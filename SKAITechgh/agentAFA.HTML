@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skaitech - AFA Management</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="dashboard-body" style="background: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px;">
+
+    <div style="max-width: 900px; margin: auto;">
+        
+        <!-- Top Nav / Header Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="color: #333; margin: 0;">AFA Management</h2>
+            <a href="dashboard.html" style="background: #7380ec; color: white; padding: 10px 16px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500;">
+                <i class="fa-solid fa-arrow-left"></i> Dashboard
+            </a>
+        </div>
+
+        <!-- Action Bar: Search & Add Button -->
+        <div style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px; justify-content: space-between; align-items: center;">
+            
+            <!-- Search Bar -->
+            <div style="flex: 1; min-width: 250px; position: relative;">
+                <i class="fa-solid fa-search" style="position: absolute; left: 12px; top: 13px; color: #888;"></i>
+                <input type="text" id="afaSearchInput" placeholder="Search by name, phone, town, or ID..." onkeyup="filterAfaList()" style="width: 100%; padding: 10px 10px 10px 38px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px;">
+            </div>
+
+            <!-- Add AFA Button -->
+            <button onclick="openAddAfaModal()" style="background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-plus"></i> Add AFA
+            </button>
+        </div>
+
+        <!-- AFA List Container -->
+        <div style="background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+            <div id="afaTableContainer">
+                <!-- Dynamically populated or 'No AFA requests found' state -->
+                <div style="text-align: center; padding: 40px; color: #666;" id="emptyAfaState">
+                    <p style="font-size: 15px; margin-bottom: 15px;">No AFA requests found.</p>
+                </div>
+                <div id="afaDataList" style="display: none; flex-direction: column; gap: 10px;"></div>
+            </div>
+
+            <!-- Pagination Bar -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 25px; padding-top: 15px; border-top: 1px solid #eee; font-size: 14px; color: #555;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span>Per page</span>
+                    <select id="perPageSelect" style="padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 5px;">
+                    <button style="padding: 6px 12px; border: 1px solid #ddd; background: #fff; border-radius: 4px; cursor: pointer;">Previous</button>
+                    <button style="padding: 6px 12px; border: 1px solid #2563eb; background: #2563eb; color: #fff; border-radius: 4px; cursor: pointer;">1</button>
+                    <button style="padding: 6px 12px; border: 1px solid #ddd; background: #fff; border-radius: 4px; cursor: pointer;">Next</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Simple Add AFA Modal / Form Area (Hidden by default) -->
+    <div id="afaModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000;">
+        <div style="background: #fff; width: 100%; max-width: 450px; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin: 0; color: #333;">New AFA Registration</h3>
+                <i class="fa-solid fa-xmark" onclick="closeAddAfaModal()" style="cursor: pointer; font-size: 18px; color: #777;"></i>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <label style="font-size: 13px; font-weight: 500;">Customer Name *</label>
+                <input type="text" id="afaName" placeholder="e.g. Kwaku Mensah" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+
+                <label style="font-size: 13px; font-weight: 500;">Phone Number *</label>
+                <input type="text" id="afaPhone" placeholder="e.g. 0241234567" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+
+                <label style="font-size: 13px; font-weight: 500;">Town / Location *</label>
+                <input type="text" id="afaTown" placeholder="e.g. Accra" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+
+                <label style="font-size: 13px; font-weight: 500;">Ghana Card / ID *</label>
+                <input type="text" id="afaIdNumber" placeholder="e.g. GHA-123456789-0" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+
+                <button onclick="submitNewAfa()" style="background: #2563eb; color: white; border: none; padding: 12px; border-radius: 4px; font-weight: 500; cursor: pointer; margin-top: 10px;">Submit Request</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="agentAFA.JS"></script>
+</body>
+</html>

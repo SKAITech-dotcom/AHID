@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Results Checker - SKAITech</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: wheat; /* Deep SKAITech yellow background */
+            color: #1e293b;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        /* Top Navigation Header for Back Button */
+        .top-bar {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .back-btn {
+            background: #ffffff;
+            color: black;
+            text-decoration: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            transition: background 0.2s;
+        }
+
+        .back-btn:hover {
+            background: #f1f5f9;
+        }
+
+        .results-checker-card {
+            width: 100%;
+            max-width: 500px;
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .results-checker-card h3 {
+            margin-bottom: 20px;
+            color: #1e293b;
+            font-size: 1.5rem;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .form-group select,
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group select:focus,
+        .form-group input:focus {
+            border-color: #ca8a04;
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 5px;
+            color: #64748b;
+            font-size: 0.85rem;
+        }
+
+        .price-summary {
+            display: flex;
+            justify-content: space-between;
+            background: #fefce8;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #fef08a;
+            font-size: 0.95rem;
+            color: #854d0e;
+        }
+
+        .btn-pay {
+            width: 100%;
+            background-color: #1e293b;
+            color: white;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn-pay:hover {
+            background-color: #0f172a;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Back to Dashboard Navigation Header -->
+    <div class="top-bar">
+        <a href="dashboard.html" class="back-btn">
+            <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+  
+    <!-- Results Checker Main Card -->
+    <div class="results-checker-card">
+        <h3>Results Checker</h3>
+        <form id="resultsCheckerForm">
+            <div class="form-group">
+                <label for="examType">Exam type</label>
+                <select id="examType" name="examType" required>
+                    <option value="BECE">BECE</option>
+                    <option value="WASSCE">WASSCE</option>
+                    <option value="NOV/DEC">NOV/DEC</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="quantity">Quantity</label>
+                <input type="number" id="quantity" name="quantity" value="1" min="1" max="10" required>
+            </div>
+
+            <div class="price-summary">
+                <span>Price per PIN: <strong>GHS <span id="pricePerPin">19.00</span></strong></span>
+                <span>Total: <strong>GHS <span id="totalPrice">19.00</span></strong></span>
+            </div>
+
+            <div class="form-group">
+                <label for="phoneNumber">Phone number</label>
+                <input type="tel" id="phoneNumber" name="phoneNumber" placeholder="0XX XXX XXXX" maxlength="10" required>
+                <small>Phone number to receive PIN/Serial via SMS</small>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" placeholder="your@email.com" required>
+                <small>Required for Paystack payment confirmation</small>
+            </div>
+
+            <button type="submit" class="btn-pay">Pay with Paystack</button>
+        </form>
+    </div>
+
+<script>
+    const prices = {
+        "BECE": 19.00,
+        "WASSCE": 22.00,
+        "NOV/DEC": 22.00
+    };
+
+    const examTypeSelect = document.getElementById("examType");
+    const quantityInput = document.getElementById("quantity");
+    const pricePerPinSpan = document.getElementById("pricePerPin");
+    const totalPriceSpan = document.getElementById("totalPrice");
+    const resultsCheckerForm = document.getElementById("resultsCheckerForm");
+
+    function updatePricing() {
+        const selectedExam = examTypeSelect.value;
+        const qty = parseInt(quantityInput.value) || 1;
+        const unitPrice = prices[selectedExam] || 19.00;
+        const total = unitPrice * qty;
+
+        pricePerPinSpan.textContent = unitPrice.toFixed(2);
+        totalPriceSpan.textContent = total.toFixed(2);
+    }
+
+    examTypeSelect.addEventListener("change", updatePricing);
+    quantityInput.addEventListener("input", updatePricing);
+
+    resultsCheckerForm.addEventListener("submit", function(e) {
+        e.preventDefault();
+        
+        const totalAmount = parseFloat(totalPriceSpan.textContent);
+        const examType = examTypeSelect.value;
+        const quantity = quantityInput.value;
+
+        alert(`Initiating Paystack payment of GHS ${totalAmount} for ${quantity} ${examType} checker(s).`);
+    });
+</script>
+
+</body>
+</html>

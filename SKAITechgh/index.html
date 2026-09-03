@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skaitech - Fast & Reliable Mobile Data in Ghana</title>
+  
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<!-- HEADER NAVIGATION -->
+<header class="site-header">
+    <!-- Main Top Row: Logo on left, Stacked Buttons on right -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+        
+        <!-- Logo on the Left -->
+        <div class="top-logo-bar">
+            <a href="index.html">
+                <img src="img/akaitech more final logo.jpeg" alt="Skaitech Logo" style="height: 35px;">
+            </a>
+        </div>
+
+        <!-- Right Side Stack: Agent Portal on top, Menu button below -->
+        <div class="header-right-stack">
+            <a href="login.html?register=true" class="agent-portal-btn">Agent Portal</a>
+            <button id="menuToggleBtn" class="menu-toggle-btn" onclick="toggleMenu()">
+    <span id="menuIconSymbol">&#8801;</span>
+</button>
+        </div>
+
+    </div>
+    <div id="menuOverlay" class="menu-overlay" onclick="toggleMenu()"></div>
+
+<nav id="dropdownMenu" class="dropdown-menu">
+    <div class="dropdown-nav-list">
+        <a href="index.html" class="dropdown-nav-link dropdown-nav-link-active">Dashboard</a>
+        <a href="nonAgentTrachOrder.html" class="dropdown-nav-link">Track Order</a>
+        <a href="ourHelpDesk.html" class="dropdown-nav-link">Help Desk</a>
+        <a href="AFA.html" class="dropdown-nav-link">⚡AFA</a>
+        <a href="https://chat.whatsapp.com/Ebf1GFoh9Y64BiaFVqbHid" class="dropdown-nav-link">👥Community</a>
+    </div>
+</nav>
+
+   
+</header>
+
+  <!-- MAIN CONTENT -->
+  <main>
+    <!-- HERO SECTION -->
+    <section class="hero-section">
+      <div class="container">
+        <span class="badge-location">
+          <i class="fa-solid fa-circle-check"></i> Instant Automated Delivery
+        </span>
+        <h1 class="hero-title">
+          Fast Data Top-Up Platform for <span class="text-accent">Ghana Networks</span>
+        </h1>
+        <p class="hero-subtitle">
+          Provision MTN, Telecel, and AirtelTigo data packages instantly. Built for agents, resellers, and individuals.
+        </p>
+        <div class="hero-buttons">
+          <a href="login.html?register=true" class="btn-primary">Create Agent Account</a>
+          <a href="#networks" class="btn-secondary">View Available Packages</a>
+        </div>
+      </div>
+    </section>
+
+   <!-- NETWORK PROVIDERS SECTION (GRANDMASTER STYLE CARDS) -->
+<section id="networks" class="partners-section">
+    
+</section>
+<div class="network-grid">
+    <!-- MTN Card -->
+    <a href="nonAgentBuyers.html?network=mtn" class="network-card-link" style="text-decoration: none; display: block;">
+        <div class="network-card">
+            <div class="network-icon-box mtn-box">MTN</div>
+            <span class="network-name">MTN Data</span>
+            <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
+        </div>
+    </a>
+
+    <!-- Telecel Card -->
+    <a href="nonAgentBuyers.html?network=telecel" class="network-card-link" style="text-decoration: none; display: block;">
+        <div class="network-card">
+            <div class="network-icon-box telecel-box">T</div>
+            <span class="network-name">Telecel Data</span>
+            <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
+        </div>
+    </a>
+
+    <!-- AirtelTigo Card -->
+    <a href="nonAgentBuyers.html?network=airteltigo" class="network-card-link" style="text-decoration: none; display: block;">
+        <div class="network-card">
+            <div class="network-icon-box airteltigo-box">AT</div>
+            <span class="network-name">AirtelTigo Data</span>
+            <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
+        </div>
+    </a>
+</div>
+    <!-- FEATURES SECTION -->
+    <section id="features" class="features-section">
+      <div class="container">
+        <h2 class="section-title">Why Choose Skaitech?</h2>
+        <div class="features-grid">
+          
+          <div class="feature-card">
+            <div class="icon-wrapper icon-sky">
+              <i class="fa-solid fa-bolt"></i>
+            </div>
+            <h3 class="card-title">Automated Dispatch</h3>
+            <p class="card-desc">Orders process instantly upon confirmation through our secure edge system.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="icon-wrapper icon-emerald">
+              <i class="fa-solid fa-wallet"></i>
+            </div>
+            <h3 class="card-title">Agent Credit & Overdraft</h3>
+            <p class="card-desc">Keep your sales going with overdraft access when your balance runs low.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="icon-wrapper icon-amber">
+              <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <h3 class="card-title">Bank-Grade Security</h3>
+            <p class="card-desc">Protected by serverless database protocols to ensure safe transactions.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- CALL TO ACTION SECTION -->
+    <section class="cta-section">
+      <div class="container">
+        <h2 class="cta-title">Ready to Start Reselling?</h2>
+        <p class="cta-desc">Join hundreds of agents servicing customers across Ghana daily.</p>
+        <a href="login.html?register=true" class="btn-cta">Register Agent Portal</a>
+      </div>
+    </section>
+    <!-- WhatsApp Floating Action Button -->
+<a href="https://chat.whatsapp.com/EbflGFoh9Y64BiaFVqbHid" target="_blank" style="
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #10b981;
+    color: white;
+    width: 50px; 
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    cursor: pointer;
+    text-decoration: none;
+    z-index: 9999;
+">
+    <i class="fa-brands fa-whatsapp"></i>
+</a>
+<script>
+// Toggle function for the side-sliding menu and background overlay
+function toggleMenu() {
+    const menu = document.getElementById('dropdownMenu');
+    const overlay = document.getElementById('menuOverlay');
+    
+    if (menu && overlay) {
+        menu.classList.toggle('active');
+        overlay.classList.toggle('active');
+    }
+}
+
+</script>
+
+
+<footer>
+<script src="script.js"></script>
+<script src="nonAgentBuyers.js"></script>
+
+</footer>
+
+
+
+
+
+
+
+
+    
+  
