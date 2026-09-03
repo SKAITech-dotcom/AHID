@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skaitech - Track Order</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f3f4f6;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .main-container {
+            width: 100%;
+            max-width: 480px;
+        }
+        .back-link {
+            color: #4b5563;
+            text-decoration: none;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            margin-bottom: 16px;
+        }
+        .track-card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(0,0,0,0.03);
+            margin-bottom: 16px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            box-sizing: border-box;
+            margin-bottom: 12px;
+            outline: none;
+        }
+        .form-input:focus {
+            border-color: #2563eb;
+        }
+        .action-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .result-box {
+            margin-top: 16px;
+            padding: 16px;
+            background: #f9fafb;
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <a href="index.html" class="back-link">
+            <i class="fa-solid fa-arrow-left"></i> Back to Home
+        </a>
+        
+        <div class="track-card">
+            <h2 style="margin-top: 0; font-size: 1.4rem; color: #1f2937;"><i class="fa-solid fa-magnifying-glass"></i> Track Your Order</h2>
+            <p style="font-size: 0.9rem; color: #6b7280; margin-bottom: 20px;">Enter your tracking ID below to check your bundle delivery status.</p>
+            
+            <input type="text" id="trackingInput" placeholder="e.g., SKAI-123456" class="form-input">
+            <button onclick="searchOrder()" class="action-btn">Search Order</button>
+
+            <div id="orderResult" style="display: none;" class="result-box"></div>
+        </div>
+    </div>
+
+    <script>
+        function searchOrder() {
+            const inputElement = document.getElementById('trackingInput');
+            const resultBox = document.getElementById('orderResult');
+
+            if (!inputElement || !resultBox) {
+                alert('System error: Elements missing.');
+                return;
+            }
+
+            const query = inputElement.value.trim().toUpperCase();
+
+            if (!query) {
+                alert('Please enter a valid tracking ID.');
+                return;
+            }
+
+            // Retrieve saved orders from browser local storage
+            const orders = JSON.parse(localStorage.getItem('skaitech_orders')) || [];
+
+            if (orders.length === 0) {
+                resultBox.style.display = 'block';
+                resultBox.innerHTML = `<p style="color: #dc2626; font-weight: 600; margin: 0;">No orders saved in this browser yet. Try placing a test order first!</p>`;
+                return;
+            }
+
+            const foundOrder = orders.find(o => o.trackingId.toUpperCase() === query);
+
+            if (!foundOrder) {
+                resultBox.style.display = 'block';
+                resultBox.innerHTML = `<p style="color: #dc2626; font-weight: 600; margin: 0;">No order found matching ID: ${query}</p>`;
+                return;
+            }
+
+            // Display found order details
+            resultBox.style.display = 'block';
+            resultBox.innerHTML = `
+                <div style="font-size: 0.9rem; color: #374151; line-height: 1.6;">
+                    <div style="font-weight: 700; color: #1f2937; margin-bottom: 8px; font-size: 1rem;">Order Found!</div>
+                    <div><strong>Tracking ID:</strong> ${foundOrder.trackingId}</div>
+                    <div><strong>Network:</strong> ${foundOrder.network}</div>
+                    <div><strong>Package:</strong> ${foundOrder.size} (${foundOrder.price})</div>
+                    <div><strong>Name:</strong> ${foundOrder.name}</div>
+                    <div><strong>Phone:</strong> ${foundOrder.phone}</div>
+                    <div><strong>Status:</strong> <span style="color: #d97706; font-weight: 700;">${foundOrder.status}</span></div>
+                    <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 6px;">Placed on: ${foundOrder.date}</div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

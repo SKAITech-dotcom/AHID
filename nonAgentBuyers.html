@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skaitech - Data Packages</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f3f4f6;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .main-container {
+            width: 100%;
+            max-width: 480px;
+            background: transparent;
+        }
+        .back-link {
+            color: #4b5563;
+            text-decoration: none;
+            font-weight: 1000;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 16px;
+        }
+        /* Top Banner Style */
+        .network-banner {
+            text-align: center;
+            padding: 14px;
+            border-radius: 12px;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        /* Product Card Style */
+        .product-card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(0,0,0,0.03);
+            text-align: center;
+        }
+        .card-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #f3f4f6;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #374151;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+        .data-size {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: #1f2937;
+            margin: 8px 0 4px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .data-price {
+            font-size: 1.25rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+        .payment-type {
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-bottom: 16px;
+        }
+        .action-btn {
+            width: 100%;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transition: opacity 0.2s;
+        }
+        .action-btn:hover {
+            opacity: 0.9;
+        }
+        .form-container {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #f3f4f6;
+            text-align: left;
+        }
+        .form-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            box-sizing: border-box;
+            margin-top: 4px;
+            margin-bottom: 12px;
+            outline: none;
+        }
+        .form-input:focus {
+            border-color: #3b82f6;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <a href="index.html" class="back-link">
+            <i class="fa-solid fa-arrow-left"></i> Back to Home
+        </a>
+        
+        <!-- Dynamic Network Banner -->
+        <div id="networkBanner" class="network-banner">Loading...</div>
+
+        <!-- Dynamic Package List Container -->
+        <div id="packageList"></div>
+    </div>
+
+    <script src="nonAgentBuyers.js"></script>
+</body>
+</html>

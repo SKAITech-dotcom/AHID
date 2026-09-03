@@ -1,0 +1,169 @@
+<!-- Support & Send Message Section -->
+ <a href="#" id="back-btn" class="back-btn" style="display: inline-flex; align-items: center; gap: 8px; background: #ffffff; color: #1e293b; padding: 10px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; border: 1px solid #cbd5e1; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px; transition: background 0.2s;">
+    <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+</a>
+<SCRipt>
+   document.getElementById('back-btn').addEventListener('click', function(e) {
+    e.preventDefault();
+    
+    const previousPage = document.referrer;
+    
+    if (previousPage.includes('dashboard') || previousPage.includes('agent')) {
+        window.location.href = 'dashboard.html'; 
+    } else {
+        window.location.href = 'index.html'; 
+    }
+});
+</SCRipt>
+<div class="support-section" style="margin-top: 40px; padding: 20px; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+    <h3 style="margin-bottom: 8px; font-size: 1.5rem; color: #111827;">Send Us a Message</h3>
+    <p style="color: #6b7280; margin-bottom: 24px;">Fill out the form below and we'll get back to you as soon as possible.</p>
+
+    <!-- Contact Info Cards (Email & Phone) -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div style="padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+            <span style="font-size: 14px; color: #6b7280; display: block; margin-bottom: 4px;">Email Us</span>
+            <a href="mailto:skaitech@gmail.com" style="color: #2563eb; font-weight: 600; text-decoration: none;">skaitech@gmail.com</a>
+        </div>
+        <div style="padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+            <span style="font-size: 14px; color: #6b7280; display: block; margin-bottom: 4px;">Call / WhatsApp</span>
+            <span style="color: #111827; font-weight: 600;">+233 543423685 or +233 547431007</span>
+        </div>
+    </div>
+    
+
+    <!-- Message Form -->
+    <form id="reportMessageForm" onsubmit="handleReportMessage(event)">
+        <div style="margin-bottom: 16px;">
+            <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Full Name</label>
+            <input type="text" id="msgName" placeholder="John Doe" required style="width: 100%; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 6px; outline: none;">
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Email</label>
+            <input type="email" id="msgEmail" placeholder="john@example.com" required style="width: 100%; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 6px; outline: none;">
+        </div>
+        <!-- Subject / Topic Dropdown -->
+<div style="margin-bottom: 16px;">
+    <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Subject</label>
+    <select id="msgSubject" required style="width: 100%; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 6px; outline: none; background: #ffffff; color: #111827;">
+        <option value="" disabled selected>Select a topic</option>
+        <option value="Order Issue">Order Issue</option>
+        <option value="Payment Problem">Payment Problem</option>
+        <option value="Refund Request">Refund Request</option>
+        <option value="Account Help">Account Help</option>
+        <option value="General Inquiry">General Inquiry</option>
+        <option value="Bug Report">Bug Report</option>
+    </select>
+</div>
+
+        <div style="margin-bottom: 16px;">
+            <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Message</label>
+            <textarea id="msgContent" rows="4" placeholder="Describe your issue or question regarding your report..." required style="width: 100%; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 6px; outline: none; resize: vertical;"></textarea>
+        </div>
+
+        <button type="submit" style="background: #2563eb; color: white; border: none; padding: 12px 20px; font-weight: 600; border-radius: 6px; cursor: pointer; width: 100%;">
+            Send Message
+        </button>
+    </form>
+</div>
+
+<!-- Put the style block right here -->
+<style>
+    /* FAQ content is hidden by default */
+    .faq-item .faq-content {
+        display: none !important;
+    }
+    /* When active, show content */
+    .faq-item.active .faq-content {
+        display: block !important;
+    }
+    /* Rotate arrow icon when active */
+    .faq-item.active .faq-icon {
+        transform: rotate(180deg);
+    }
+</style>
+
+<!-- Frequently Asked Questions Section -->
+<div class="faq-section" style="max-width: 800px; margin: 40px auto; padding: 0 20px;">
+    <h2 style="font-size: 1.75rem; font-weight: 700; color: #111827; margin-bottom: 24px; display: flex; align-items: center; gap: 10px;">
+        <span style="color: #2563eb;">❓</span> Frequently Asked Questions
+    </h2>
+
+    <!-- FAQ Item 1 -->
+    <div class="faq-item" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 16px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+        <button onclick="toggleFaq(this)" style="width: 100%; background: none; border: none; padding: 20px; text-align: left; font-size: 1rem; font-weight: 600; color: #111827; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+            How long does it take to receive my data bundle?
+            <span class="faq-icon" style="font-size: 1.2rem; transition: transform 0.3s;">⌄</span>
+        </button>
+        <div class="faq-content" style="padding: 0 20px; color: #4b5563; font-size: 0.95rem; line-height: 1.5;">
+            <p style="padding-bottom: 20px; margin: 0;">Data bundles are typically delivered instantly after successful payment. In rare cases, it may take up to 5 minutes.</p>
+        </div>
+    </div>
+
+    <!-- FAQ Item 2 -->
+    <div class="faq-item" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 16px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+        <button onclick="toggleFaq(this)" style="width: 100%; background: none; border: none; padding: 20px; text-align: left; font-size: 1rem; font-weight: 600; color: #111827; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+            What payment methods do you accept?
+            <span class="faq-icon" style="font-size: 1.2rem; transition: transform 0.3s;">⌄</span>
+        </button>
+        <div class="faq-content" style="padding: 0 20px; color: #4b5563; font-size: 0.95rem; line-height: 1.5;">
+            <p style="padding-bottom: 20px; margin: 0;">We accept all Paystack-supported payment methods including mobile money (MTN MoMo, Telecel Cash, AirtelTigo Money).</p>
+        </div>
+    </div>
+
+    <!-- FAQ Item 3 -->
+    <div class="faq-item" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 16px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+        <button onclick="toggleFaq(this)" style="width: 100%; background: none; border: none; padding: 20px; text-align: left; font-size: 1rem; font-weight: 600; color: #111827; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+            Can I get a refund if I purchased the wrong bundle?
+            <span class="faq-icon" style="font-size: 1.2rem; transition: transform 0.3s;">⌄</span>
+        </button>
+        <div class="faq-content" style="padding: 0 20px; color: #4b5563; font-size: 0.95rem; line-height: 1.5;">
+            <p style="padding-bottom: 20px; margin: 0;">Yes, you can request a refund within 30 minutes of purchase if the bundle hasn't been activated. Contact our support team with your order reference.</p>
+        </div>
+    </div>
+
+    <!-- FAQ Item 4 -->
+    <div class="faq-item" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 16px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+        <button onclick="toggleFaq(this)" style="width: 100%; background: none; border: none; padding: 20px; text-align: left; font-size: 1rem; font-weight: 600; color: #111827; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+            What are we offering?
+            <span class="faq-icon" style="font-size: 1.2rem; transition: transform 0.3s;">⌄</span>
+        </button>
+        <div class="faq-content" style="padding: 0 20px; color: #4b5563; font-size: 0.95rem; line-height: 1.5;">
+            <p style="padding-bottom: 20px; margin: 0;"><ul>
+                <li>MTN,Telecel(vodafone) and AirtelTigo data bundle</li>
+                <li>AFA registration </li>
+                <li>WASSCE results checkout</li>
+                <li>NOVDEC results checkout</li>
+                <li>BECE checkout</li>
+            </ul>. </p>
+        </div>
+    </div>
+
+    <!-- FAQ Item 5 -->
+    <div class="faq-item" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 16px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+        <button onclick="toggleFaq(this)" style="width: 100%; background: none; border: none; padding: 20px; text-align: left; font-size: 1rem; font-weight: 600; color: #111827; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+            Is my payment information secure?
+            <span class="faq-icon" style="font-size: 1.2rem; transition: transform 0.3s;">⌄</span>
+        </button>
+        <div class="faq-content" style="padding: 0 20px; color: #4b5563; font-size: 0.95rem; line-height: 1.5;">
+            <p style="padding-bottom: 20px; margin: 0;">Absolutely. All payments are processed through Paystack, a PCI-DSS compliant payment processor. We never store your card details.</p>
+        </div>
+    </div>
+
+    <!-- FAQ Item 6 -->
+    <div class="faq-item" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 16px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+        <button onclick="toggleFaq(this)" style="width: 100%; background: none; border: none; padding: 20px; text-align: left; font-size: 1rem; font-weight: 600; color: #111827; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+            How can I track my order?
+            <span class="faq-icon" style="font-size: 1.2rem; transition: transform 0.3s;">⌄</span>
+        </button>
+        <div class="faq-content" style="padding: 0 20px; color: #4b5563; font-size: 0.95rem; line-height: 1.5;">
+            <p style="padding-bottom: 20px; margin: 0;">You can track all your orders from the "Track Orders" or "Reports" page after logging in. Each order has a unique reference number.</p>
+        </div>
+    </div>
+</div>
+
+
+
+
+<script src="script.js"></script>

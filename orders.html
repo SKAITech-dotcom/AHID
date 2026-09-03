@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skaitech - Orders</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="orders-body-yellow">
+
+  <!-- TOP HEADER NAVBAR -->
+  <header class="gt-header">
+    <div class="gt-header-left">
+      <button class="hamburger-btn" onclick="toggleDrawer()">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <span class="gt-brand">Skaitech gh</span>
+    </div>
+    <div class="gt-header-right">
+      <div class="user-avatar" id="userAvatarInitials">SA</div>
+    </div>
+  </header>
+
+  <!-- SIDE DRAWER OVERLAY & MENU -->
+  <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleDrawer()"></div>
+  <aside id="sideDrawer" class="side-drawer">
+  <span class="drawer-section-label">AGENT</span>
+  <nav class="drawer-nav">
+    <a href="dashboard.html" class="drawer-item" onclick="toggleDrawer()">
+      <i class="fa-solid fa-border-all"></i> Dashboard
+    </a>
+    <a href="orders.html" class="drawer-item active" onclick="toggleDrawer()">
+      <i class="fa-solid fa-cart-shopping"></i> Orders
+    </a>
+    <a href="ourHelpDesk.html" class="drawer-item" onclick="toggleDrawer()">
+      <i class="fa-solid fa-triangle-exclamation"></i> Our Help Desk
+    </a>
+    <a href="agentWallet.html" class="drawer-item" onclick="toggleDrawer()">
+      <i class="fa-solid fa-wallet"></i> Wallet
+    </a>
+    <a href="deposit.html" class="drawer-item" onclick="toggleDrawer()">
+      <i class="fa-solid fa-money-bill-transfer"></i> Deposit
+    </a>
+    <a href="agentAFA.HTML" class="drawer-item" onclick="toggleDrawer()">
+      <i class="fa-solid fa-users"></i> AFA
+    </a>
+    <a href="STORE.HTML" class="drawer-item" onclick="toggleDrawer()">
+      <i class="fa-solid fa-store"></i> Store
+    </a>
+    <a href="resultsChecker.html" class="drawer-item">
+    <i class="fa-solid fa-receipt"></i> Results Checker
+</a>
+    <a href="https://chat.whatsapp.com/EbflGFoh9Y64BiaFVqbHid" class="drawer-item" onclick="toggleDrawer()">
+      <i class="fa-solid fa-comments"></i> Community
+    </a>
+  </nav>
+</aside>
+  
+
+  <!-- MAIN ORDERS CONTENT -->
+  <main class="orders-page-wrapper">
+    
+    <!-- SEARCH INPUT -->
+    <div class="search-input-wrapper">
+      <i class="fa-solid fa-magnifying-glass search-icon"></i>
+      <input type="text" id="orderSearch" onkeyup="filterOrders()" placeholder="Search by phone number...">
+    </div>
+
+    <!-- STATUS FILTER PILLS -->
+    <!-- STATUS FILTER PILLS -->
+<div class="status-pills">
+    <button class="pill-btn active" onclick="setFilter('all', this)">All</button>
+    <button class="pill-btn" onclick="setFilter('pending', this)">Pending</button>
+    <button class="pill-btn" onclick="setFilter('processing', this)">Processing</button>
+    <button class="pill-btn" onclick="setFilter('completed', this)">Completed</button>
+    <button class="pill-btn" onclick="setFilter('canceled', this)">Canceled</button>
+    <!-- <button class="pill-btn" onclick="setFilter('failed', this)">Failed</button> -->
+</div>
+
+    <!-- COUNTER DISPLAY -->
+    <div class="orders-count-text" id="ordersCountText">0 orders found</div>
+
+    <!-- ORDERS DISPLAY CARD -->
+   
+    <div class="orders-content-card">
+      <!-- EMPTY STATE -->
+      <div id="emptyState" class="empty-state-box">
+        <div class="package-icon">🥅 </div>
+        <h3>No orders found</h3>
+        <p>You haven't placed any orders yet, or try searching with a different phone number.</p>
+      </div>
+
+      <!-- DYNAMIC ORDERS TABLE -->
+      <table class="orders-data-table" id="ordersTable" style="display: none;">
+        <thead>
+          <tr>
+            <th>Order ID</th>
+            <th>Network</th>
+            <th>Phone</th>
+            <th>Package</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="ordersTableBody">
+          <!-- Dynamic rows populated via JS -->
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
+<!-- PAGINATION CONTROLS -->
+<div class="pagination-container" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+  
+  <div class="page-size-selector">
+    <label for="pageSize" style="font-weight: 600; font-size: 14px; margin-right: 5px;">Show:</label>
+    <select id="pageSize" onchange="changePageSize(this.value)" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer;">
+      <option value="10" selected>10</option>
+      <option value="20">20</option>
+      <option value="30">30</option>
+      <option value="50">50</option>
+      <option value="100">100</option>
+    </select>
+    <span style="font-size: 14px; color: #555;">orders per page</span>
+  </div>
+
+  <div class="pagination-buttons" style="display: flex; align-items: center; gap: 10px;">
+    <button id="prevBtn" onclick="changePage(-1)" style="padding: 6px 14px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc;">Previous</button>
+    <span id="pageIndicator" style="font-weight: bold; font-size: 14px;">Page 1</span>
+    <button id="nextBtn" onclick="changePage(1)" style="padding: 6px 14px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc;">Next</button>
+  </div>
+
+</div>
+</div>
+
+
