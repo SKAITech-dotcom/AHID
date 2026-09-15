@@ -73,6 +73,18 @@ document.addEventListener('DOMContentLoaded', () => {
             inputEl.value = savedValue;
         }
     });
+
+    const linkInput = document.getElementById('storeLinkInput');
+    if (linkInput) {
+        const origin = window.location.origin;
+        const pathname = window.location.pathname;
+        const repoSegment = pathname.split('/').filter(Boolean)[0];
+        const baseUrl = repoSegment && pathname.includes(`/${repoSegment}/`)
+            ? `${origin}/${repoSegment}`
+            : origin;
+
+        linkInput.value = `${baseUrl}/nonAgentBuyers.html?agent=skaitech_gh`;
+    }
 });
 // Bind STORE functions to window for HTML onclick attributes
 window.switchTab = switchTab;
