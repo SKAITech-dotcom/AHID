@@ -608,7 +608,7 @@ body {
   left: 0;
   bottom: 0;
   width: 260px;
-  background-color: #ffffff;
+  background: linear-gradient(180deg, #f472b6 0%, #be185d 100%);
   z-index: 200;
   transform: translateX(-100%);
   transition: transform 0.3s ease;
@@ -642,7 +642,7 @@ body {
   align-items: center;
   gap: 1rem;
   padding: 0.75rem 1.5rem;
-  color: #475569;
+  color: #fff7fb;
   text-decoration: none;
   font-weight: 600;
   font-size: 0.95rem;
@@ -650,9 +650,9 @@ body {
 }
 
 .drawer-item:hover, .drawer-item.active {
-  background-color: #eff6ff;
-  color: #2563eb;
-  border-right: 3px solid #2563eb;
+  background-color: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  border-right: 3px solid #fff;
 }
 
 .drawer-divider {
@@ -663,7 +663,7 @@ body {
 
 /* DASHBOARD MAIN CONTAINER */
 .gt-dashboard-body {
-  background-color: #f8fafc;
+  background: linear-gradient(180deg, #f472b6 0%, #d81b60 100%);
   padding: 1.25rem;
   max-width: 500px;
   margin: 0 auto;
@@ -676,14 +676,14 @@ body {
 
 .agent-welcome h2 {
   font-size: 1.1rem;
-  font-weight: 600;
-  color: #475569;
+  font-weight: 700;
+  color: #fff7fb;
 }
 
 .agent-code {
   font-size: 0.8rem;
   font-weight: 700;
-  color: #94a3b8;
+  color: #ffe4f2;
   letter-spacing: 0.025em;
 }
 

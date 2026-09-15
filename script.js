@@ -963,20 +963,25 @@ async function loadUserData() {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
 
       if (user && !userError) {
-        const { data, error } = await supabase
+        const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('full_name, agent_code, wallets(balance)')
+          .select('full_name, agent_code')
           .eq('id', user.id)
           .single();
 
-        if (data && !error) {
-          if (data.full_name) userName = data.full_name;
-          if (data.agent_code) agentCode = data.agent_code;
+        if (profileData && !profileError) {
+          if (profileData.full_name) userName = profileData.full_name;
+          if (profileData.agent_code) agentCode = profileData.agent_code;
+        }
 
-          const rawBalance = Array.isArray(data.wallets) ? data.wallets[0]?.balance : data.wallets?.balance;
-          if (rawBalance !== undefined && rawBalance !== null) {
-            walletBalance = parseFloat(rawBalance);
-          }
+        const { data: walletData, error: walletError } = await supabase
+          .from('wallets')
+          .select('balance')
+          .eq('id', user.id)
+          .single();
+
+        if (walletData && !walletError && walletData.balance !== null && walletData.balance !== undefined) {
+          walletBalance = parseFloat(walletData.balance);
         }
       } else if (isProtectedAgentPage) {
         window.location.href = 'login.html';
