@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Skaitech - Agent Wallet</title>
+    <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
     <link rel="stylesheet" href="css/style.css"> <!-- Update path if your CSS is elsewhere -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -32,12 +33,13 @@
 
     <main class="wallet-container" style="padding: 30px; max-width: 800px; margin: auto;">
         <h2>Fund Your Agent Wallet</h2>
-        <p style="color: #666; margin-bottom: 25px;">Choose your preferred payment method below to top up your balance instantly.</p>
+        <p style="color: #666; margin-bottom: 25px;">Fund your account securely. Your balance updates after the payment provider confirms your payment.</p>
+        <div id="walletPaymentStatus" hidden role="status" style="background: #eef6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 12px 14px; border-radius: 6px; margin-bottom: 20px; font-size: 14px;"></div>
 
         <!-- METHOD 1: EXPRESSPAY CHECKOUT -->
         <div class="funding-card" style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <h3><i class="fa-solid fa-credit-card"></i> ExpressPay Checkout</h3>
-            <p style="font-size: 14px; color: #555; margin-bottom: 15px;">Enter your amount and email, then continue to ExpressPay to complete your wallet deposit securely.</p>
+            <h3><i class="fa-solid fa-credit-card"></i> Paystack Checkout</h3>
+            <p style="font-size: 14px; color: #555; margin-bottom: 15px;">Enter an amount, then continue to Paystack to complete your wallet deposit securely. We use the email on your signed-in agent account.</p>
             
             <!-- Important Note Box -->
             <div style="background: #f0f4ff; border-left: 4px solid #0056b3; padding: 12px; border-radius: 4px; margin-bottom: 15px; font-size: 13px; color: #1a365d;">
@@ -50,16 +52,13 @@
                 <input type="number" id="expressAmount" placeholder="Enter amount in GHS (e.g., 100.00)" style="width: 100%; padding: 10px; margin-top: 5px; margin-bottom: 5px; border: 1px solid #ccc; border-radius: 4px;">
                 <p style="font-size: 12px; color: #777; margin-bottom: 12px;">Converted automatically to pesewas before payment initialization.</p>
                 
-                <label style="font-weight: 500; font-size: 14px;">Email *</label>
-                <input type="email" id="expressEmail" placeholder="agent@example.com" style="width: 100%; padding: 10px; margin-top: 5px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px;">
-
-                <button onclick="payWithExpressPay()" class="btn-primary" style="background: #0056b3; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;">Proceed to ExpressPay</button>
+                <button onclick="payWithExpressPay()" class="btn-primary" style="background: #0056b3; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;">Proceed to Paystack</button>
             </div>
         </div>
         <!-- METHOD 2: DIRECT DEPOSIT (MANUAL) -->
         <div class="funding-card" style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
             <h3><i class="fa-solid fa-money-bill-transfer"></i> Direct Deposit (Manual)</h3>
-            <p style="font-size: 14px; color: #555; margin-bottom: 12px;">Transfer funds manually to our designated line, then submit your transaction reference below.</p>
+            <p style="font-size: 14px; color: #555; margin-bottom: 12px;">For automatic wallet loading, use Paystack Checkout above. Manual transfers require administrator verification.</p>
             
             <!-- Instructions with your receiving number -->
             <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; border-radius: 4px; margin-bottom: 15px; font-size: 13px; color: #856404;">
@@ -82,7 +81,7 @@
       <!-- METHOD 3: CASHOUT DEPOSIT FLOW -->
         <div class="funding-card" style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
             <h3><i class="fa-solid fa-mobile-screen-button"></i> Cashout Deposit</h3>
-            <p style="font-size: 14px; color: #555; margin-bottom: 12px;">Request a wallet top-up (MoMo payer details). This is not Paystack checkout and does not move commission.</p>
+            <p style="font-size: 14px; color: #555; margin-bottom: 12px;">Submit a MoMo settlement request for administrator review. Your wallet is credited only after the administrator confirms that payment was received.</p>
             
             <!-- Connection Status Box -->
             <div style="background: #e6f9ed; border: 1px solid #c3e6cb; color: #155724; padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 15px;">
@@ -109,17 +108,22 @@
                 <button onclick="initiateCashoutDeposit()" class="btn-primary" style="background: #7380ec; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; margin-bottom: 20px;">Submit deposit request</button>
             </div>
 
+            <div id="cashoutRequestStatus" role="status" style="background: #f8f9fa; border: 1px solid #e9ecef; padding: 12px; border-radius: 4px; font-size: 13px; color: #495057; margin-bottom: 15px;">
+                Loading your cashout deposit requests…
+            </div>
+
             <!-- How this works & Deposit Flow Info Box -->
             <div style="background: #f0f4ff; border: 1px solid #d0e1fd; padding: 15px; border-radius: 6px; font-size: 13px; color: #1a365d; line-height: 1.5;">
                 <strong>How this works</strong>
                 <ul style="padding-left: 18px; margin: 5px 0 12px 0;">
-                    <li>Registers how much you intend to deposit and which number is paying. Your wallet balance updates only after settlement (e.g. admin or MoMo confirmation)—not instantly from this step.</li>
-                    <li>You can have only <strong>one active request at a time</strong>. After a failure you may submit a new request from the form below.</li>
+                    <li>Submit the amount and payer number. You can have only <strong>one pending request at a time</strong>.</li>
+                    <li>Follow the payment instructions given by the administrator. Do not send money before confirming the receiving details.</li>
+                    <li>The administrator verifies the MoMo settlement reference, then approves or rejects the request. Approval credits your wallet once.</li>
                 </ul>
 
                 <strong style="display: block; margin-top: 10px;">Deposit flow</strong>
                 <p style="margin: 4px 0 0 0;">
-                    On submit you join the <strong>shortest open admin booth queue</strong>. Steps: <strong>1)</strong> wait in booth line, <strong>2)</strong> allow cashout on your phone, then tap <strong>"I have allowed cashout"</strong>, <strong>3)</strong> admin MoMo script, <strong>4)</strong> pay on your phone when prompted — if you cannot pay or enter your PIN, use <strong>PIN entry failed</strong> or <strong>Unable to pay</strong> (not wallet claim), <strong>5)</strong> claim wallet credit with your MoMo transaction ID after successful payment, <strong>6)</strong> submit a new request if the admin script fails (<code>deposit:request-failed</code>). Events <code>deposit:window-started</code> and <code>deposit:request-failed</code> update this page automatically. Not Paystack.
+                    <strong>1)</strong> Submit your request. <strong>2)</strong> Confirm the settlement instructions with the administrator. <strong>3)</strong> Make the MoMo payment. <strong>4)</strong> The administrator verifies it and records the settlement reference. <strong>5)</strong> Once approved, the wallet is credited automatically. This is a manual settlement flow, not Paystack.
                 </p>
             </div>
         </div>  
@@ -138,8 +142,9 @@
                 <button onclick="claimWalletCredit()" class="btn-primary" style="background: #28a745; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;">Claim Wallet Credit</button>
             </div>
         </div>
+    </main>
 
     <!-- Link the JavaScript file -->
-    <script src="agentDeposit.js"></script>
+    <script type="module" src="agentDeposit.js"></script>
 </body>
 </html>

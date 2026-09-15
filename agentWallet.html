@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Skaitech - Agent Wallet & Transactions</title>
+    <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
@@ -24,7 +25,7 @@
         
         <!-- Action Deposit Buttons -->
         <div style="display: flex; gap: 10px; margin-bottom: 16px;">
-            <button onclick="expressPayDeposit()" style="flex: 1; background: #2563eb; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer;">ExpressPay Deposit</button>
+            <button onclick="location.href='deposit.html'" style="flex: 1; background: #2563eb; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer;">Fund wallet securely</button>
             <button onclick="directDepositInfo()" style="flex: 1; background: #334155; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer;">Direct Deposit</button>
         </div>
 
@@ -109,7 +110,7 @@
     </div>
 
     <!-- Link Dedicated Wallet JavaScript -->
-    <script src="agntWallet.js"></script>
-    <script src="script.js"></script>
+    <script type="module" src="agentWallet.js"></script>
+    <script type="module" src="script.js"></script>
 </body>
 </html>

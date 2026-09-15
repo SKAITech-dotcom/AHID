@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Skaitech - Track Order</title>
+    <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -90,6 +91,15 @@
     </div>
 
     <script>
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
         function searchOrder() {
             const inputElement = document.getElementById('trackingInput');
             const resultBox = document.getElementById('orderResult');
@@ -106,20 +116,30 @@
                 return;
             }
 
-            // Retrieve saved orders from browser local storage
-            const orders = JSON.parse(localStorage.getItem('skaitech_orders')) || [];
+            // Retrieve saved orders from browser local storage (checking both public and agent orders)
+            const publicOrders = JSON.parse(localStorage.getItem('skaitech_orders')) || [];
+            let foundOrder = publicOrders.find(o => o.trackingId && o.trackingId.toUpperCase() === query);
 
-            if (orders.length === 0) {
-                resultBox.style.display = 'block';
-                resultBox.innerHTML = `<p style="color: #dc2626; font-weight: 600; margin: 0;">No orders saved in this browser yet. Try placing a test order first!</p>`;
-                return;
+            if (!foundOrder) {
+                const agentOrders = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
+                const foundAgentOrder = agentOrders.find(o => o.id && o.id.toUpperCase() === query);
+                if (foundAgentOrder) {
+                    foundOrder = {
+                        trackingId: foundAgentOrder.id,
+                        network: foundAgentOrder.network,
+                        size: foundAgentOrder.package,
+                        price: foundAgentOrder.price ? `GHS ${foundAgentOrder.price}` : 'Paid',
+                        name: 'Customer / Agent Order',
+                        phone: foundAgentOrder.phone || 'N/A',
+                        status: foundAgentOrder.status,
+                        date: foundAgentOrder.date
+                    };
+                }
             }
-
-            const foundOrder = orders.find(o => o.trackingId.toUpperCase() === query);
 
             if (!foundOrder) {
                 resultBox.style.display = 'block';
-                resultBox.innerHTML = `<p style="color: #dc2626; font-weight: 600; margin: 0;">No order found matching ID: ${query}</p>`;
+                resultBox.innerHTML = `<p style="color: #dc2626; font-weight: 600; margin: 0;">No order found matching ID: ${escapeHtml(query)}</p>`;
                 return;
             }
 
@@ -128,13 +148,13 @@
             resultBox.innerHTML = `
                 <div style="font-size: 0.9rem; color: #374151; line-height: 1.6;">
                     <div style="font-weight: 700; color: #1f2937; margin-bottom: 8px; font-size: 1rem;">Order Found!</div>
-                    <div><strong>Tracking ID:</strong> ${foundOrder.trackingId}</div>
-                    <div><strong>Network:</strong> ${foundOrder.network}</div>
-                    <div><strong>Package:</strong> ${foundOrder.size} (${foundOrder.price})</div>
-                    <div><strong>Name:</strong> ${foundOrder.name}</div>
-                    <div><strong>Phone:</strong> ${foundOrder.phone}</div>
-                    <div><strong>Status:</strong> <span style="color: #d97706; font-weight: 700;">${foundOrder.status}</span></div>
-                    <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 6px;">Placed on: ${foundOrder.date}</div>
+                    <div><strong>Tracking ID:</strong> ${escapeHtml(foundOrder.trackingId)}</div>
+                    <div><strong>Network:</strong> ${escapeHtml(foundOrder.network)}</div>
+                    <div><strong>Package:</strong> ${escapeHtml(foundOrder.size)} (${escapeHtml(foundOrder.price)})</div>
+                    <div><strong>Name:</strong> ${escapeHtml(foundOrder.name)}</div>
+                    <div><strong>Phone:</strong> ${escapeHtml(foundOrder.phone)}</div>
+                    <div><strong>Status:</strong> <span style="color: #d97706; font-weight: 700;">${escapeHtml(foundOrder.status)}</span></div>
+                    <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 6px;">Placed on: ${escapeHtml(foundOrder.date)}</div>
                 </div>
             `;
         }

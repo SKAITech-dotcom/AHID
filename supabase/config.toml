@@ -1,0 +1,32 @@
+[functions.create-result-checker-payment]
+verify_jwt = false
+
+[functions.get-result-checker-order]
+verify_jwt = false
+
+[functions.create-agent-wallet-payment]
+verify_jwt = true
+
+[functions.paystack-webhook]
+verify_jwt = false
+
+[functions.upload-result-checker-pins]
+verify_jwt = true
+
+[functions.result-checker-stock]
+verify_jwt = true
+
+[functions.purchase-agent-data]
+verify_jwt = true
+
+[functions.create-public-data-payment]
+verify_jwt = false
+
+[functions.get-public-data-order]
+verify_jwt = false
+
+[functions.request-cashout-deposit]
+verify_jwt = true
+
+[functions.manage-cashout-deposits]
+verify_jwt = true

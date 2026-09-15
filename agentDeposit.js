@@ -1,33 +1,83 @@
+import { supabase } from './supabaseClient.js';
 // Load and display current wallet balance on page load
 document.addEventListener('DOMContentLoaded', () => {
     updateWalletDisplay();
+    handlePaymentReturn();
+    loadCashoutDepositRequests();
 });
 
-function updateWalletDisplay() {
-    let balance = parseFloat(localStorage.getItem('agent_wallet_balance')) || 0;
+async function updateWalletDisplay() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        window.location.href = 'login.html';
+        return;
+    }
+
+    const { data: wallet, error } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('id', user.id)
+        .maybeSingle();
+    const balance = !error && wallet ? Number(wallet.balance) || 0 : 0;
+
+    if (!error && wallet) {
+        localStorage.setItem('agent_wallet_balance', String(balance));
+    }
+
     const balanceDisplay = document.getElementById('walletHeaderDisplay');
     if (balanceDisplay) {
         balanceDisplay.innerText = `Wallet Balance: GHS ${balance.toFixed(2)}`;
     }
+    const cardBalDisplay = document.getElementById('cashoutWalletBalDisplay');
+    if (cardBalDisplay) {
+        cardBalDisplay.innerText = `GHS ${balance.toFixed(2)}`;
+    }
+}
+
+async function handlePaymentReturn() {
+    const reference = new URLSearchParams(window.location.search).get('reference');
+    const statusElement = document.getElementById('walletPaymentStatus');
+    if (!reference || !statusElement) return;
+
+    statusElement.hidden = false;
+    statusElement.textContent = 'Payment received. Confirming your wallet top-up...';
+
+    const { data: topup, error } = await supabase
+        .from('wallet_topups')
+        .select('amount, status, payment_reference')
+        .eq('payment_reference', reference)
+        .maybeSingle();
+
+    if (error || !topup) {
+        statusElement.textContent = 'Payment submitted. Your wallet will update after Paystack confirms the transaction.';
+        return;
+    }
+
+    if (topup.status === 'paid') {
+        statusElement.textContent = `Wallet loaded successfully: GHS ${Number(topup.amount).toFixed(2)}.`;
+        await updateWalletDisplay();
+        return;
+    }
+
+    if (topup.status === 'failed') {
+        statusElement.textContent = 'Payment was not successful. Your wallet was not loaded.';
+        return;
+    }
+
+    statusElement.textContent = 'Payment is still being confirmed. Your wallet has not been loaded yet.';
 }
 
 // 1. ExpressPay Checkout Handler
 function payWithExpressPay() {
     const amountInput = document.getElementById('expressAmount');
-    const emailInput = document.getElementById('expressEmail');
-    
     const amount = parseFloat(amountInput ? amountInput.value : 0);
-    const email = emailInput ? emailInput.value.trim() : '';
 
     if (!amount || amount <= 0) {
         alert("Please enter a valid deposit amount in GHS.");
         return;
     }
 
-    if (!email || !email.includes('@')) {
-        alert("Please enter a valid agent email address.");
-        return;
-    }
+    return startWalletPayment(amount);
 
     // Calculate amount in pesewas (GHS * 100) as noted in the API instructions
     const amountInPesewas = Math.round(amount * 100);
@@ -45,6 +95,26 @@ function payWithExpressPay() {
         alert(`✅ Payment Successful! GHS ${amount.toFixed(2)} added to your wallet.`);
         location.reload();
     }, 1500);
+}
+
+async function startWalletPayment(amount) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+        alert('Please sign in with your agent account before funding your wallet.');
+        window.location.href = 'login.html';
+        return;
+    }
+    const button = document.querySelector('[onclick="payWithExpressPay()"]');
+    if (button) { button.disabled = true; button.textContent = 'Opening secure checkout…'; }
+    try {
+        const { data, error } = await supabase.functions.invoke('create-agent-wallet-payment', { body: { amount } });
+        if (error) throw error;
+        if (!data?.authorizationUrl) throw new Error(data?.error || 'Unable to open checkout.');
+        window.location.href = data.authorizationUrl;
+    } catch (error) {
+        alert(error.message || 'Unable to start secure payment. Please try again.');
+        if (button) { button.disabled = false; button.textContent = 'Proceed to Paystack'; }
+    }
 }
 
 // 2. Direct Deposit (Manual Reference) Handler
@@ -76,27 +146,35 @@ function submitDirectDeposit() {
     document.getElementById('momoReference').value = '';
 }
 
-// Update wallet balance display on load (both header and card)
-document.addEventListener('DOMContentLoaded', () => {
-    updateWalletDisplay();
-});
+async function loadCashoutDepositRequests() {
+    const statusElement = document.getElementById('cashoutRequestStatus');
+    if (!statusElement) return;
 
-function updateWalletDisplay() {
-    let balance = parseFloat(localStorage.getItem('agent_wallet_balance')) || 0;
-    
-    const headerDisplay = document.getElementById('walletHeaderDisplay');
-    if (headerDisplay) {
-        headerDisplay.innerText = `Wallet Balance: GHS ${balance.toFixed(2)}`;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: requests, error } = await supabase
+        .from('cashout_deposit_requests')
+        .select('id, amount, status, settlement_reference, admin_note, requested_at')
+        .eq('agent_id', user.id)
+        .order('requested_at', { ascending: false })
+        .limit(5);
+    if (error) {
+        statusElement.textContent = 'Unable to load cashout deposit requests.';
+        return;
     }
-
-    const cardBalDisplay = document.getElementById('cashoutWalletBalDisplay');
-    if (cardBalDisplay) {
-        cardBalDisplay.innerText = `GHS ${balance.toFixed(2)}`;
+    if (!requests?.length) {
+        statusElement.textContent = 'No cashout deposit requests yet.';
+        return;
     }
+    statusElement.innerHTML = requests.map((entry) => {
+        const reference = entry.settlement_reference ? ` • Ref: ${entry.settlement_reference}` : '';
+        const note = entry.admin_note ? ` • ${entry.admin_note}` : '';
+        return `<div><strong>${String(entry.status).toUpperCase()}</strong> — GHS ${Number(entry.amount).toFixed(2)}${reference}${note}</div>`;
+    }).join('');
 }
 
 // 3. Cashout Deposit Flow Handler
-function initiateCashoutDeposit() {
+async function initiateCashoutDeposit() {
     const phone = document.getElementById('cashoutPhone').value.trim();
     const amount = parseFloat(document.getElementById('cashoutAmount').value);
 
@@ -110,25 +188,20 @@ function initiateCashoutDeposit() {
         return;
     }
 
-    alert(`✅ Deposit Request Submitted!\nAmount: GHS ${amount.toFixed(2)}\nNumber: ${phone}\nYou have joined the queue. Follow the admin booth workflow to complete settlement.`);
-
-    // Log request as pending admin settlement/queue
-    const newDeposit = {
-        id: 'CSH' + Math.floor(1000 + Math.random() * 9000),
-        network: 'Cashout Deposit',
-        package: `Queue Request (${phone})`,
-        price: amount.toFixed(2),
-        status: 'Pending Booth Queue',
-        date: new Date().toLocaleDateString()
-    };
-
-    const existingOrders = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
-    existingOrders.unshift(newDeposit);
-    localStorage.setItem('skaitechOrders', JSON.stringify(existingOrders));
-
-    // Clear fields
-    document.getElementById('cashoutAmount').value = '';
-    document.getElementById('cashoutPhone').value = '';
+    const button = document.querySelector('[onclick="initiateCashoutDeposit()"]');
+    if (button) { button.disabled = true; button.textContent = 'Submitting request…'; }
+    try {
+        const { data, error } = await supabase.functions.invoke('request-cashout-deposit', { body: { amount, phone } });
+        if (error || data?.error) throw new Error(data?.error || error?.message || 'Unable to submit the deposit request.');
+        alert(`Deposit request submitted for GHS ${Number(data.request.amount).toFixed(2)}. Pay only through the agreed admin/booth process. Your wallet will be credited after an administrator verifies and approves the payment.`);
+        document.getElementById('cashoutAmount').value = '';
+        document.getElementById('cashoutPhone').value = '';
+        await loadCashoutDepositRequests();
+    } catch (error) {
+        alert(error instanceof Error ? error.message : 'Unable to submit the deposit request.');
+    } finally {
+        if (button) { button.disabled = false; button.textContent = 'Submit deposit request'; }
+    }
 }
 
 
@@ -136,7 +209,7 @@ function initiateCashoutDeposit() {
 function saveTransactionRecord(type, amount, status) {
     const txs = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
     txs.unshift({
-        id: 'TXN' + Math.floor(1000 + Math.random() * 9000),
+        id: 'TXN' + Math.floor(1000 + Math.randfom() * 9000),
         network: type,
         package: `Wallet Funding`,
         price: amount.toFixed(2),
@@ -161,6 +234,11 @@ function claimWalletCredit() {
         return;
     }
 
+    alert(`Your claim for GHS ${amount.toFixed(2)} (${txId}) has been recorded for verification. Your wallet will be credited only after the payment is confirmed.`);
+    document.getElementById('claimTxId').value = '';
+    document.getElementById('claimAmount').value = '';
+    return;
+
     // Update wallet balance in localStorage
     let balance = parseFloat(localStorage.getItem('agent_wallet_balance')) || 0;
     balance += amount;
@@ -181,3 +259,9 @@ function claimWalletCredit() {
     alert(`✅ Wallet Successfully Credited!\nGHS ${amount.toFixed(2)} has been added to your balance using Transaction ID: ${txId}`);
     location.reload(); // Refresh page to display new balance
 }
+// Bind deposit functions to window for HTML onclick attributes
+window.payWithExpressPay = payWithExpressPay;
+window.submitDirectDeposit = submitDirectDeposit;
+window.initiateCashoutDeposit = initiateCashoutDeposit;
+window.claimWalletCredit = claimWalletCredit;
+window.updateWalletDisplay = updateWalletDisplay;

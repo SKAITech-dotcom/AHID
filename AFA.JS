@@ -1,3 +1,14 @@
+import { supabase } from './supabaseClient.js';
+
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+}
+
 // Handle New Registration Submission
 function submitRegistration() {
     const name = document.getElementById('regName').value.trim();
@@ -61,13 +72,13 @@ function trackAfa() {
 
     const found = records.find(item => 
         item.phone.toLowerCase().includes(query) || 
-        item.idNum.toLowerCase().includes(query) ||
+        item.idNum.toLowerCase().includes(query) || 
         item.fullName.toLowerCase().includes(query)
     );
 
     if (!found) {
         resultBox.style.display = 'block';
-        resultBox.innerHTML = `<p style="color: #b45309; font-weight: 600; margin: 0;">No active AFA registration matched: "${query}"</p>`;
+        resultBox.innerHTML = `<p style="color: #b45309; font-weight: 600; margin: 0;">No active AFA registration matched: "${escapeHtml(query)}"</p>`;
         return;
     }
 
@@ -77,21 +88,25 @@ function trackAfa() {
             <div style="font-weight: 800; color: #b45309; margin-bottom: 10px; font-size: 1rem;">Registration Found!</div>
             
             <div class="field-label">FULL NAME</div>
-            <div class="field-val">${found.fullName}</div>
+            <div class="field-val">${escapeHtml(found.fullName)}</div>
 
             <div class="field-label">PHONE NUMBER</div>
-            <div class="field-val">${found.phone}</div>
+            <div class="field-val">${escapeHtml(found.phone)}</div>
 
             <div class="field-label">TOWN</div>
-            <div class="field-val">${found.town}</div>
+            <div class="field-val">${escapeHtml(found.town)}</div>
 
             <div class="field-label">ID NUMBER</div>
-            <div class="field-val">${found.idNum}</div>
+            <div class="field-val">${escapeHtml(found.idNum)}</div>
 
             <div class="field-label">REGISTRATION STATUS</div>
             <div style="display: inline-block; background: #d97706; color: white; padding: 3px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; margin-top: 4px;">
-                ${found.status}
+                ${escapeHtml(found.status)}
             </div>
         </div>
     `;
 }
+
+// Bind AFA functions to window for HTML onclick attributes
+window.submitRegistration = submitRegistration;
+window.trackAfa = trackAfa;

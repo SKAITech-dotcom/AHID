@@ -1,3 +1,4 @@
+import { supabase } from './supabaseClient.js';
 // Simple tab switching function
 function switchTab(tabName) {
     const tabs = ['overview', 'store', 'pricing', 'withdrawals'];
@@ -73,3 +74,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+// Bind STORE functions to window for HTML onclick attributes
+window.switchTab = switchTab;
+window.copyStoreLink = copyStoreLink;
+window.saveStorePrices = saveStorePrices;
+window.withdrawCredit = withdrawCredit;
+window.transferToBalance = transferToBalance;

@@ -1,0 +1,6 @@
+import { supabase } from './supabaseClient.js';
+const notice = (message) => { const el = document.getElementById('notice'); el.textContent = message; el.hidden = false; };
+const parsePins = (text) => text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => { const [pin, serial = ''] = line.split(',').map((value) => value.trim()); return { pin, serial }; }).filter(({ pin }) => pin);
+async function loadStock() { const { data, error } = await supabase.functions.invoke('result-checker-stock'); document.getElementById('stock').textContent = error || data?.error ? 'Unable to load stock. Admin access is required.' : Object.entries(data.stock).map(([type, count]) => `${type}: ${count} available`).join(' • ') || 'No available PIN stock.'; }
+document.getElementById('uploadForm').addEventListener('submit', async (event) => { event.preventDefault(); const pins = parsePins(document.getElementById('pins').value); const { data, error } = await supabase.functions.invoke('upload-result-checker-pins', { body: { examType: document.getElementById('examType').value, pins } }); if (error || data?.error) { notice(data?.error || 'Upload failed.'); return; } notice(`${data.added} PIN(s) uploaded; ${data.skipped} duplicate(s) skipped.`); document.getElementById('pins').value = ''; loadStock(); });
+loadStock();

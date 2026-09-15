@@ -1,42 +1,23 @@
-// Pricing configuration per exam type (adjust as needed)
-const prices = {
-    "BECE": 19.00,
-    "WASSCE": 22.00,
-    "NOV/DEC": 22.00
-};
-
-const examTypeSelect = document.getElementById("examType");
-const quantityInput = document.getElementById("quantity");
-const pricePerPinSpan = document.getElementById("pricePerPin");
-const totalPriceSpan = document.getElementById("totalPrice");
-const resultsCheckerForm = document.getElementById("resultsCheckerForm");
-
-// Update prices dynamically when exam type or quantity changes
-function updatePricing() {
-    const selectedExam = examTypeSelect.value;
-    const qty = parseInt(quantityInput.value) || 1;
-    const unitPrice = prices[selectedExam] || 19.00;
-    const total = unitPrice * qty;
-
-    pricePerPinSpan.textContent = unitPrice.toFixed(2);
-    totalPriceSpan.textContent = total.toFixed(2);
+import { supabase } from './supabaseClient.js';
+const PRICES = { BECE: 19, WASSCE: 22, 'NOV/DEC': 22 };
+const $ = (id) => document.getElementById(id);
+function notice(message, isError = false) { const el = $('notice'); el.textContent = message; el.className = `notice show${isError ? ' error' : ''}`; }
+function updatePrice() { const price = PRICES[$('examType').value]; const quantity = Math.max(1, Number.parseInt($('quantity').value, 10) || 1); $('quantity').value = quantity; $('pricePerPin').textContent = price.toFixed(2); $('totalPrice').textContent = (price * quantity).toFixed(2); }
+async function showCompletedOrder(reference) {
+  const saved = JSON.parse(sessionStorage.getItem('skaitech_result_payment') || '{}');
+  if (saved.reference !== reference || !saved.email) { notice('Payment received. Keep your reference and contact support to retrieve your PIN.'); return; }
+  const { data, error } = await supabase.functions.invoke('get-result-checker-order', { body: { reference, email: saved.email } });
+  if (error || data?.error) { notice(data?.error || 'Unable to retrieve your order.', true); return; }
+  if (data.order.status !== 'paid') { notice('Your payment is being confirmed. Refresh in a few seconds; do not pay again.'); return; }
+  $('pins').textContent = `Payment confirmed. Save these PIN details:\n${data.order.pins.map((pin) => `PIN: ${pin.pin}${pin.serial ? ` | SERIAL: ${pin.serial}` : ''}`).join('\n')}`;
+  $('pins').hidden = false; notice(`Order ${reference} is complete.`);
 }
-
-examTypeSelect.addEventListener("change", updatePricing);
-quantityInput.addEventListener("input", updatePricing);
-
-// Handle form submission / Paystack integration
-resultsCheckerForm.addEventListener("submit", function(e) {
-    e.preventDefault();
-    
-    const email = document.getElementById("email").value;
-    const phone = document.getElementById("phoneNumber").value;
-    const totalAmount = parseFloat(totalPriceSpan.textContent);
-    const examType = examTypeSelect.value;
-    const quantity = quantityInput.value;
-
-    // Placeholder for your Paystack popup integration
-    alert(`Initiating Paystack payment of GHS ${totalAmount} for ${quantity} ${examType} checker(s).`);
-    
-    // TODO: Insert your Paystack Popups script here (e.g., PaystackPop.setup({...}))
+$('resultsCheckerForm').addEventListener('submit', async (event) => {
+  event.preventDefault(); const button = event.submitter; button.disabled = true; notice('Preparing secure Paystack checkout…');
+  const email = $('email').value.trim().toLowerCase();
+  const { data, error } = await supabase.functions.invoke('create-result-checker-payment', { body: { examType: $('examType').value, quantity: Number($('quantity').value), email, phone: $('phoneNumber').value.trim() } });
+  if (error || data?.error) { notice(data?.error || 'Unable to start payment.', true); button.disabled = false; return; }
+  sessionStorage.setItem('skaitech_result_payment', JSON.stringify({ reference: data.reference, email })); window.location.href = data.authorizationUrl;
 });
+$('examType').addEventListener('change', updatePrice); $('quantity').addEventListener('input', updatePrice); updatePrice();
+const reference = new URLSearchParams(window.location.search).get('reference'); if (reference) showCompletedOrder(reference);

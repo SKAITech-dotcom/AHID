@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Skaitech - Orders</title>
+  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -108,34 +109,31 @@
         </tbody>
       </table>
     </div>
+
+    <!-- PAGINATION CONTROLS -->
+    <div class="pagination-container" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+      
+      <div class="page-size-selector">
+        <label for="pageSize" style="font-weight: 600; font-size: 14px; margin-right: 5px;">Show:</label>
+        <select id="pageSize" onchange="changePageSize(this.value)" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer;">
+          <option value="10" selected>10</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+        <span style="font-size: 14px; color: #555;">orders per page</span>
+      </div>
+
+      <div class="pagination-buttons" style="display: flex; align-items: center; gap: 10px;">
+        <button id="prevBtn" onclick="changePage(-1)" style="padding: 6px 14px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc;">Previous</button>
+        <span id="pageIndicator" style="font-weight: bold; font-size: 14px;">Page 1</span>
+        <button id="nextBtn" onclick="changePage(1)" style="padding: 6px 14px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc;">Next</button>
+      </div>
+
+    </div>
   </main>
 
-  <script src="script.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>
-
-<!-- PAGINATION CONTROLS -->
-<div class="pagination-container" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
-  
-  <div class="page-size-selector">
-    <label for="pageSize" style="font-weight: 600; font-size: 14px; margin-right: 5px;">Show:</label>
-    <select id="pageSize" onchange="changePageSize(this.value)" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer;">
-      <option value="10" selected>10</option>
-      <option value="20">20</option>
-      <option value="30">30</option>
-      <option value="50">50</option>
-      <option value="100">100</option>
-    </select>
-    <span style="font-size: 14px; color: #555;">orders per page</span>
-  </div>
-
-  <div class="pagination-buttons" style="display: flex; align-items: center; gap: 10px;">
-    <button id="prevBtn" onclick="changePage(-1)" style="padding: 6px 14px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc;">Previous</button>
-    <span id="pageIndicator" style="font-weight: bold; font-size: 14px;">Page 1</span>
-    <button id="nextBtn" onclick="changePage(1)" style="padding: 6px 14px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc;">Next</button>
-  </div>
-
-</div>
-</div>
-
-

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cashout Deposit Review | Skaitech</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body style="background:#f3f4f6; margin:0; font-family:Arial,sans-serif; color:#1f2937;">
+  <main style="max-width:900px; margin:32px auto; padding:0 16px;">
+    <a href="dashboard.html" style="color:#1d4ed8; text-decoration:none;">← Back to dashboard</a>
+    <section style="margin-top:16px; background:#fff; border-radius:12px; padding:24px; box-shadow:0 2px 10px #00000010;">
+      <h1 style="margin-top:0;">Cashout deposit requests</h1>
+      <p>Approve only after independently confirming receipt of the MoMo payment. Approval credits the agent wallet once and cannot be reversed from this screen.</p>
+      <div style="display:flex; gap:8px; margin:16px 0; flex-wrap:wrap;">
+        <button type="button" data-status="pending">Pending</button>
+        <button type="button" data-status="approved">Approved</button>
+        <button type="button" data-status="rejected">Rejected</button>
+        <button type="button" data-status="all">All</button>
+      </div>
+      <p id="notice" role="status"></p>
+      <div id="requests">Loading requests…</div>
+    </section>
+  </main>
+  <script type="module" src="adminCashoutDeposits.js"></script>
+</body>
+</html>

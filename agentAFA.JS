@@ -1,14 +1,25 @@
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadAfaRequests();
 });
 
 // Open/Close Modal handlers
 function openAddAfaModal() {
-    document.getElementById('afaModal').style.display = 'flex';
+    const modal = document.getElementById('afaModal');
+    if (modal) modal.style.display = 'flex';
 }
 
 function closeAddAfaModal() {
-    document.getElementById('afaModal').style.display = 'none';
+    const modal = document.getElementById('afaModal');
+    if (modal) modal.style.display = 'none';
 }
 
 // Save a new AFA registration
@@ -55,19 +66,22 @@ function loadAfaRequests(filterQuery = '') {
     const container = document.getElementById('afaDataList');
     const emptyState = document.getElementById('emptyAfaState');
 
+    if (!container || !emptyState) return;
+
     container.innerHTML = '';
 
     // Filter based on search query (by phone, name, town, or ID)
     const filtered = afaList.filter(item => {
         const query = filterQuery.toLowerCase();
-        return item.name.toLowerCase().includes(query) ||
-               item.phone.toLowerCase().includes(query) ||
-               item.town.toLowerCase().includes(query) ||
-               item.idNumber.toLowerCase().includes(query) ||
-               item.id.toLowerCase().includes(query);
+        return (item.name && item.name.toLowerCase().includes(query)) ||
+               (item.phone && item.phone.toLowerCase().includes(query)) ||
+               (item.town && item.town.toLowerCase().includes(query)) ||
+               (item.idNumber && item.idNumber.toLowerCase().includes(query)) ||
+               (item.id && item.id.toLowerCase().includes(query));
     });
 
     if (filtered.length === 0) {
+        emptyState.innerHTML = '<p style="font-size: 15px; margin-bottom: 15px;">No AFA requests found.</p>';
         emptyState.style.display = 'block';
         container.style.display = 'none';
         return;
@@ -88,16 +102,16 @@ function loadAfaRequests(filterQuery = '') {
         
         card.innerHTML = `
             <div>
-                <div style="font-weight: 600; color: #1f2937; font-size: 15px; margin-bottom: 3px;">${item.name} <span style="font-size: 12px; color: #666; font-weight: normal;">(${item.id})</span></div>
+                <div style="font-weight: 600; color: #1f2937; font-size: 15px; margin-bottom: 3px;">${escapeHtml(item.name)} <span style="font-size: 12px; color: #666; font-weight: normal;">(${escapeHtml(item.id)})</span></div>
                 <div style="font-size: 13px; color: #4b5563; display: flex; gap: 15px; flex-wrap: wrap;">
-                    <span><i class="fa-solid fa-phone"></i> ${item.phone}</span>
-                    <span><i class="fa-solid fa-location-dot"></i> ${item.town}</span>
-                    <span><i class="fa-solid fa-id-card"></i> ${item.idNumber}</span>
+                    <span><i class="fa-solid fa-phone"></i> ${escapeHtml(item.phone)}</span>
+                    <span><i class="fa-solid fa-location-dot"></i> ${escapeHtml(item.town)}</span>
+                    <span><i class="fa-solid fa-id-card"></i> ${escapeHtml(item.idNumber)}</span>
                 </div>
             </div>
             <div style="display: flex; align-items: center; gap: 12px;">
-                <span style="background: ${badgeColor}; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;">${item.status}</span>
-                <span style="font-size: 12px; color: #9ca3af;">${item.date}</span>
+                <span style="background: ${badgeColor}; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;">${escapeHtml(item.status)}</span>
+                <span style="font-size: 12px; color: #9ca3af;">${escapeHtml(item.date)}</span>
             </div>
         `;
         container.appendChild(card);
@@ -106,6 +120,13 @@ function loadAfaRequests(filterQuery = '') {
 
 // Live search tracker function
 function filterAfaList() {
-    const query = document.getElementById('afaSearchInput').value;
+    const searchInput = document.getElementById('afaSearchInput');
+    const query = searchInput ? searchInput.value : '';
     loadAfaRequests(query);
 }
+
+window.openAddAfaModal = openAddAfaModal;
+window.closeAddAfaModal = closeAddAfaModal;
+window.submitNewAfa = submitNewAfa;
+window.filterAfaList = filterAfaList;
+window.loadAfaRequests = loadAfaRequests;
