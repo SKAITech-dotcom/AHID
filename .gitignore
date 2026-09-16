@@ -1,0 +1,10 @@
+.claude/
+.vscode/
+.tools/
+memory-bank/
+*.log
+*.tmp
+*.bak
+desktop.ini
+.DS_Store
+Thumbs.db
