@@ -1,3 +1,5 @@
+import { requireVerifiedAgent } from './agentAuthGuard.js';
+
 function escapeHtml(value) {
     return String(value)
         .replaceAll('&', '&amp;')
@@ -7,7 +9,9 @@ function escapeHtml(value) {
         .replaceAll("'", '&#039;');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    const authResult = await requireVerifiedAgent({ redirectOnFail: true });
+    if (!authResult) return;
     loadAfaRequests();
 });
 

@@ -110,6 +110,35 @@ Deno.serve(async (request) => {
       return json({ received: true });
     }
 
+    if (event.data?.metadata?.payment_type === 'utility_bill' || String(reference).startsWith('UTIL-')) {
+      const { data: order, error: orderError } = await admin.from('utility_orders')
+        .select('*').eq('payment_reference', reference).single();
+      if (orderError || !order || ['paid', 'completed'].includes(order.status)) return json({ received: true });
+
+      const verified = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+        headers: { Authorization: `Bearer ${secret}` },
+      });
+      const transaction = await verified.json();
+      const feeRate = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.015');
+      const safeRate = Number.isFinite(feeRate) && feeRate >= 0 && feeRate < 1 ? feeRate : 0.015;
+      const expectedGross = Math.round(((Number(order.amount) / (1 - safeRate)) + Number.EPSILON) * 100) / 100;
+      if (!verified.ok || transaction.data?.status !== 'success' || transaction.data.amount !== Math.round(expectedGross * 100) || transaction.data.currency !== 'GHS') {
+        return json({ error: 'Payment verification failed.' }, 400);
+      }
+
+      const { error: fulfilError } = await admin.rpc('fulfil_utility_order', {
+        p_order_id: order.id,
+        p_provider_data: {
+          paystack_reference: reference,
+          channel: transaction.data?.channel,
+          paid_at: transaction.data?.paid_at,
+          authorization: transaction.data?.authorization,
+        },
+      });
+      if (fulfilError) throw fulfilError;
+      return json({ received: true });
+    }
+
     const { data: order, error } = await admin.from('results_orders').select('*').eq('payment_reference', reference).single();
     if (error || !order) return json({ received: true });
     if (order.status === 'paid') return json({ received: true });

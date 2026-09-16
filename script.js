@@ -305,27 +305,22 @@ const networkPackages = {
     themeClass: 'theme-mtn',
     logoUrl: 'img/mtn-logo.png',
     packages: [
-      { size: '1 GB', price: 4.20 },
-      { size: '2 GB', price: 8.30 },
-      { size: '3 GB', price: 12.20 },
-      { size: '4 GB', price: 16.20 },
-      { size: '5 GB', price: 20.50 },
-      { size: '6 GB', price: 24.80 },
-      { size: '8 GB', price: 34.00 },
-      { size: '10 GB', price: 40.00 },
-      { size: '15 GB', price: 58.60 },
-      { size: '20 GB', price: 78.00 },
-      { size: '25 GB', price: 98.00 },
-      { size: '30 GB', price: 118.00 },
-      { size: '40 GB', price: 156.00 },
-      { size: '50 GB', price: 195.00 },
-      { size: '100 GB', price: 375.00 }
+      { size: '1 GB', price: 4.50 },
+      { size: '2 GB', price: 9.00 },
+      { size: '3 GB', price: 14.00 },
+      { size: '4 GB', price: 18.00 },
+      { size: '5 GB', price: 22.00 },
+      { size: '6 GB', price: 26.00 },
+      { size: '8 GB', price: 33.00 },
+      { size: '10 GB', price: 43.00 },
+      { size: '15 GB', price: 61.00 }
     ]
   },
   'Telecel': {
     label: 'TELECEL',
     themeClass: 'theme-telecel',
     logoUrl: 'img/telecel-logo.png',
+    outOfStock: true,
     packages: [
       { size: '5 GB', price: 18.50 },
       { size: '10 GB', price: 35.00 },
@@ -350,24 +345,9 @@ const networkPackages = {
     themeClass: 'theme-airteltigo',
     logoUrl: 'img/airtel-logo.png',
     packages: [
-      { size: '1 GB', price: 4.00 },
-      { size: '2 GB', price: 8.00 },
-      { size: '3 GB', price: 12.00 },
-      { size: '4 GB', price: 16.00 },
-      { size: '5 GB', price: 20.00 },
-      { size: '6 GB', price: 24.00 },
-      { size: '7 GB', price: 28.00 },
-      { size: '8 GB', price: 32.00 },
-      { size: '9 GB', price: 36.00 },
-      { size: '30 GB', price: 65.00 },
-      { size: '40 GB', price: 75.00 },
-      { size: '50 GB', price: 90.00 },
-      { size: '60 GB', price: 110.00 },
-      { size: '70 GB', price: 125.00 },
-      { size: '80 GB', price: 150.00 },
-      { size: '100 GB', price: 175.00 },
-      { size: '150 GB', price: 220.00 },
-      { size: '200 GB', price: 330.00 }
+      { size: '1 GB', price: 4.50 },
+      { size: '2 GB', price: 9.00 },
+      { size: '3 GB', price: 15.00 }
     ]
   }
 };
@@ -381,11 +361,15 @@ function selectNetwork(netKey) {
 
   const data = networkPackages[netKey] || networkPackages['MTN'];
 
-  container.innerHTML = data.packages.map(pkg => `
-    <div class="package-card ${data.themeClass || ''}">
+  const outOfStockBanner = data.outOfStock
+    ? `<div style="grid-column: 1 / -1; background: #fee2e2; border: 1px solid #f87171; color: #991b1b; padding: 12px; border-radius: 8px; font-weight: 700; text-align: center; margin-bottom: 12px;"><i class="fa-solid fa-triangle-exclamation"></i> Telecel Data Bundles are currently Out of Stock.</div>`
+    : '';
+
+  container.innerHTML = outOfStockBanner + data.packages.map(pkg => `
+    <div class="package-card ${data.themeClass || ''}" style="${data.outOfStock ? 'opacity: 0.85;' : ''}">
       <div class="card-logo-wrapper">
         <img src="${data.logoUrl}" alt="${data.label}" class="card-network-logo" />
-        <span class="status-dot"></span>
+        <span class="status-dot" style="${data.outOfStock ? 'background: #ef4444;' : ''}"></span>
       </div>
       <span class="card-net-label">${data.label}</span>
       <div class="card-data-size">
@@ -393,9 +377,15 @@ function selectNetwork(netKey) {
       </div>
       <div class="card-price-tag">GHS ${pkg.price.toFixed(2)}</div>
       <span class="card-pay-type">One-time payment</span>
+${data.outOfStock ? `
+      <button class="btn-add-cart" disabled style="background: #9ca3af; color: #fff; cursor: not-allowed; opacity: 0.8;" onclick="alert('Telecel data bundle is currently out of stock.'); return false;">
+        <i class="fa-solid fa-ban"></i> Out of Stock
+      </button>
+      ` : `
       <button class="btn-add-cart" onclick="openBuyModal('${data.label}', '${pkg.size}', ${pkg.price})" style="background: linear-gradient(135deg, #2563eb, #1e40af); color: #fff; cursor: pointer;">
-  <i class="fa-solid fa-cart-plus"></i> Add to Cart
-</button>
+        <i class="fa-solid fa-cart-plus"></i> Add to Cart
+      </button>
+      `}
     </div>
   `).join('');
 }  
@@ -405,6 +395,10 @@ function selectNetwork(netKey) {
 let currentOrder = null;
 
 function openBuyModal(network, size, price) {
+    if (network && network.toUpperCase() === 'TELECEL') {
+        alert("Telecel data bundle is currently out of stock.");
+        return;
+    }
     currentOrder = { network, size, price: parseFloat(price) };
     const modal = document.getElementById('buyModal');
     const title = document.getElementById('modalTitle');
@@ -422,6 +416,10 @@ function closeBuyModal() {
 }
 
 async function processPurchase() {
+    if (currentOrder && currentOrder.network && currentOrder.network.toUpperCase() === 'TELECEL') {
+        alert("Telecel data bundle is currently out of stock.");
+        return;
+    }
     const phoneInput = document.getElementById('recipientPhone');
     const phone = phoneInput ? phoneInput.value.trim() : '';
 
@@ -936,6 +934,7 @@ async function loadUserData() {
     currentPath.endsWith('nonagentbuyers.html') ||
     currentPath.endsWith('nonagenttrachorder.html') ||
     currentPath.endsWith('resultschecker.html') ||
+    currentPath.endsWith('utilitybills.html') ||
     currentPath.endsWith('nonagentdashboard.html') ||
     currentPath.endsWith('afa.html') ||
     currentPath === '/' ||
@@ -963,6 +962,22 @@ async function loadUserData() {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
 
       if (user && !userError) {
+        // Enforce verified agent role for protected agent pages
+        const { data: agentData, error: agentError } = await supabase
+          .from('agents')
+          .select('id, role, full_name, agent_code')
+          .eq('id', user.id)
+          .single();
+
+        if (isProtectedAgentPage && (agentError || !agentData || !['agent', 'admin'].includes(agentData.role))) {
+          console.warn('Unauthorized access attempt to agent portal:', user.id);
+          localStorage.removeItem('currentAgentCode');
+          localStorage.removeItem('agent_wallet_balance');
+          alert('Access Denied: This portal requires a verified Skaitech Agent account.');
+          window.location.href = 'index.html';
+          return;
+        }
+
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('full_name, agent_code')
@@ -972,6 +987,9 @@ async function loadUserData() {
         if (profileData && !profileError) {
           if (profileData.full_name) userName = profileData.full_name;
           if (profileData.agent_code) agentCode = profileData.agent_code;
+        } else if (agentData) {
+          if (agentData.full_name) userName = agentData.full_name;
+          if (agentData.agent_code) agentCode = agentData.agent_code;
         }
 
         const { data: walletData, error: walletError } = await supabase

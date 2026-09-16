@@ -1,4 +1,4 @@
-import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
+import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 
 const NETWORKS = new Set(['mtn', 'telecel', 'airteltigo']);
 const catalog: Record<string, Record<number, number>> = {
@@ -54,9 +54,7 @@ Deno.serve(async (request) => {
 
   let orderId: string | null = null;
   let providerAccepted = false;
-  try {
-    const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
-    if (!token) return json({ error: 'Please sign in before buying data.' }, 401);
+    const { admin, user } = await requireAgent(request);
 
     const body = await request.json();
     const phone = String(body.phone ?? '').trim();
@@ -68,10 +66,6 @@ Deno.serve(async (request) => {
     if (!Number.isInteger(volumeInMB) || volumeInMB <= 0 || volumeInMB > 204800) return json({ error: 'Invalid bundle volume.' }, 400);
     const saleAmount = catalog[networkType]?.[volumeInMB];
     if (!saleAmount) return json({ error: 'This bundle is not available at the current agent price.' }, 400);
-
-    const admin = adminClient();
-    const { data: { user }, error: userError } = await admin.auth.getUser(token);
-    if (userError || !user) return json({ error: 'Your session is invalid. Please sign in again.' }, 401);
 
     const apiKey = Deno.env.get('DATA_API_KEY');
     if (!apiKey) throw new Error('RemaData API is not configured.');
@@ -130,6 +124,8 @@ Deno.serve(async (request) => {
       }
     }
     console.error(error);
-    return json({ error: errorMessage(error, 'Unable to complete data purchase.') }, 500);
+    const msg = errorMessage(error, 'Unable to complete data purchase.');
+    const status = msg.includes('Authentication') ? 401 : msg.includes('Verified agent') ? 403 : 500;
+    return json({ error: msg }, status);
   }
 });

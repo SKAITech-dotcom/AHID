@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pay Utility Bills & Subscriptions - Skaitech</title>
+  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      background-color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #0f172a;
+    }
+
+    .bill-wrapper {
+      max-width: 620px;
+      margin: 30px auto;
+      padding: 0 16px 60px;
+    }
+
+    .back-nav {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #475569;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 20px;
+      transition: color 0.2s;
+    }
+    .back-nav:hover {
+      color: #2563eb;
+    }
+
+    .bill-card {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+      border: 1px solid #e2e8f0;
+    }
+
+    .bill-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .bill-header h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 6px 0;
+    }
+
+    .bill-header p {
+      color: #64748b;
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    /* Tabs */
+    .bill-tabs {
+      display: flex;
+      background: #f1f5f9;
+      padding: 4px;
+      border-radius: 12px;
+      gap: 4px;
+      margin-bottom: 24px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      background: transparent;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+      background: #ffffff;
+      color: #1e40af;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+    }
+
+    .sub-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .sub-tab-btn {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .sub-tab-btn.active {
+      border-color: #2563eb;
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #334151;
+      margin-bottom: 6px;
+    }
+
+    .field input, .field select {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      box-sizing: border-box;
+      outline: none;
+      background-color: #ffffff;
+      transition: border-color 0.2s;
+    }
+
+    .field input:focus, .field select:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .input-with-btn {
+      display: flex;
+      gap: 8px;
+    }
+
+    .input-with-btn input {
+      flex: 1;
+    }
+
+    .verify-btn {
+      background: #f1f5f9;
+      color: #334151;
+      border: 1px solid #cbd5e1;
+      padding: 0 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .verify-btn:hover {
+      background: #e2e8f0;
+      border-color: #94a3b8;
+    }
+
+    .verification-status {
+      margin-top: 6px;
+      font-size: 0.82rem;
+      display: none;
+    }
+
+    .verification-status.success {
+      display: block;
+      color: #15803d;
+    }
+
+    .verification-status.error {
+      display: block;
+      color: #b91c1c;
+    }
+
+    .chip-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .chip-btn {
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #334151;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .chip-btn:hover, .chip-btn.active {
+      background: #2563eb;
+      border-color: #2563eb;
+      color: white;
+    }
+
+    .order-summary {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 20px 0;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+      color: #64748b;
+    }
+
+    .summary-row.total {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .pay-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #2563eb, #1e40af);
+      color: white;
+      border: none;
+      padding: 14px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.2s;
+    }
+
+    .pay-btn:hover {
+      opacity: 0.95;
+    }
+
+    .pay-btn:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .notice {
+      display: none;
+      margin-top: 16px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+
+    .notice.show {
+      display: block;
+    }
+
+    .notice.info {
+      background: #eff6ff;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+    }
+
+    .notice.error {
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    /* Result Receipt Section */
+    .receipt-card {
+      display: none;
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      border: 2px solid #10b981;
+      box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.15);
+      margin-top: 24px;
+    }
+
+    .receipt-header {
+      text-align: center;
+      padding-bottom: 16px;
+      border-bottom: 1px dashed #e2e8f0;
+    }
+
+    .receipt-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #dcfce7;
+      color: #166534;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+
+    .token-box {
+      background: #0f172a;
+      color: #38bdf8;
+      font-family: 'Courier New', Courier, monospace;
+      padding: 16px;
+      border-radius: 10px;
+      text-align: center;
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+      margin: 16px 0 8px 0;
+      user-select: all;
+    }
+
+    .copy-btn {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #334151;
+      margin-bottom: 12px;
+    }
+
+    .receipt-details {
+      margin-top: 16px;
+      font-size: 0.88rem;
+    }
+
+    .receipt-details .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="container" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 1rem;">
+      <a href="index.html" style="text-decoration: none;">
+        <img src="img/akaitech more final logo.jpeg" alt="Skaitech Logo" style="height: 38px; border-radius: 6px;">
+      </a>
+      <div>
+        <a href="index.html" class="nav-link" style="margin-right: 15px;">Home</a>
+        <a href="nonAgentTrachOrder.html" class="nav-link" style="margin-right: 15px;">Track Order</a>
+        <a href="resultsChecker.html" class="nav-link" style="margin-right: 15px;">Results Checker</a>
+        <a href="login.html" class="btn-login">Agent Login</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="bill-wrapper">
+    <a href="index.html" class="back-nav">
+      <i class="fa-solid fa-arrow-left"></i> Back to Home
+    </a>
+
+    <!-- Top Status Banner if redirected from Paystack -->
+    <div id="paymentResultNotice" class="notice"></div>
+
+    <!-- Receipt Card (Shown on successful payment) -->
+    <div id="receiptCard" class="receipt-card">
+      <div class="receipt-header">
+        <div class="receipt-badge"><i class="fa-solid fa-circle-check"></i> Payment Confirmed</div>
+        <h2 style="margin: 4px 0; font-size: 1.3rem;" id="receiptTitle">Utility Payment Receipt</h2>
+        <p style="margin: 0; color: #64748b; font-size: 0.85rem;" id="receiptDate"></p>
+      </div>
+
+      <div id="tokenContainer" style="display: none; text-align: center;">
+        <div style="font-size: 0.85rem; color: #64748b; margin-top: 12px;">Your Prepaid Electricity Token:</div>
+        <div id="receiptToken" class="token-box">---- ---- ---- ---- ----</div>
+        <button type="button" class="copy-btn" id="copyTokenBtn" onclick="copyToken()">
+          <i class="fa-solid fa-copy"></i> Copy Token
+        </button>
+        <p style="font-size: 0.8rem; color: #64748b; margin-top: 0;">
+          <i class="fa-solid fa-info-circle"></i> Type this 20-digit token into your CIU/meter keypad and press Enter.
+        </p>
+      </div>
+
+      <div class="receipt-details">
+        <div class="row"><span>Reference</span><strong id="receiptRef">-</strong></div>
+        <div class="row"><span>Service</span><strong id="receiptService">-</strong></div>
+        <div class="row"><span>Account / Meter</span><strong id="receiptAccount">-</strong></div>
+        <div class="row"><span>Customer Name</span><strong id="receiptName">-</strong></div>
+        <div class="row"><span>Phone Number</span><strong id="receiptPhone">-</strong></div>
+        <div class="row"><span>Amount Paid</span><strong id="receiptAmount">GHS 0.00</strong></div>
+        <div class="row"><span>Status</span><span id="receiptStatus" style="color: #15803d; font-weight: 700;">Completed</span></div>
+      </div>
+
+      <button onclick="window.print()" class="action-btn" style="margin-top: 18px; width: 100%; padding: 10px; background: #0f172a; color: white; border: none; border-radius: 8px; cursor: pointer;">
+        <i class="fa-solid fa-print"></i> Print Receipt
+      </button>
+    </div>
+
+    <!-- Main Payment Form Card -->
+    <div class="bill-card" id="formCard">
+      <div class="bill-header">
+        <h1>Utility Bills & Subscriptions</h1>
+        <p>Instant online payment for Electricity, Water, and TV in Ghana</p>
+      </div>
+
+      <!-- Main Category Tabs -->
+      <div class="bill-tabs">
+        <button type="button" class="tab-btn active" id="tabBtnEcg" onclick="switchBillCategory('ecg')">
+          <i class="fa-solid fa-bolt"></i> ECG Prepaid
+        </button>
+        <button type="button" class="tab-btn" id="tabBtnWater" onclick="switchBillCategory('ghana_water')">
+          <i class="fa-solid fa-droplet"></i> Ghana Water
+        </button>
+        <button type="button" class="tab-btn" id="tabBtnTv" onclick="switchBillCategory('tv')">
+          <i class="fa-solid fa-tv"></i> TV Subscription
+        </button>
+      </div>
+
+      <form id="utilityBillForm">
+        <!-- Sub-selector for TV providers -->
+        <div id="tvProviderRow" class="sub-tabs" style="display: none;">
+          <button type="button" class="sub-tab-btn active" id="tvBtnDstv" onclick="selectTvProvider('dstv')">
+            <i class="fa-solid fa-satellite-dish"></i> DStv
+          </button>
+          <button type="button" class="sub-tab-btn" id="tvBtnGotv" onclick="selectTvProvider('gotv')">
+            <i class="fa-solid fa-tv"></i> GOtv
+          </button>
+          <button type="button" class="sub-tab-btn" id="tvBtnStartimes" onclick="selectTvProvider('startimes')">
+            <i class="fa-solid fa-broadcast-tower"></i> StarTimes
+          </button>
+        </div>
+
+        <!-- Meter Type (ECG Only) -->
+        <div class="field" id="meterTypeField">
+          <label for="meterType">Meter Brand / Type</label>
+          <select id="meterType">
+            <option value="Smart Prepaid Meter">Smart Prepaid Meter</option>
+            <option value="Clou Meter">Clou Meter</option>
+            <option value="Holley Meter">Holley Meter</option>
+            <option value="BXC Meter">BXC Meter</option>
+            <option value="Actaris / Itron">Actaris / Itron</option>
+            <option value="Other Prepaid">Other Prepaid</option>
+          </select>
+        </div>
+
+        <!-- TV Package Selection (TV Only) -->
+        <div class="field" id="tvPackageField" style="display: none;">
+          <label for="tvPackage">Subscription Package</label>
+          <select id="tvPackage" onchange="onPackageSelect()">
+            <!-- Options populated dynamically -->
+          </select>
+        </div>
+
+        <!-- Account / Meter Number with Verify button -->
+        <div class="field">
+          <label id="accountLabel" for="accountNumber">Meter Number</label>
+          <div class="input-with-btn">
+            <input type="text" id="accountNumber" placeholder="Enter meter number" required>
+            <button type="button" class="verify-btn" id="verifyBtn" onclick="verifyAccount()">
+              <i class="fa-solid fa-check"></i> Verify
+            </button>
+          </div>
+          <div id="verificationMsg" class="verification-status"></div>
+        </div>
+
+        <!-- Customer Name -->
+        <div class="field">
+          <label for="customerName">Account Holder / Customer Name</label>
+          <input type="text" id="customerName" placeholder="Full name" required>
+        </div>
+
+        <!-- Customer Phone Number -->
+        <div class="field">
+          <label for="customerPhone">Phone Number (to receive token / SMS)</label>
+          <input type="tel" id="customerPhone" maxlength="10" placeholder="e.g. 0244123456" required>
+        </div>
+
+        <!-- Customer Email -->
+        <div class="field">
+          <label for="customerEmail">Email Address (for receipt)</label>
+          <input type="email" id="customerEmail" placeholder="you@example.com" required>
+        </div>
+
+        <!-- Amount Field -->
+        <div class="field">
+          <label for="billAmount">Amount (GHS)</label>
+          <input type="number" id="billAmount" min="5" max="10000" step="1" value="50" required oninput="updateSummary()">
+          
+          <div class="chip-group" id="amountChips">
+            <button type="button" class="chip-btn" onclick="setAmount(20)">20 GHS</button>
+            <button type="button" class="chip-btn active" onclick="setAmount(50)">50 GHS</button>
+            <button type="button" class="chip-btn" onclick="setAmount(100)">100 GHS</button>
+            <button type="button" class="chip-btn" onclick="setAmount(200)">200 GHS</button>
+            <button type="button" class="chip-btn" onclick="setAmount(500)">500 GHS</button>
+          </div>
+        </div>
+
+        <!-- Payment Breakdown Summary -->
+        <div class="order-summary">
+          <div class="summary-row">
+            <span>Bill Amount:</span>
+            <span>GHS <span id="summaryNet">50.00</span></span>
+          </div>
+          <div class="summary-row">
+            <span>Processing / Gateway Fee (~1.5%):</span>
+            <span>GHS <span id="summaryFee">0.76</span></span>
+          </div>
+          <div class="summary-row total">
+            <span>Total to Pay:</span>
+            <span style="color: #2563eb;">GHS <span id="summaryTotal">50.76</span></span>
+          </div>
+        </div>
+
+        <button type="submit" class="pay-btn" id="submitPayBtn">
+          <i class="fa-solid fa-lock"></i> Pay with Paystack
+        </button>
+      </form>
+
+      <div id="formNotice" class="notice"></div>
+    </div>
+  </main>
+
+  <footer style="text-align: center; padding: 20px; color: #94a3b8; font-size: 0.85rem;">
+    &copy; 2026 Skaitech Ghana. All rights reserved. Powered by Paystack.
+  </footer>
+
+  <script type="module" src="utilityBills.js"></script>
+</body>
+</html>

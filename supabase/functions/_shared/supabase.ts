@@ -34,6 +34,44 @@ export async function requireAdmin(request: Request) {
   return { admin, user };
 }
 
+export async function requireAgent(request: Request) {
+  const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  if (!token) throw new Error('Authentication is required.');
+  const admin = adminClient();
+  const { data: { user }, error } = await admin.auth.getUser(token);
+  if (error || !user) throw new Error('Your session is invalid.');
+  const { data: agent, error: agentError } = await admin
+    .from('agents')
+    .select('id, role, full_name, agent_code')
+    .eq('id', user.id)
+    .single();
+  if (agentError || !agent || !['agent', 'admin'].includes(agent.role)) {
+    throw new Error('Verified agent access is required.');
+  }
+  return { admin, user, agent };
+}
+
+export async function getOptionalAgent(request: Request) {
+  const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  if (!token) return null;
+  try {
+    const admin = adminClient();
+    const { data: { user }, error } = await admin.auth.getUser(token);
+    if (error || !user) return null;
+    const { data: agent } = await admin
+      .from('agents')
+      .select('id, role, full_name, agent_code')
+      .eq('id', user.id)
+      .single();
+    if (agent && ['agent', 'admin'].includes(agent.role)) {
+      return { user, agent };
+    }
+  } catch {
+    // Ignore optional auth parsing errors
+  }
+  return null;
+}
+
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',

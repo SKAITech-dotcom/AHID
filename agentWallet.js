@@ -1,8 +1,23 @@
 import { supabase } from './supabaseClient.js';
-document.addEventListener('DOMContentLoaded', () => {
-    // 1. Load Wallet Balance
+import { requireVerifiedAgent } from './agentAuthGuard.js';
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // 0. Enforce verified agent authentication
+    const authResult = await requireVerifiedAgent({ redirectOnFail: true });
+    if (!authResult) return;
+
+    // 1. Load Wallet Balance from DB
     const balanceEl = document.getElementById('walletPageBalance');
-    const currentBalance = parseFloat(localStorage.getItem('agent_wallet_balance')) || 0;
+    let currentBalance = parseFloat(localStorage.getItem('agent_wallet_balance')) || 0;
+    try {
+        const { data: wallet } = await supabase.from('wallets').select('balance').eq('id', authResult.user.id).single();
+        if (wallet && wallet.balance !== null) {
+            currentBalance = parseFloat(wallet.balance);
+            localStorage.setItem('agent_wallet_balance', currentBalance);
+        }
+    } catch (err) {
+        console.warn('Could not fetch remote wallet balance:', err);
+    }
     if (balanceEl) {
         balanceEl.innerText = `GHS ${currentBalance.toFixed(2)}`;
     }

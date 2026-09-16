@@ -1,4 +1,4 @@
-import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
+import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 
 function getCustomerCoveredGrossAmount(netAmount: number) {
   const feeRate = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.015');
@@ -10,11 +10,8 @@ Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   try {
-    const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
-    if (!token) return json({ error: 'Please sign in before funding your wallet.' }, 401);
-    const admin = adminClient();
-    const { data: { user }, error: userError } = await admin.auth.getUser(token);
-    if (userError || !user?.email) return json({ error: 'Your session is invalid. Please sign in again.' }, 401);
+    const { admin, user } = await requireAgent(request);
+    if (!user.email) return json({ error: 'An email is required on your agent account.' }, 400);
     const { amount } = await request.json();
     const value = Number(amount);
     if (!Number.isFinite(value) || value < 1 || value > 10000) return json({ error: 'Enter an amount between GHS 1.00 and GHS 10,000.00.' }, 400);
