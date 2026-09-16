@@ -393,8 +393,8 @@ function selectNetwork(netKey) {
       </div>
       <div class="card-price-tag">GHS ${pkg.price.toFixed(2)}</div>
       <span class="card-pay-type">One-time payment</span>
-      <button class="btn-add-cart" onclick="openBuyModal('${data.label}', '${pkg.size}', ${pkg.price})">
-  <i class="fa-solid fa-bolt"></i> Buy Now
+      <button class="btn-add-cart" disabled style="background: #9ca3af; cursor: not-allowed; opacity: 0.75;" onclick="alert('Data bundle purchases are temporarily disabled.'); return false;">
+  <i class="fa-solid fa-ban"></i> Unavailable
 </button>
     </div>
   `).join('');
@@ -405,12 +405,8 @@ function selectNetwork(netKey) {
 let currentOrder = null;
 
 function openBuyModal(network, size, price) {
-    currentOrder = { network, size, price: parseFloat(price) };
-
-    document.getElementById('modalTitle').innerText = `Buy ${network} Bundle`;
-    document.getElementById('modalPackageDetails').innerText = `Package: ${size} - GHS ${parseFloat(price).toFixed(2)}`;
-    document.getElementById('recipientPhone').value = '';
-    document.getElementById('buyModal').style.display = 'flex';
+    alert("Data bundle purchases are temporarily disabled.");
+    return;
 }
 
 function closeBuyModal() {
@@ -419,6 +415,8 @@ function closeBuyModal() {
 }
 
 async function processPurchase() {
+    alert("Data bundle purchases are temporarily disabled.");
+    return;
     const phoneInput = document.getElementById('recipientPhone');
     const phone = phoneInput ? phoneInput.value.trim() : '';
 
@@ -926,11 +924,6 @@ window.loadUserData = loadUserData;
 async function loadUserData() {
   const currentPath = window.location.pathname.toLowerCase();
 
-  if (currentPath.endsWith('afa.html') || currentPath.endsWith('agentafa.html')) {
-    window.location.href = 'index.html';
-    return;
-  }
-
   const isLoginPage = currentPath.endsWith('login.html');
   const isPublicPage = isLoginPage ||
     currentPath.endsWith('index.html') ||
@@ -939,6 +932,7 @@ async function loadUserData() {
     currentPath.endsWith('nonagenttrachorder.html') ||
     currentPath.endsWith('resultschecker.html') ||
     currentPath.endsWith('nonagentdashboard.html') ||
+    currentPath.endsWith('afa.html') ||
     currentPath === '/' ||
     currentPath.endsWith('/');
 
@@ -946,7 +940,8 @@ async function loadUserData() {
     currentPath.endsWith('orders.html') ||
     currentPath.endsWith('agentwallet.html') ||
     currentPath.endsWith('deposit.html') ||
-    currentPath.endsWith('store.html');
+    currentPath.endsWith('store.html') ||
+    currentPath.endsWith('agentafa.html');
 
   // Never redirect on login.html or public pages
   if (isPublicPage && !isProtectedAgentPage) {

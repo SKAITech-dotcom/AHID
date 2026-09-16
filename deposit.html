@@ -56,9 +56,12 @@
             </div>
         </div>
         <!-- METHOD 2: DIRECT DEPOSIT (MANUAL) -->
-        <div class="funding-card" style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <h3><i class="fa-solid fa-money-bill-transfer"></i> Direct Deposit (Manual)</h3>
-            <p style="font-size: 14px; color: #555; margin-bottom: 12px;">For automatic wallet loading, use Paystack Checkout above. Manual transfers require administrator verification.</p>
+        <div class="funding-card" style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); opacity: 0.65;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0;"><i class="fa-solid fa-money-bill-transfer"></i> Direct Deposit (Manual)</h3>
+                <span style="background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;">DISABLED</span>
+            </div>
+            <p style="font-size: 14px; color: #555; margin-bottom: 12px; margin-top: 8px;">Direct manual deposits are currently disabled. Please use Paystack Checkout above.</p>
             
             <!-- Instructions with your receiving number -->
             <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; border-radius: 4px; margin-bottom: 15px; font-size: 13px; color: #856404;">
@@ -69,23 +72,26 @@
 
             <div style="margin-top: 15px;">
                 <label style="font-weight: 500; font-size: 14px; display: block; margin-bottom: 5px;">Amount Sent (GHS) *</label>
-                <input type="number" id="directAmount" placeholder="e.g. 100.00" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+                <input type="number" id="directAmount" placeholder="e.g. 100.00" disabled style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; background: #f3f4f6; cursor: not-allowed;">
                 
                 <label style="font-weight: 500; font-size: 14px; display: block; margin-bottom: 5px;">MoMo Transaction Reference / ID *</label>
-                <input type="text" id="momoReference" placeholder="e.g. 123456789" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+                <input type="text" id="momoReference" placeholder="e.g. 123456789" disabled style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; background: #f3f4f6; cursor: not-allowed;">
 
-                <button onclick="submitDirectDeposit()" class="btn-primary" style="background: #7380ec; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;">Submit Reference</button>
+                <button disabled onclick="alert('Direct deposit is currently disabled. Please use Paystack Checkout.'); return false;" class="btn-primary" style="background: #9ca3af; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: not-allowed; font-weight: 500;">Submit Reference (Disabled)</button>
             </div>
         </div>
 
       <!-- METHOD 3: CASHOUT DEPOSIT FLOW -->
-        <div class="funding-card" style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <h3><i class="fa-solid fa-mobile-screen-button"></i> Cashout Deposit</h3>
-            <p style="font-size: 14px; color: #555; margin-bottom: 12px;">Submit a MoMo settlement request for administrator review. Your wallet is credited only after the administrator confirms that payment was received.</p>
+        <div class="funding-card" style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); opacity: 0.65;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0;"><i class="fa-solid fa-mobile-screen-button"></i> Cashout Deposit</h3>
+                <span style="background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;">DISABLED</span>
+            </div>
+            <p style="font-size: 14px; color: #555; margin-bottom: 12px; margin-top: 8px;">Cashout deposits are currently disabled. Please use Paystack Checkout above.</p>
             
             <!-- Connection Status Box -->
-            <div style="background: #e6f9ed; border: 1px solid #c3e6cb; color: #155724; padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 15px;">
-                Connected — you can submit a deposit request.
+            <div style="background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 15px;">
+                This deposit method is currently disabled.
             </div>
 
             <!-- Current Wallet Balance Bar -->
@@ -93,53 +99,40 @@
                 <span style="color: #495057;">Current wallet balance</span>
                 <strong id="cashoutWalletBalDisplay" style="color: #212529;">GHS 0.00</strong>
             </div>
-            <p style="font-size: 12px; color: #6c757d; margin-top: -10px; margin-bottom: 15px;">Minimum request GHS 50.00. For Paystack card/MoMo checkout, use the add-fund flow in the dashboard instead.</p>
 
             <div style="margin-top: 15px;">
                 <label style="font-weight: 500; font-size: 14px; display: block; margin-bottom: 5px;">Amount to deposit (GHS)</label>
                 <div style="position: relative; margin-bottom: 15px;">
-                    <input type="number" id="cashoutAmount" placeholder="0.00" style="width: 100%; padding: 10px 35px 10px 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+                    <input type="number" id="cashoutAmount" placeholder="0.00" disabled style="width: 100%; padding: 10px 35px 10px 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; background: #f3f4f6; cursor: not-allowed;">
                     <span style="position: absolute; right: 12px; top: 10px; color: #6c757d;">₵</span>
                 </div>
                 
                 <label style="font-weight: 500; font-size: 14px; display: block; margin-bottom: 5px;">Paying phone number (MoMo)</label>
-                <input type="text" id="cashoutPhone" placeholder="0241234567" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+                <input type="text" id="cashoutPhone" placeholder="0241234567" disabled style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; background: #f3f4f6; cursor: not-allowed;">
                 
-                <button onclick="initiateCashoutDeposit()" class="btn-primary" style="background: #7380ec; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; margin-bottom: 20px;">Submit deposit request</button>
+                <button disabled onclick="alert('Cashout deposit is currently disabled. Please use Paystack Checkout.'); return false;" class="btn-primary" style="background: #9ca3af; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: not-allowed; font-weight: 500; margin-bottom: 20px;">Submit deposit request (Disabled)</button>
             </div>
 
             <div id="cashoutRequestStatus" role="status" style="background: #f8f9fa; border: 1px solid #e9ecef; padding: 12px; border-radius: 4px; font-size: 13px; color: #495057; margin-bottom: 15px;">
                 Loading your cashout deposit requests…
             </div>
-
-            <!-- How this works & Deposit Flow Info Box -->
-            <div style="background: #f0f4ff; border: 1px solid #d0e1fd; padding: 15px; border-radius: 6px; font-size: 13px; color: #1a365d; line-height: 1.5;">
-                <strong>How this works</strong>
-                <ul style="padding-left: 18px; margin: 5px 0 12px 0;">
-                    <li>Submit the amount and payer number. You can have only <strong>one pending request at a time</strong>.</li>
-                    <li>Follow the payment instructions given by the administrator. Do not send money before confirming the receiving details.</li>
-                    <li>The administrator verifies the MoMo settlement reference, then approves or rejects the request. Approval credits your wallet once.</li>
-                </ul>
-
-                <strong style="display: block; margin-top: 10px;">Deposit flow</strong>
-                <p style="margin: 4px 0 0 0;">
-                    <strong>1)</strong> Submit your request. <strong>2)</strong> Confirm the settlement instructions with the administrator. <strong>3)</strong> Make the MoMo payment. <strong>4)</strong> The administrator verifies it and records the settlement reference. <strong>5)</strong> Once approved, the wallet is credited automatically. This is a manual settlement flow, not Paystack.
-                </p>
-            </div>
         </div>  
         <!-- CLAIM WALLET CREDIT SECTION -->
-        <div class="funding-card" style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <h3><i class="fa-solid fa-circle-check" style="color: #28a745;"></i> Claim Wallet Credit</h3>
-            <p style="font-size: 14px; color: #555; margin-bottom: 12px;">Completed your MoMo payment? Enter your transaction ID and amount below to credit your wallet instantly.</p>
+        <div class="funding-card" style="background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); opacity: 0.65;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0;"><i class="fa-solid fa-circle-check" style="color: #64748b;"></i> Claim Wallet Credit</h3>
+                <span style="background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;">DISABLED</span>
+            </div>
+            <p style="font-size: 14px; color: #555; margin-bottom: 12px; margin-top: 8px;">Claiming wallet credit is currently disabled. Please use Paystack Checkout above.</p>
             
             <div style="margin-top: 15px;">
                 <label style="font-weight: 500; font-size: 14px; display: block; margin-bottom: 5px;">MoMo Transaction ID / Reference *</label>
-                <input type="text" id="claimTxId" placeholder="e.g. TID987654321" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+                <input type="text" id="claimTxId" placeholder="e.g. TID987654321" disabled style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; background: #f3f4f6; cursor: not-allowed;">
                 
                 <label style="font-weight: 500; font-size: 14px; display: block; margin-bottom: 5px;">Amount Paid (GHS) *</label>
-                <input type="number" id="claimAmount" placeholder="e.g. 50.00" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+                <input type="number" id="claimAmount" placeholder="e.g. 50.00" disabled style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; background: #f3f4f6; cursor: not-allowed;">
 
-                <button onclick="claimWalletCredit()" class="btn-primary" style="background: #28a745; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;">Claim Wallet Credit</button>
+                <button disabled onclick="alert('Claiming wallet credit is currently disabled. Please use Paystack Checkout.'); return false;" class="btn-primary" style="background: #9ca3af; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: not-allowed; font-weight: 500;">Claim Wallet Credit (Disabled)</button>
             </div>
         </div>
     </main>

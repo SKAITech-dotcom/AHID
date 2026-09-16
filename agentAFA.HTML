@@ -29,8 +29,8 @@
             </div>
 
             <!-- Add AFA Button -->
-            <button onclick="openAddAfaModal()" style="background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-plus"></i> Add AFA
+            <button disabled onclick="alert('AFA registration is temporarily disabled.'); return false;" style="background: #9ca3af; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: 500; cursor: not-allowed; opacity: 0.75; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-ban"></i> Add AFA (Disabled)
             </button>
         </div>
 
@@ -84,7 +84,7 @@
                 <label style="font-size: 13px; font-weight: 500;">Ghana Card / ID *</label>
                 <input type="text" id="afaIdNumber" placeholder="e.g. GHA-123456789-0" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
 
-                <button onclick="submitNewAfa()" style="background: #2563eb; color: white; border: none; padding: 12px; border-radius: 4px; font-weight: 500; cursor: pointer; margin-top: 10px;">Submit Request</button>
+                <button disabled onclick="alert('AFA registration is temporarily disabled.'); return false;" style="background: #9ca3af; color: white; border: none; padding: 12px; border-radius: 4px; font-weight: 500; cursor: not-allowed; opacity: 0.75; margin-top: 10px;">Submit Request (Disabled)</button>
             </div>
         </div>
     </div>

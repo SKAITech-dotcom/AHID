@@ -119,6 +119,8 @@ async function startWalletPayment(amount) {
 
 // 2. Direct Deposit (Manual Reference) Handler
 function submitDirectDeposit() {
+    alert("Direct deposit is currently disabled. Please use Paystack Checkout.");
+    return;
     const amount = parseFloat(document.getElementById('directAmount').value);
     const refId = document.getElementById('momoReference').value.trim();
 
@@ -175,6 +177,8 @@ async function loadCashoutDepositRequests() {
 
 // 3. Cashout Deposit Flow Handler
 async function initiateCashoutDeposit() {
+    alert("Cashout deposit is currently disabled. Please use Paystack Checkout.");
+    return;
     const phone = document.getElementById('cashoutPhone').value.trim();
     const amount = parseFloat(document.getElementById('cashoutAmount').value);
 
@@ -221,6 +225,8 @@ function saveTransactionRecord(type, amount, status) {
 
 // 4. Claim Wallet Credit Handler (Using MoMo Transaction ID)
 function claimWalletCredit() {
+    alert("Claiming wallet credit is currently disabled. Please use Paystack Checkout.");
+    return;
     const txId = document.getElementById('claimTxId').value.trim();
     const amount = parseFloat(document.getElementById('claimAmount').value);
 

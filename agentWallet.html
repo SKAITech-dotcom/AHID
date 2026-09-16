@@ -25,8 +25,8 @@
         
         <!-- Action Deposit Buttons -->
         <div style="display: flex; gap: 10px; margin-bottom: 16px;">
-            <button onclick="location.href='deposit.html'" style="flex: 1; background: #2563eb; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer;">Fund wallet securely</button>
-            <button onclick="directDepositInfo()" style="flex: 1; background: #334155; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer;">Direct Deposit</button>
+            <button onclick="location.href='deposit.html'" style="flex: 1; background: #2563eb; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer;"><i class="fa-solid fa-credit-card"></i> Fund Wallet (Paystack)</button>
+            <button disabled style="flex: 1; background: #94a3b8; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: not-allowed; opacity: 0.7;" onclick="alert('Direct deposit is currently disabled. Please use Paystack Checkout.'); return false;"><i class="fa-solid fa-ban"></i> Direct Deposit (Disabled)</button>
         </div>
 
         <!-- Financial Cards Grid -->

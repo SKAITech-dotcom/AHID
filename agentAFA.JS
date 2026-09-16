@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Open/Close Modal handlers
 function openAddAfaModal() {
+    alert("AFA registration is temporarily disabled.");
+    return;
     const modal = document.getElementById('afaModal');
     if (modal) modal.style.display = 'flex';
 }
@@ -24,6 +26,8 @@ function closeAddAfaModal() {
 
 // Save a new AFA registration
 function submitNewAfa() {
+    alert("AFA registration is temporarily disabled.");
+    return;
     const name = document.getElementById('afaName').value.trim();
     const phone = document.getElementById('afaPhone').value.trim();
     const town = document.getElementById('afaTown').value.trim();

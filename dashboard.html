@@ -32,10 +32,8 @@
       </button>
       <span class="gt-brand">Skaitech gh</span>
     </div>
-
-    
-      
-      </div>
+    <div class="gt-header-right">
+      <div class="user-avatar" id="userAvatarInitials">AG</div>
     </div>
   </header>
 
@@ -43,12 +41,13 @@
   <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleDrawer()"></div>
   <aside id="sideDrawer" class="side-drawer">
     <span class="drawer-section-label">AGENT</span>
-     <a href="dashboard.html" class="drawer-item active" onclick="toggleDrawer()">
-  <i class="fa-solid fa-border-all"></i> Dashboard
-</a>
-      <a href="orders.html" class="drawer-item" onclick="toggleDrawer()">
-  <i class="fa-solid fa-cart-shopping"></i> Orders
-</a>
+    <nav class="drawer-nav">
+      <a href="dashboard.html" class="drawer-item active">
+        <i class="fa-solid fa-border-all"></i> Dashboard
+      </a>
+      <a href="orders.html" class="drawer-item">
+        <i class="fa-solid fa-cart-shopping"></i> Orders
+      </a>
       <a href="ourHelpDesk.html" class="drawer-item">
         <i class="fa-solid fa-triangle-exclamation"></i> Our Help Desk
       </a>
@@ -61,24 +60,21 @@
       <a href="agentAFA.HTML" class="drawer-item">
         <i class="fa-solid fa-users"></i> AFA
       </a>
-
       <a href="STORE.HTML" class="drawer-item">
         <i class="fa-solid fa-store"></i> Store
       </a>
+      <a href="resultsChecker.html" class="drawer-item">
+        <i class="fa-solid fa-receipt"></i> Results Checker
+      </a>
     </nav>
-    <a href="resultsChecker.html" class="drawer-item">
-    <i class="fa-solid fa-receipt"></i> Results Checker
-</a>
-    <!-- Or if you are using an ID or data attribute for a single-page view switch, use that instead -->
-</li>
 
     <div class="drawer-divider"></div>
 
     <nav class="drawer-nav">
-    <a href="https://chat.whatsapp.com/EbflGFoh9Y64BiaFVqbHid" target="_blank" class="drawer-item">
+      <a href="https://chat.whatsapp.com/EbflGFoh9Y64BiaFVqbHid" target="_blank" class="drawer-item">
         <i class="fa-brands fa-whatsapp"></i> Community
-    </a>
-</nav>
+      </a>
+    </nav>
   </aside>
 
   <!-- MAIN DASHBOARD CONTENT -->
@@ -126,25 +122,17 @@
   <div class="accordion-header" onclick="toggleAccordion(this)">
     <span class="accordion-title">How to fund your agent wallet</span>
     <div class="flex items-center gap-2">
-      <span class="badge-pill">3 options</span>
+      <span class="badge-pill">Paystack Only</span>
       <i class="fa-solid fa-chevron-down accordion-arrow"></i>
     </div>
   </div>
   <div class="accordion-content">
-    <p class="accordion-desc"> how you  to fund your agent wallet.</p>
+    <p class="accordion-desc">Fund your agent wallet securely via Paystack.</p>
     
-    <!-- EDITABLE DEPOSIT AGENT ACCOUNT   OPTIONS -->
+    <!-- EDITABLE DEPOSIT AGENT ACCOUNT OPTIONS -->
     <div class="deposit-option">
-      <div class="option-title"><i class="fa-solid fa-wallet"></i> ExpressPay checkout</div>
-      <p>Instant wallet funding through ExpressPay.</p>
-    </div>
-    <div class="deposit-option">
-      <div class="option-title"><i class="fa-solid fa-building-columns"></i> Direct deposit (manual)</div>
-      <p>Submit and verify a direct MoMo transfer reference.</p>
-    </div>
-    <div class="deposit-option">
-      <div class="option-title"><i class="fa-solid fa-money-bill-transfer"></i> Cashout deposit flow</div>
-      <p>Use the guided cashout-assisted MoMo deposit process.</p>
+      <div class="option-title"><i class="fa-solid fa-credit-card"></i> Paystack checkout (Instant)</div>
+      <p>Instant automated wallet funding through Paystack (card & mobile money).</p>
     </div>
   </div>
 </div> 
@@ -200,7 +188,7 @@
 
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeBuyModal()">Cancel Order</button>
-      <button class="btn-confirm" onclick="processPurchase()">Confirm & Buy</button>
+      <button class="btn-confirm" disabled style="background: #9ca3af; cursor: not-allowed; opacity: 0.75;" onclick="alert('Data bundle purchases are temporarily disabled.'); return false;">Confirm & Buy</button>
     </div>
   </div>
 </div>
