@@ -393,8 +393,8 @@ function selectNetwork(netKey) {
       </div>
       <div class="card-price-tag">GHS ${pkg.price.toFixed(2)}</div>
       <span class="card-pay-type">One-time payment</span>
-      <button class="btn-add-cart" disabled style="background: #9ca3af; cursor: not-allowed; opacity: 0.75;" onclick="alert('Data bundle purchases are temporarily disabled.'); return false;">
-  <i class="fa-solid fa-ban"></i> Unavailable
+      <button class="btn-add-cart" onclick="openBuyModal('${data.label}', '${pkg.size}', ${pkg.price})" style="background: linear-gradient(135deg, #2563eb, #1e40af); color: #fff; cursor: pointer;">
+  <i class="fa-solid fa-cart-plus"></i> Add to Cart
 </button>
     </div>
   `).join('');
@@ -405,8 +405,15 @@ function selectNetwork(netKey) {
 let currentOrder = null;
 
 function openBuyModal(network, size, price) {
-    alert("Data bundle purchases are temporarily disabled.");
-    return;
+    currentOrder = { network, size, price: parseFloat(price) };
+    const modal = document.getElementById('buyModal');
+    const title = document.getElementById('modalTitle');
+    const details = document.getElementById('modalPackageDetails');
+    const phoneInput = document.getElementById('recipientPhone');
+    if (title) title.innerText = `Buy ${network} Bundle`;
+    if (details) details.innerText = `Package: ${size} - GHS ${parseFloat(price).toFixed(2)}`;
+    if (phoneInput) phoneInput.value = '';
+    if (modal) modal.style.display = 'flex';
 }
 
 function closeBuyModal() {
@@ -415,8 +422,6 @@ function closeBuyModal() {
 }
 
 async function processPurchase() {
-    alert("Data bundle purchases are temporarily disabled.");
-    return;
     const phoneInput = document.getElementById('recipientPhone');
     const phone = phoneInput ? phoneInput.value.trim() : '';
 

@@ -118,8 +118,8 @@ if (listElem) {
                 <div class="data-price" style="color: ${currentTheme.primary};">${pkg.price}</div>
                 <div class="payment-type">${pkg.validity}</div>
                 
-                <button disabled class="action-btn" style="background: #9ca3af; cursor: not-allowed; opacity: 0.75;" onclick="alert('Data bundle purchases are temporarily disabled.'); return false;">
-                    <i class="fa-solid fa-ban"></i> Unavailable
+                <button onclick="toggleOrderForm(${index})" class="action-btn" style="background: ${currentTheme.gradient};">
+                    <i class="fa-solid fa-bag-shopping"></i> Buy Now
                 </button>
                 
                 <!-- Hidden Checkout Input Form with Cancel Button -->
@@ -134,8 +134,8 @@ if (listElem) {
                     <input type="tel" id="phone_${index}" placeholder="024XXXXXXX" class="form-input">
                     
                     <div style="display: flex; gap: 8px; margin-top: 4px;">
-                        <button disabled onclick="alert('Data bundle purchases are temporarily disabled.'); return false;" class="action-btn" style="background: #9ca3af; cursor: not-allowed; opacity: 0.75; flex: 2; margin-top: 0;">
-                            Confirm Order (Disabled)
+                        <button onclick="submitOrder('${pkg.size}', '${pkg.price}', ${index})" class="action-btn" style="background: ${currentTheme.gradient}; flex: 2; margin-top: 0;">
+                            Confirm Order
                         </button>
                         <button onclick="toggleOrderForm(${index})" style="background: #e5e7eb; color: #374151; border: none; padding: 12px; border-radius: 10px; font-weight: 700; font-size: 0.9rem; cursor: pointer; flex: 1;">
                             Cancel
@@ -151,7 +151,10 @@ if (listElem) {
 
 // Toggle Form Visibility
 function toggleOrderForm(index) {
-    alert('Data bundle purchases are temporarily disabled.');
+    const form = document.getElementById(`orderForm_${index}`);
+    if (form) {
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    }
 }
 
 async function showPaymentResult() {
@@ -181,8 +184,6 @@ async function showPaymentResult() {
 
 // Order Submission
 async function submitOrder(size, price, index) {
-    alert('Data bundle purchases are temporarily disabled.');
-    return;
     const nameInput = document.getElementById(`name_${index}`);
     const emailInput = document.getElementById(`email_${index}`);
     const phoneInput = document.getElementById(`phone_${index}`);

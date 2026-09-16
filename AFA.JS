@@ -11,8 +11,6 @@ function escapeHtml(value) {
 
 // Handle New Registration Submission
 function submitRegistration() {
-    alert('AFA registration is temporarily disabled.');
-    return;
     const name = document.getElementById('regName').value.trim();
     const phone = document.getElementById('regPhone').value.trim();
     const town = document.getElementById('regTown').value.trim();
