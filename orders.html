@@ -10,78 +10,54 @@
 </head>
 <body class="orders-body-yellow">
 
-  <!-- TOP HEADER NAVBAR -->
-  <header class="gt-header">
-    <div class="gt-header-left">
-      <button class="hamburger-btn" onclick="toggleDrawer()">
-        <i class="fa-solid fa-bars"></i>
-      </button>
-      <span class="gt-brand">Skaitech gh</span>
-    </div>
-    <div class="gt-header-right">
-      <div class="user-avatar" id="userAvatarInitials">SA</div>
-    </div>
-  </header>
-
-  <!-- SIDE DRAWER OVERLAY & MENU -->
-  <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleDrawer()"></div>
-  <aside id="sideDrawer" class="side-drawer">
-    <span class="drawer-section-label">AGENT</span>
-    <nav class="drawer-nav">
-      <a href="dashboard.html" class="drawer-item">
-        <i class="fa-solid fa-border-all"></i> Dashboard
-      </a>
-      <a href="orders.html" class="drawer-item active">
-        <i class="fa-solid fa-cart-shopping"></i> Orders
-      </a>
-      <a href="ourHelpDesk.html" class="drawer-item">
-        <i class="fa-solid fa-triangle-exclamation"></i> Our Help Desk
-      </a>
-      <a href="agentWallet.html" class="drawer-item">
-        <i class="fa-solid fa-wallet"></i> Wallet
-      </a>
-      <a href="deposit.html" class="drawer-item">
-        <i class="fa-solid fa-money-bill-transfer"></i> Deposit
-      </a>
-      <a href="agentAFA.HTML" class="drawer-item">
-        <i class="fa-solid fa-users"></i> AFA
-      </a>
-      <a href="STORE.HTML" class="drawer-item">
-        <i class="fa-solid fa-store"></i> Store
-      </a>
-      <a href="resultsChecker.html" class="drawer-item">
-        <i class="fa-solid fa-receipt"></i> Results Checker
-      </a>
-    </nav>
-
-    <div class="drawer-divider"></div>
-
-    <nav class="drawer-nav">
-      <a href="https://chat.whatsapp.com/EbflGFoh9Y64BiaFVqbHid" target="_blank" class="drawer-item">
-        <i class="fa-brands fa-whatsapp"></i> Community
-      </a>
-    </nav>
-  </aside>
-  
-
   <!-- MAIN ORDERS CONTENT -->
   <main class="orders-page-wrapper">
     
+    <!-- TRANSACTION SUMMARY CARDS -->
+    <div class="tx-stats-grid">
+      <div class="tx-stat-card tx-stat-airtime">
+        <span class="tx-stat-label"><i class="fa-solid fa-mobile-screen-button"></i> Airtime Purchases</span>
+        <strong class="tx-stat-value" id="statAirtime">0</strong>
+      </div>
+      <div class="tx-stat-card tx-stat-utility">
+        <span class="tx-stat-label"><i class="fa-solid fa-bolt"></i> Utility Purchases</span>
+        <strong class="tx-stat-value" id="statUtility">0</strong>
+      </div>
+      <div class="tx-stat-card tx-stat-ok">
+        <span class="tx-stat-label"><i class="fa-solid fa-circle-check"></i> Successful</span>
+        <strong class="tx-stat-value tx-stat-ok" id="statCompleted">0</strong>
+      </div>
+      <div class="tx-stat-card tx-stat-bad">
+        <span class="tx-stat-label"><i class="fa-solid fa-circle-xmark"></i> Failed</span>
+        <strong class="tx-stat-value tx-stat-bad" id="statFailed">0</strong>
+      </div>
+      <div class="tx-stat-card tx-stat-pending">
+        <span class="tx-stat-label"><i class="fa-solid fa-clock"></i> Pending</span>
+        <strong class="tx-stat-value tx-stat-pending" id="statPending">0</strong>
+      </div>
+    </div>
+
     <!-- SEARCH INPUT -->
     <div class="search-input-wrapper">
       <i class="fa-solid fa-magnifying-glass search-icon"></i>
       <input type="text" id="orderSearch" onkeyup="filterOrders()" placeholder="Search by phone number...">
     </div>
 
+    <!-- SERVICE TYPE TABS (Airtime / Utility / All) -->
+    <div class="status-pills service-tabs" id="serviceTabs" style="margin-top: 8px;">
+      <button class="pill-btn active" onclick="setServiceTab('all', this)">All Services</button>
+      <button class="pill-btn" onclick="setServiceTab('airtime', this)"><i class="fa-solid fa-mobile-screen-button"></i> Airtime</button>
+      <button class="pill-btn" onclick="setServiceTab('utility', this)"><i class="fa-solid fa-bolt"></i> Utility</button>
+    </div>
+
     <!-- STATUS FILTER PILLS -->
-    <!-- STATUS FILTER PILLS -->
-<div class="status-pills">
+<div class="status-pills" id="statusPills">
     <button class="pill-btn active" onclick="setFilter('all', this)">All</button>
     <button class="pill-btn" onclick="setFilter('pending', this)">Pending</button>
     <button class="pill-btn" onclick="setFilter('processing', this)">Processing</button>
     <button class="pill-btn" onclick="setFilter('completed', this)">Completed</button>
+    <button class="pill-btn" onclick="setFilter('failed', this)">Failed</button>
     <button class="pill-btn" onclick="setFilter('canceled', this)">Canceled</button>
-    <!-- <button class="pill-btn" onclick="setFilter('failed', this)">Failed</button> -->
 </div>
 
     <!-- COUNTER DISPLAY -->
@@ -102,11 +78,12 @@
         <thead>
           <tr>
             <th>Order ID</th>
-            <th>Network</th>
-            <th>Phone</th>
-            <th>Package</th>
+            <th>Service</th>
+            <th>Recipient</th>
+            <th>Details</th>
             <th>Status</th>
-            <th>Action</th>
+            <th>Provider Ref</th>
+            <th>Date</th>
           </tr>
         </thead>
         <tbody id="ordersTableBody">
@@ -139,6 +116,7 @@
     </div>
   </main>
 
+  <script type="module" src="agentNav.js"></script>
   <script type="module" src="script.js"></script>
 </body>
 </html>

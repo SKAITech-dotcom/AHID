@@ -1,4 +1,4 @@
-import { adminClient, corsPreflight, getOptionalAgent, json } from '../_shared/supabase.ts';
+import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 
 const VALID_BILL_TYPES: Record<string, 'electricity' | 'water' | 'tv'> = {
   ecg: 'electricity',
@@ -54,11 +54,10 @@ Deno.serve(async (request) => {
     const grossAmount = getCustomerCoveredGrossAmount(netAmount);
     const feeAmount = Math.round((grossAmount - netAmount + Number.EPSILON) * 100) / 100;
 
-    const optionalAgent = await getOptionalAgent(request);
-    const agentId = optionalAgent?.user?.id ?? null;
+    const { admin, user } = await requireAgent(request);
+    const agentId = user.id;
 
     const reference = `UTIL-${crypto.randomUUID()}`;
-    const admin = adminClient();
 
     const { data: order, error: orderError } = await admin.from('utility_orders').insert({
       bill_type: billType,
@@ -127,6 +126,11 @@ Deno.serve(async (request) => {
   } catch (error) {
     console.error('Utility bill payment initialization error:', error);
     const message = error instanceof Error ? error.message : 'Unable to start utility bill payment.';
-    return json({ error: message }, 500);
+    const status = message.includes('Authentication is required') || message.includes('session is invalid')
+      ? 401
+      : message.includes('Agent account required')
+      ? 403
+      : 500;
+    return json({ error: message }, status);
   }
 });

@@ -1,282 +1,386 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nonagent Dashboard</title>
-    <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
-    <style>
-        :root {
-            --primary-color: #2563eb;
-            --background-color: #f8fafc;
-            --surface-color: #ffffff;
-            --text-main: #1e293b;
-            --text-muted: #64748b;
-            --border-color: #e2e8f0;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Customer Dashboard - Skaitech</title>
+  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .customer-dash-wrap {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px 16px 60px;
+    }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
+    .welcome-hero {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      color: white;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+    }
 
-        body {
-            background-color: var(--background-color);
-            color: var(--text-main);
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
+    .welcome-hero h1 {
+      margin: 0 0 8px;
+      font-size: 1.6rem;
+      font-weight: 800;
+    }
 
-        /* Sidebar */
-        aside {
-            width: 260px;
-            background-color: var(--surface-color);
-            border-right: 1px solid var(--border-color);
-            display: flex;
-            flex-direction: column;
-        }
+    .welcome-hero p {
+      margin: 0;
+      opacity: 0.9;
+      font-size: 0.95rem;
+    }
 
-        .sidebar-brand {
-            padding: 1.5rem;
-            font-size: 1.25rem;
-            font-weight: bold;
-            color: var(--primary-color);
-            border-bottom: 1px solid var(--border-color);
-        }
+    .services-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 20px 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
-        .sidebar-menu {
-            list-style: none;
-            padding: 1rem;
-        }
+    .card-link {
+      text-decoration: none;
+      color: inherit;
+    }
 
-        .sidebar-menu li {
-            padding: 0.75rem 1rem;
-            margin-bottom: 0.25rem;
-            border-radius: 0.375rem;
-            color: var(--text-muted);
-            cursor: pointer;
-            transition: background 0.2s, color 0.2s;
-        }
+    .recent-orders-card {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      margin-top: 24px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    }
 
-        .sidebar-menu li.active, .sidebar-menu li:hover {
-            background-color: #eff6ff;
-            color: var(--primary-color);
-            font-weight: 500;
-        }
+    .order-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 0.9rem;
+    }
 
-        /* Main Content Area */
-        main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-        }
+    .order-table th, .order-table td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid #f1f5f9;
+    }
 
-        header {
-            background-color: var(--surface-color);
-            padding: 1rem 2rem;
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+    .order-table th {
+      color: #64748b;
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+    }
 
-        header h1 {
-            font-size: 1.5rem;
-        }
-
-        .user-profile {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-        }
-
-        .dashboard-content {
-            padding: 2rem;
-            display: flex;
-            flex-direction: column;
-            gap: 2rem;
-        }
-
-        /* Metrics Grid */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .card {
-            background-color: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
-            padding: 1.5rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-        }
-
-        .card h3 {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 0.5rem;
-        }
-
-        .card .metric-value {
-            font-size: 1.875rem;
-            font-weight: bold;
-        }
-
-        /* Panels & Tables */
-        .panel-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 1.5rem;
-        }
-
-        @media (max-width: 1024px) {
-            .panel-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .panel {
-            background-color: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
-            padding: 1.5rem;
-        }
-
-        .panel h2 {
-            font-size: 1.125rem;
-            margin-bottom: 1rem;
-        }
-
-        .chart-placeholder {
-            height: 220px;
-            background-color: #f1f5f9;
-            border-radius: 0.375rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-muted);
-            font-size: 0.875rem;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-            font-size: 0.875rem;
-        }
-
-        th, td {
-            padding: 0.75rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        th {
-            color: var(--text-muted);
-            font-weight: 600;
-        }
-    </style>
+    .status-pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: #dcfce7;
+      color: #166534;
+    }
+  </style>
 </head>
-<body>
+<body class="dashboard-body">
 
-    <!-- Sidebar -->
-    <aside>
-        <div class="sidebar-brand">Nonagent Portal</div>
-        <ul class="sidebar-menu">
-            <li class="active">Overview</li>
-            <li>System Logs</li>
-            <li>Analytics</li>
-            <li>Configuration</li>
-            <li>Settings</li>
-        </ul>
-    </aside>
+  <!-- TOP HEADER NAVBAR (Same as Agent Dashboard) -->
+  <header class="gt-header">
+    <div class="gt-header-left">
+      <button class="hamburger-btn" onclick="toggleDrawer()">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <span class="gt-brand">Skaitech gh</span>
+    </div>
+    <div class="gt-header-right">
+      <a href="login.html?register=true" style="background: #2563eb; color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 0.8rem; font-weight: 700; margin-right: 8px;">
+        Agent Portal
+      </a>
+      <div class="user-avatar">
+        <i class="fa-solid fa-user"></i>
+      </div>
+    </div>
+  </header>
 
-    <!-- Main Section -->
-    <main>
-        <header>
-            <h1>Dashboard Overview</h1>
-            <div class="user-profile">Welcome, Administrator</div>
-        </header>
+  <!-- SIDE DRAWER OVERLAY & MENU (Same style as Agent Dashboard) -->
+  <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleDrawer()"></div>
+  <aside id="sideDrawer" class="side-drawer">
+    <div class="drawer-header">
+      <div class="drawer-brand">
+        <img src="img/akaitech%20more%20final%20logo.jpeg" alt="Skaitech" class="drawer-logo">
+        <span class="drawer-brand-name">SKAITECH</span>
+      </div>
+      <button type="button" class="drawer-close-btn" onclick="toggleDrawer()" aria-label="Close menu">&times;</button>
+    </div>
+    <span class="drawer-section-label">MAIN SERVICES</span>
+    <nav class="drawer-nav">
+      <a href="nonagentdashboard.html" class="drawer-item active">
+        <i class="fa-solid fa-house"></i> Dashboard
+      </a>
+      <a href="airtime.html" class="drawer-item" onclick="return handleAirtimeClick(null, event);">
+        <i class="fa-solid fa-mobile-screen-button"></i> Buy Airtime
+      </a>
+      <a href="instantData.html" class="drawer-item">
+        <i class="fa-solid fa-wifi"></i> Instant Data
+      </a>
+      <a href="utilityBills.html" class="drawer-item" onclick="return handleUtilityClick(event, 'ecg')">
+        <i class="fa-solid fa-bolt"></i> Utility Bills
+      </a>
+      <a href="resultsChecker.html" class="drawer-item">
+        <i class="fa-solid fa-receipt"></i> Results Checker
+      </a>
+      <a href="nonAgentTrachOrder.html" class="drawer-item">
+        <i class="fa-solid fa-magnifying-glass"></i> Track Order
+      </a>
+      <a href="AFA.html" class="drawer-item">
+        <i class="fa-solid fa-id-card"></i> AFA Registration
+      </a>
+    </nav>
 
-        <div class="dashboard-content">
-            <!-- Top Metric Cards -->
-            <div class="metrics-grid">
-                <div class="card">
-                    <h3>Active Users</h3>
-                    <div class="metric-value">1,248</div>
-                </div>
-                <div class="card">
-                    <h3>System Load</h3>
-                    <div class="metric-value">24%</div>
-                </div>
-                <div class="card">
-                    <h3>Pending Tasks</h3>
-                    <div class="metric-value">12</div>
-                </div>
-                <div class="card">
-                    <h3>Uptime</h3>
-                    <div class="metric-value">99.9%</div>
-                </div>
-            </div>
+    <div class="drawer-divider"></div>
 
-            <!-- Main Panels -->
-            <div class="panel-grid">
-                <div class="panel">
-                    <h2>Performance Trends</h2>
-                    <div class="chart-placeholder">
-                        [ Analytics Chart Placeholder ]
-                    </div>
-                </div>
-                <div class="panel">
-                    <h2>Quick Actions</h2>
-                    <ul style="list-style: n/one; display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem;">
-                        <li><button style="width: 100%; padding: 0.75rem; background: var(--primary-color); color: white; border: none; border-radius: 0.375rem; cursor: pointer;">Generate Report</button></li>
-                        <li><button style="width: 100%; padding: 0.75rem; background: #e2e8f0; color: var(--text-main); border: none; border-radius: 0.375rem; cursor: pointer;">Clear Cache</button></li>
-                    </ul>
-                </div>
-            </div>
+    <span class="drawer-section-label">AGENT ACCESS</span>
+    <nav class="drawer-nav">
+      <a href="login.html" class="drawer-item">
+        <i class="fa-solid fa-right-to-bracket"></i> Agent Login
+      </a>
+      <a href="login.html?register=true" class="drawer-item">
+        <i class="fa-solid fa-user-plus"></i> Become an Agent
+      </a>
+    </nav>
 
-            <!-- Activity Table -->
-            <div class="panel">
-                <h2>Recent Activity Log</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Timestamp</th>
-                            <th>Event Type</th>
-                            <th>Status</th>
-                            <th>Details</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>2026-06-06 10:45</td>
-                            <td>Data Sync</td>
-                            <td><span style="color: #16a34a; font-weight: 500;">Success</span></td>
-                            <td>Synchronized local database records</td>
-                        </tr>
-                        <tr>
-                            <td>2026-06-06 09:12</td>
-                            <td>User Login</td>
-                            <td><span style="color: #16a34a; font-weight: 500;">Success</span></td>
-                            <td>Admin signed in from secure gateway</td>
-                        </tr>
-                        <tr>
-                            <td>2026-06-05 23:30</td>
-                            <td>Automated Backup</td>
-                            <td><span style="color: #16a34a; font-weight: 500;">Success</span></td>
-                            <td>Daily system snapshot completed</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+    <div class="drawer-divider"></div>
+
+    <span class="drawer-section-label">SUPPORT</span>
+    <nav class="drawer-nav">
+      <a href="ourHelpDesk.html" class="drawer-item">
+        <i class="fa-solid fa-headset"></i> Our Help Desk
+      </a>
+      <a href="https://chat.whatsapp.com/EbflGFoh9Y64BiaFVqbHid" target="_blank" class="drawer-item">
+        <i class="fa-brands fa-whatsapp"></i> Community
+      </a>
+    </nav>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="customer-dash-wrap">
+    <div class="welcome-hero">
+      <h1>Welcome to Skaitech Services</h1>
+      <p>Quick, reliable access to Airtime Top-Ups, Mobile Data, Utility Bill Payments, and Exam Results Checkers.</p>
+    </div>
+
+    <!-- Airtime Top-Up Section -->
+    <h2 class="services-title"><i class="fa-solid fa-mobile-screen-button" style="color: #2563eb;"></i> Instant Airtime Top-Up</h2>
+    <div class="network-grid">
+      <a href="airtime.html?network=mtn" class="card-link" onclick="return handleAirtimeClick('mtn', event);">
+        <div class="network-card">
+          <div class="network-icon-box mtn-box">MTN</div>
+          <span class="network-name">MTN Airtime</span>
+          <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
         </div>
-    </main>
+      </a>
+      <a href="airtime.html?network=telecel" class="card-link" onclick="return handleAirtimeClick('telecel', event);">
+        <div class="network-card">
+          <div class="network-icon-box telecel-box">T</div>
+          <span class="network-name">Telecel Airtime</span>
+          <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
+        </div>
+      </a>
+      <a href="airtime.html?network=at" class="card-link" onclick="return handleAirtimeClick('at', event);">
+        <div class="network-card">
+          <div class="network-icon-box airteltigo-box">AT</div>
+          <span class="network-name">AT Airtime</span>
+          <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
+        </div>
+      </a>
+    </div>
 
+    <!-- Data Bundles Section -->
+    <h2 class="services-title"><i class="fa-solid fa-signal" style="color: #2563eb;"></i> Instant Data</h2>
+    <div class="network-grid">
+      <a href="instantData.html?network=mtn" class="card-link">
+        <div class="network-card">
+          <div class="network-icon-box mtn-box">MTN</div>
+          <span class="network-name">MTN Instant Data</span>
+          <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
+        </div>
+      </a>
+      <a href="instantData.html?network=telecel" class="card-link">
+        <div class="network-card">
+          <div class="network-icon-box telecel-box">T</div>
+          <span class="network-name">Telecel Instant Data</span>
+          <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
+        </div>
+      </a>
+      <a href="instantData.html?network=airteltigo" class="card-link">
+        <div class="network-card">
+          <div class="network-icon-box airteltigo-box">AT</div>
+          <span class="network-name">AirtelTigo Instant Data</span>
+          <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
+        </div>
+      </a>
+    </div>
+
+    <!-- Utilities Section -->
+    <h2 class="services-title"><i class="fa-solid fa-lightbulb" style="color: #f59e0b;"></i> Utility Bills &amp; Subscriptions</h2>
+    <div class="network-grid">
+      <a href="utilityBills.html?service=ecg" class="card-link" onclick="return handleUtilityClick(event, 'ecg')">
+        <div class="network-card">
+          <div class="network-icon-box ecg-box"><i class="fa-solid fa-bolt"></i></div>
+          <span class="network-name">ECG Prepaid</span>
+          <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant Token</span>
+        </div>
+      </a>
+      <a href="utilityBills.html?service=water" class="card-link" onclick="return handleUtilityClick(event, 'water')">
+        <div class="network-card">
+          <div class="network-icon-box water-box"><i class="fa-solid fa-droplet"></i></div>
+          <span class="network-name">Ghana Water</span>
+          <span class="network-status"><i class="fa-solid fa-circle-check"></i> Settle Bill</span>
+        </div>
+      </a>
+      <a href="utilityBills.html?service=tv" class="card-link" onclick="return handleUtilityClick(event, 'tv')">
+        <div class="network-card">
+          <div class="network-icon-box tv-box"><i class="fa-solid fa-tv"></i></div>
+          <span class="network-name">TV Subscriptions</span>
+          <span class="network-status"><i class="fa-solid fa-tv"></i> DStv • GOtv • StarTimes</span>
+        </div>
+      </a>
+    </div>
+
+    <!-- Other Services -->
+    <h2 class="services-title"><i class="fa-solid fa-graduation-cap" style="color: #10b981;"></i> Education &amp; Other</h2>
+    <div class="network-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+      <a href="resultsChecker.html" class="card-link">
+        <div class="network-card">
+          <div class="network-icon-box" style="background: #10b981; color: white;"><i class="fa-solid fa-receipt"></i></div>
+          <span class="network-name">Results Checker</span>
+          <span class="network-status">BECE • WASSCE • NOV/DEC</span>
+        </div>
+      </a>
+      <a href="AFA.html" class="card-link">
+        <div class="network-card">
+          <div class="network-icon-box" style="background: #6366f1; color: white;"><i class="fa-solid fa-id-card"></i></div>
+          <span class="network-name">AFA Registration</span>
+          <span class="network-status">Apply Online</span>
+        </div>
+      </a>
+      <a href="nonAgentTrachOrder.html" class="card-link">
+        <div class="network-card">
+          <div class="network-icon-box" style="background: #64748b; color: white;"><i class="fa-solid fa-magnifying-glass"></i></div>
+          <span class="network-name">Track Any Order</span>
+          <span class="network-status">Live Status</span>
+        </div>
+      </a>
+    </div>
+
+    <!-- Recent Orders Box -->
+    <div class="recent-orders-card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0; font-size: 1.1rem; color: #1e293b;">Your Recent Orders</h3>
+        <a href="nonAgentTrachOrder.html" style="font-size: 0.85rem; color: #2563eb; text-decoration: none; font-weight: 600;">Track by ID →</a>
+      </div>
+      <div id="recentOrdersContainer" style="margin-top: 12px;">
+        <p style="color: #94a3b8; font-size: 0.9rem; margin: 16px 0;">Loading recent orders...</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- AIRTIME AGENT ACCESS PROMPT MODAL -->
+  <div id="airtimeAgentGateModal" class="agent-gate-modal" onclick="if(event.target === this) closeAirtimeAgentModal()">
+    <div class="agent-gate-card">
+      <button type="button" class="agent-gate-close" onclick="closeAirtimeAgentModal()" aria-label="Close modal">&times;</button>
+      <div class="agent-gate-icon">
+        <i class="fa-solid fa-mobile-screen-button"></i>
+      </div>
+      <h3 class="agent-gate-title">Agent Registration Required</h3>
+      <p class="agent-gate-desc">
+        Only registered agents can purchase airtime. Please register as an agent to continue purchasing MTN, Telecel, and AT airtime.
+      </p>
+      <div class="agent-gate-actions">
+        <a href="login.html?register=true" class="agent-gate-btn-primary">
+          <i class="fa-solid fa-user-plus"></i> Register as Agent
+        </a>
+        <a href="javascript:void(0)" onclick="closeAirtimeAgentModal(); return false;" class="agent-gate-btn-secondary">
+          <i class="fa-solid fa-xmark"></i> Cancel
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- AGENT ACCESS PROMPT MODAL -->
+  <div id="agentGateModal" class="agent-gate-modal" onclick="if(event.target === this) closeAgentModal()">
+    <div class="agent-gate-card">
+      <button type="button" class="agent-gate-close" onclick="closeAgentModal()" aria-label="Close modal">&times;</button>
+      <div class="agent-gate-icon">
+        <i class="fa-solid fa-shield-halved"></i>
+      </div>
+      <h3 class="agent-gate-title">Agent Account Required</h3>
+      <p class="agent-gate-desc">
+        Utility bill settlements (ECG Prepaid, Ghana Water, and TV Subscriptions) are available exclusively to verified Skaitech Agents.
+      </p>
+      <div class="agent-gate-actions">
+        <a href="login.html?register=true" class="agent-gate-btn-primary">
+          <i class="fa-solid fa-user-plus"></i> Create an Agent Account
+        </a>
+        <a href="login.html" class="agent-gate-btn-secondary">
+          <i class="fa-solid fa-right-to-bracket"></i> Sign In as Agent
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleDrawer() {
+      const drawer = document.getElementById('sideDrawer');
+      const overlay = document.getElementById('sidebarOverlay');
+      if (drawer && overlay) {
+        drawer.classList.toggle('active');
+        overlay.classList.toggle('active');
+      }
+    }
+
+    function openAgentModal() {
+      const modal = document.getElementById('agentGateModal');
+      if (modal) modal.classList.add('active');
+    }
+
+    function closeAgentModal() {
+      const modal = document.getElementById('agentGateModal');
+      if (modal) modal.classList.remove('active');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const container = document.getElementById('recentOrdersContainer');
+      const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
+      if (orders.length === 0) {
+        container.innerHTML = '<p style="color: #94a3b8; font-size: 0.9rem; margin: 16px 0;">No past orders found in this browser. <a href="instantData.html" style="color: #2563eb;">Buy data</a> or <a href="utilityBills.html" style="color: #2563eb;">pay a bill</a> to get started.</p>';
+        return;
+      }
+
+      let html = '<table class="order-table"><thead><tr><th>Reference</th><th>Service</th><th>Details</th><th>Price</th><th>Status</th></tr></thead><tbody>';
+      orders.slice(0, 5).forEach(o => {
+        html += `
+          <tr>
+            <td><strong>${o.trackingId || '-'}</strong></td>
+            <td>${o.network || '-'}</td>
+            <td>${o.size || '-'}</td>
+            <td>${o.price || '-'}</td>
+            <td><span class="status-pill">${o.status || 'Completed'}</span></td>
+          </tr>
+        `;
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    });
+  </script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>

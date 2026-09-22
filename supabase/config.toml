@@ -30,3 +30,9 @@ verify_jwt = true
 
 [functions.manage-cashout-deposits]
 verify_jwt = true
+
+[functions.check-agent-access]
+verify_jwt = true
+
+[functions.agent-transactions]
+verify_jwt = true

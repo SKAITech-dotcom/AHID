@@ -1,4 +1,5 @@
 import { adminClient, json } from '../_shared/supabase.ts';
+import { dispatchAirtimeTopup } from '../_shared/airtimeProvider.ts';
 
 async function signatureFor(payload: string, secret: string) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']);
@@ -134,6 +135,46 @@ Deno.serve(async (request) => {
           paid_at: transaction.data?.paid_at,
           authorization: transaction.data?.authorization,
         },
+      });
+      if (fulfilError) throw fulfilError;
+      return json({ received: true });
+    }
+
+    if (event.data?.metadata?.payment_type === 'airtime' || String(reference).startsWith('AIR-')) {
+      const { data: order, error: orderError } = await admin.from('airtime_orders')
+        .select('*').eq('payment_reference', reference).single();
+      if (orderError || !order || order.payment_status === 'paid') return json({ received: true });
+
+      const verified = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+        headers: { Authorization: `Bearer ${secret}` },
+      });
+      const transaction = await verified.json();
+      const feeRate = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.015');
+      const safeRate = Number.isFinite(feeRate) && feeRate >= 0 && feeRate < 1 ? feeRate : 0.015;
+      const expectedGross = Math.round(((Number(order.amount) / (1 - safeRate)) + Number.EPSILON) * 100) / 100;
+      if (!verified.ok || transaction.data?.status !== 'success' || transaction.data.amount !== Math.round(expectedGross * 100) || transaction.data.currency !== 'GHS') {
+        return json({ error: 'Payment verification failed.' }, 400);
+      }
+
+      await admin.from('airtime_orders').update({
+        payment_status: 'paid',
+        airtime_status: 'processing',
+        updated_at: new Date().toISOString(),
+      }).eq('id', order.id);
+
+      const dispatchResult = await dispatchAirtimeTopup({
+        phone: order.recipient_phone,
+        network: order.network,
+        amount: Number(order.amount),
+        reference,
+      });
+
+      const { error: fulfilError } = await admin.rpc('fulfil_airtime_order', {
+        p_order_id: order.id,
+        p_airtime_status: dispatchResult.status,
+        p_provider_reference: dispatchResult.providerReference ?? null,
+        p_provider_response: dispatchResult.providerResponse ?? null,
+        p_failure_reason: dispatchResult.failureReason ?? null,
       });
       if (fulfilError) throw fulfilError;
       return json({ received: true });

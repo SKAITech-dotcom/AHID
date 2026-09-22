@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Settings - Skaitech</title>
+  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .settings-wrapper {
+      max-width: 620px;
+      margin: 30px auto;
+      padding: 0 16px 60px;
+    }
+    .settings-card {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 18px;
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+      border: 1px solid #e2e8f0;
+    }
+    .settings-card h2 {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 4px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .settings-card h2 i {
+      color: #2563eb;
+    }
+    .settings-card > p {
+      color: #64748b;
+      font-size: 0.88rem;
+      margin: 0 0 18px 0;
+    }
+    .settings-field {
+      margin-bottom: 14px;
+    }
+    .settings-field label {
+      display: block;
+      font-weight: 700;
+      color: #1e293b;
+      font-size: 0.85rem;
+      margin-bottom: 6px;
+    }
+    .settings-field input {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      box-sizing: border-box;
+      outline: none;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    .settings-field input:focus {
+      border-color: #2563eb;
+      background: #ffffff;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+    .settings-save-btn {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 13px 16px;
+      font-size: 0.95rem;
+      font-weight: 800;
+      cursor: pointer;
+      background: #2563eb;
+      color: #ffffff;
+      transition: opacity 0.15s;
+    }
+    .settings-save-btn:hover { opacity: 0.92; }
+    .settings-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .settings-notice {
+      display: none;
+      margin-top: 12px;
+      padding: 11px 14px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .settings-notice.show { display: block; }
+    .settings-notice.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+    .settings-notice.error { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+    .settings-info-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #f1f5f9;
+      gap: 12px;
+    }
+    .settings-info-row:last-child { border-bottom: none; }
+    .settings-info-label {
+      font-size: 0.85rem;
+      color: #64748b;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .settings-info-label i { color: #2563eb; width: 18px; text-align: center; }
+    .settings-info-value {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #0f172a;
+      text-align: right;
+      word-break: break-all;
+    }
+    .settings-hint {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <main class="settings-wrapper">
+
+    <div id="settingsNotice" class="settings-notice" role="status"></div>
+
+    <!-- ACCOUNT OVERVIEW -->
+    <section class="settings-card">
+      <h2><i class="fa-solid fa-id-card"></i> Account Overview</h2>
+      <p>Your verified agent profile and recent activity.</p>
+
+      <div class="settings-info-row">
+        <span class="settings-info-label"><i class="fa-solid fa-user"></i> Full name</span>
+        <span class="settings-info-value" id="ovFullName">—</span>
+      </div>
+      <div class="settings-info-row">
+        <span class="settings-info-label"><i class="fa-solid fa-star"></i> Agent code</span>
+        <span class="settings-info-value" id="ovAgentCode">—</span>
+      </div>
+      <div class="settings-info-row">
+        <span class="settings-info-label"><i class="fa-solid fa-envelope"></i> Email</span>
+        <span class="settings-info-value" id="ovEmail">—</span>
+      </div>
+      <div class="settings-info-row">
+        <span class="settings-info-label"><i class="fa-solid fa-phone"></i> Phone</span>
+        <span class="settings-info-value" id="ovPhone">—</span>
+      </div>
+      <div class="settings-info-row">
+        <span class="settings-info-label"><i class="fa-solid fa-user-tag"></i> Role</span>
+        <span class="settings-info-value" id="ovRole">—</span>
+      </div>
+      <div class="settings-info-row">
+        <span class="settings-info-label"><i class="fa-solid fa-clock-rotate-left"></i> Last login</span>
+        <span class="settings-info-value" id="ovLastLogin">—</span>
+      </div>
+    </section>
+
+    <!-- PERSONAL DETAILS -->
+    <section class="settings-card">
+      <h2><i class="fa-solid fa-user-pen"></i> Update Your Details</h2>
+      <p>Keep your profile name, agent code, and phone number up to date.</p>
+
+      <div class="settings-field">
+        <label for="setFullName">Full name</label>
+        <input type="text" id="setFullName" autocomplete="name">
+      </div>
+      <div class="settings-field">
+        <label for="setPhone">Phone number</label>
+        <input type="tel" id="setPhone" placeholder="e.g. 0241234567" maxlength="15" autocomplete="tel">
+      </div>
+      <div class="settings-field">
+        <label for="setAgentCode">Agent code</label>
+        <input type="text" id="setAgentCode" maxlength="20">
+        <div class="settings-hint">Your agent code is used to identify you to your buyers.</div>
+      </div>
+
+      <button type="button" class="settings-save-btn" id="saveDetailsBtn">
+        <i class="fa-solid fa-floppy-disk"></i> Save Details
+      </button>
+    </section>
+
+    <!-- CREDENTIALS -->
+    <section class="settings-card">
+      <h2><i class="fa-solid fa-lock"></i> Update Credentials</h2>
+      <p>Change the email and/or password used to sign in to your account.</p>
+
+      <div class="settings-field">
+        <label for="setEmail">Email address</label>
+        <input type="email" id="setEmail" autocomplete="email">
+        <div class="settings-hint">Leave blank to keep your current email.</div>
+      </div>
+      <div class="settings-field">
+        <label for="setPassword">New password</label>
+        <input type="password" id="setPassword" placeholder="Minimum 6 characters" autocomplete="new-password">
+        <div class="settings-hint">Leave blank to keep your current password.</div>
+      </div>
+      <div class="settings-field">
+        <label for="setConfirmPassword">Confirm new password</label>
+        <input type="password" id="setConfirmPassword" autocomplete="new-password">
+      </div>
+
+      <button type="button" class="settings-save-btn" id="saveCredentialsBtn">
+        <i class="fa-solid fa-key"></i> Save Credentials
+      </button>
+      <div class="settings-hint" style="margin-top: 10px;">You will need to sign in again after changing credentials.</div>
+    </section>
+
+  </main>
+
+  <script type="module" src="agentNav.js"></script>
+  <script type="module" src="settings.js"></script>
+</body>
+</html>

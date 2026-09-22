@@ -1,17 +1,10 @@
 # Claude Code — project context
 
-
-
-
-
-
-
-
 <!-- cloude-code-toolbox:mcp-skills-awareness-begin -->
 
 ### MCP & Skills awareness (Cloude Code ToolBox)
 
-_Last synced: 2026-09-19T18:06:08.312Z._
+_Last synced: 2026-09-22T00:23:24.541Z._
 
 - **Full report:** `.claude/cloude-code-toolbox-mcp-skills-awareness.md` in this workspace (auto-overwritten on each scan). Use it as ground truth for configured servers and skill folders.
 - **MCP:** For **live tools** in Claude Code, enable the matching server via `/mcp`. Servers are configured in `~/.claude.json` (user) and `.mcp.json` (project).
@@ -26,7 +19,7 @@ _No active workspace servers in mcp.json._
 
 #### User MCP
 
-- `C:\Users\khash\.claude.json` — _file missing_
+- `C:\Users\khash\.claude.json` — _no servers defined_
 
 _No active user-scoped servers in mcp.json._
 
@@ -40,6 +33,7 @@ _None found._
 
 <!-- cloude-code-toolbox:mcp-skills-awareness-end -->
 
+
 <!-- cloude-code-toolbox:cursorrules-begin -->
 
 ## Migrated from `.cursorrules` (via Cloude Code ToolBox)
@@ -50,6 +44,7 @@ _None found._
 - Match existing code style.
 
 <!-- cloude-code-toolbox:cursorrules-end -->
+
 
 <!-- claude-code-memory-bank:begin -->
 # Memory bank (persistent context)
@@ -78,3 +73,21 @@ Context layers (read deeper files after foundations): **projectbrief** → **pro
 
 Do not delete these files; evolve them as the project changes.
 <!-- claude-code-memory-bank:end -->
+
+
+
+<!-- cloude-code-toolbox:token-optimization-begin -->
+
+### Token Optimization (Claude Code ToolBox)
+
+_Active level: concise_
+
+- Respond concisely: 1-3 sentences max unless the user asks for detail.
+- Never restate the user's question or echo file contents back verbatim.
+- When showing code changes, show only modified lines with 2 lines of context.
+- Skip meta-commentary ("I'll now...", "Let me...", "Here's what I did...").
+- Before reading a file, check `.claude/project-map.md` for structural context.
+- If you already read a file this session and it hasn't changed, reference your memory instead of re-reading.
+- Do not read files matching `.claudeignore` patterns unless explicitly asked.
+
+<!-- cloude-code-toolbox:token-optimization-end -->

@@ -10,26 +10,16 @@
 </head>
 <body class="dashboard-body">
 
-    <!-- HEADER -->
-    <header class="gt-header">
-        <div class="header-left">
-            <h3>Skaitech gh</h3>
-        </div>
-       <!-- Sleek Dashboard Top Bar -->
-<div style="background: linear-gradient(135deg, #7380ec, #4f5dcb); color: white; padding: 15px 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <!-- WALLET BALANCE BANNER -->
+<div style="background: linear-gradient(135deg, #7380ec, #4f5dcb); color: white; padding: 15px 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 16px auto 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 800px;">
     <div style="display: flex; align-items: center; gap: 10px;">
         <i class="fa-solid fa-wallet" style="font-size: 20px;"></i>
         <div>
             <span style="font-size: 12px; opacity: 0.85; display: block;">Available Balance</span>
-            <strong id="walletHeaderDisplay" style="font-size: 18px;">GHS 65.80</strong>
+            <strong id="walletHeaderDisplay" style="font-size: 18px;">GHS 0.00</strong>
         </div>
     </div>
-    
-    <a href="dashboard.html" style="background: rgba(255, 255, 255, 0.2); color: white; padding: 8px 14px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; transition: background 0.2s;">
-        <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
-    </a>
 </div>
-    </header>
 
     <main class="wallet-container" style="padding: 30px; max-width: 800px; margin: auto;">
         <h2>Fund Your Agent Wallet</h2>
@@ -138,6 +128,7 @@
     </main>
 
     <!-- Link the JavaScript file -->
+    <script type="module" src="agentNav.js"></script>
     <script type="module" src="agentDeposit.js"></script>
 </body>
 </html>

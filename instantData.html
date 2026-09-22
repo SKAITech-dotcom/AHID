@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skaitech - Instant Data</title>
+    <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --id-bg: #ffcc00;
+            --id-card: #1a1a1e;
+            --id-card-raised: #1f1f24;
+            --id-border: #2a2a31;
+            --id-border-soft: #232329;
+            --id-text: #f5f5f7;
+            --id-muted: #9ca3af;
+            --id-gold: #ffcc00;
+            --id-gold-soft: #ffd633;
+            --id-green: #4ade80;
+            --id-red: #f87171;
+        }
+
+        body {
+            background-color: var(--id-bg);
+            color: var(--id-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0 16px 120px;
+        }
+        .id-page { width: 100%; max-width: 520px; margin: 0 auto; padding-top: 16px; }
+
+        .id-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .id-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+        .id-brand img { height: 34px; border-radius: 6px; }
+        .id-brand span { font-weight: 800; color: var(--id-text); letter-spacing: -0.5px; font-size: 1rem; }
+        .id-back {
+            color: var(--id-muted); text-decoration: none; font-weight: 700; font-size: 0.85rem;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+
+        .id-card {
+            background: var(--id-card);
+            border-radius: 18px;
+            padding: 22px 18px;
+            margin-bottom: 14px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+            border: 1px solid var(--id-border);
+        }
+
+        .id-title {
+            font-size: 1.4rem; font-weight: 900; color: var(--id-text); margin: 0 0 6px;
+            letter-spacing: -0.5px;
+        }
+        .id-subtitle {
+            font-size: 0.88rem; color: var(--id-muted); margin: 0 0 14px; line-height: 1.5;
+        }
+        .id-bundle-subtitle {
+            display: flex; align-items: center; gap: 8px;
+            background: linear-gradient(135deg, rgba(255, 204, 0, 0.14), rgba(255, 204, 0, 0.05));
+            border: 1px solid rgba(255, 204, 0, 0.25);
+            border-radius: 12px;
+            padding: 10px 14px;
+            margin: 0 0 16px;
+        }
+        .id-bundle-subtitle i { color: var(--id-gold); font-size: 0.95rem; }
+        .id-bundle-subtitle span {
+            font-size: 0.86rem; font-weight: 800; color: var(--id-gold-soft);
+            letter-spacing: 0.3px; text-transform: uppercase;
+        }
+
+        /* Network selector */
+        .id-step-label {
+            font-size: 0.72rem; font-weight: 800; color: var(--id-muted); letter-spacing: 0.5px;
+            text-transform: uppercase; margin: 18px 0 10px; display: block;
+        }
+        .id-network-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+        }
+        .id-network-btn {
+            border: 1px solid var(--id-border); background: var(--id-card-raised); border-radius: 14px; padding: 12px 6px;
+            cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px;
+            transition: all 0.15s; font-family: inherit; color: var(--id-text);
+        }
+        .id-network-btn:hover { border-color: rgba(255, 204, 0, 0.55); transform: translateY(-1px); }
+        .id-network-btn.active { border-color: var(--id-gold); }
+        .id-network-logo {
+            height: 34px; width: 34px; border-radius: 50%; display: flex; align-items: center;
+            justify-content: center; color: #fff; font-weight: 800; font-size: 0.7rem;
+            box-shadow: 0 0 0 3px rgba(255, 204, 0, 0.12);
+        }
+        .id-network-btn span { font-size: 0.76rem; font-weight: 700; color: var(--id-text); }
+
+        /* Phone field */
+        .id-field {
+            width: 100%; padding: 12px 14px; border: 1px solid var(--id-border); border-radius: 12px;
+            font-size: 0.95rem; box-sizing: border-box; outline: none; margin-top: 4px;
+            background: var(--id-card-raised); color: var(--id-text);
+        }
+        .id-field::placeholder { color: #6b7280; }
+        .id-field:focus { border-color: var(--id-gold); box-shadow: 0 0 0 3px rgba(255, 204, 0, 0.12); }
+        .id-phone-wrap { position: relative; }
+        .id-network-hint {
+            display: none; align-items: center; gap: 6px; margin-top: 6px;
+            font-size: 0.78rem; font-weight: 700; color: var(--id-green);
+        }
+        .id-network-hint.show { display: inline-flex; }
+
+        /* Bundle list (stacked cards: Data left, Cost right) */
+        .id-bundle-grid {
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .id-bundle-row {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            width: 100%; text-align: left;
+            background: var(--id-card-raised); border: 1px solid var(--id-border); border-radius: 14px;
+            padding: 14px 16px; cursor: pointer; font-family: inherit;
+            transition: all 0.15s;
+        }
+        .id-bundle-row:hover { border-color: rgba(255, 204, 0, 0.5); transform: translateY(-1px); }
+        .id-bundle-row.active {
+            border-color: var(--id-gold);
+            background: linear-gradient(135deg, rgba(255, 204, 0, 0.12), rgba(255, 204, 0, 0.03));
+            box-shadow: 0 0 0 3px rgba(255, 204, 0, 0.1);
+        }
+        .id-bundle-left { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .id-bundle-data-label {
+            font-size: 0.68rem; font-weight: 800; color: var(--id-muted);
+            letter-spacing: 0.6px; text-transform: uppercase;
+        }
+        .id-bundle-size { font-size: 1.15rem; font-weight: 900; color: var(--id-gold); letter-spacing: -0.3px; }
+        .id-bundle-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+        .id-bundle-cost-label {
+            font-size: 0.68rem; font-weight: 800; color: var(--id-muted);
+            letter-spacing: 0.6px; text-transform: uppercase;
+        }
+        .id-bundle-price { font-size: 1.02rem; font-weight: 900; color: var(--id-gold-soft); }
+
+        .id-fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+        /* Sticky checkout bar */
+        .id-checkout-bar {
+            position: fixed; left: 0; right: 0; bottom: 0; background: var(--id-card);
+            border-top: 1px solid var(--id-border); box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.45);
+            padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        }
+        .id-checkout-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .id-checkout-phone { font-size: 0.76rem; color: var(--id-muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .id-checkout-total { font-size: 1.2rem; font-weight: 900; color: var(--id-gold); }
+        .id-buy-btn {
+            border: none; background: linear-gradient(135deg, var(--id-gold), #ffb700); color: #121212; font-weight: 900; font-size: 0.95rem;
+            padding: 15px 28px; border-radius: 12px; cursor: pointer; white-space: nowrap;
+            box-shadow: 0 8px 18px rgba(255, 204, 0, 0.28); transition: opacity 0.15s;
+        }
+        .id-buy-btn:hover { opacity: 0.9; }
+        .id-buy-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        .id-notice {
+            display: none; padding: 12px 14px; border-radius: 12px; font-size: 0.86rem;
+            font-weight: 600; margin-bottom: 14px;
+        }
+        .id-notice.error { display: block; background: rgba(248, 113, 113, 0.12); color: var(--id-red); border: 1px solid rgba(248, 113, 113, 0.3); }
+        .id-notice.info { display: block; background: rgba(255, 204, 0, 0.1); color: var(--id-gold); border: 1px solid rgba(255, 204, 0, 0.25); }
+
+        /* Result overlay */
+        .id-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); display: none;
+            align-items: center; justify-content: center; padding: 20px; z-index: 1000;
+        }
+        .id-overlay.active { display: flex; }
+        .id-result-card {
+            background: var(--id-card); border: 1px solid var(--id-border); border-radius: 18px; padding: 26px 22px; width: 100%; max-width: 380px;
+            text-align: center; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+        .id-result-icon { font-size: 2.6rem; margin-bottom: 10px; }
+        .id-result-title { font-size: 1.2rem; font-weight: 800; color: var(--id-text); margin: 0 0 6px; }
+        .id-result-desc { font-size: 0.88rem; color: var(--id-muted); margin: 0 0 16px; line-height: 1.45; }
+        .id-result-ref {
+            background: var(--id-card-raised); border: 1px solid var(--id-border); border-radius: 10px; padding: 10px;
+            font-family: monospace; font-size: 0.8rem; color: var(--id-gold-soft); margin-bottom: 16px; word-break: break-all;
+        }
+        .id-result-btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            background: linear-gradient(135deg, var(--id-gold), #ffb700); color: #121212; border: none; border-radius: 10px; padding: 12px 22px;
+            font-weight: 800; cursor: pointer; text-decoration: none; font-size: 0.9rem;
+        }
+        .id-result-btn.ghost { background: var(--id-card-raised); color: var(--id-muted); margin-left: 8px; border: 1px solid var(--id-border); }
+        .id-automated-badge {
+            display: inline-flex; align-items: center; gap: 6px; background: rgba(74, 222, 128, 0.12); color: var(--id-green);
+            border: 1px solid rgba(74, 222, 128, 0.3); border-radius: 9999px; padding: 4px 12px;
+            font-size: 0.72rem; font-weight: 800; margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="id-page">
+        <!-- Status notice -->
+        <div id="idNotice" class="id-notice"></div>
+
+        <!-- Main card -->
+        <div class="id-card">
+            <span class="id-automated-badge"><i class="fa-solid fa-bolt"></i> INSTANT AUTOMATED DELIVERY</span>
+            <h1 class="id-title">Instant Data Top-Up</h1>
+            <p class="id-subtitle">Painless instant top-ups with real delivery. No stress, no expiry worries.</p>
+
+            <div class="id-bundle-subtitle">
+                <i class="fa-solid fa-bolt"></i>
+                <span>Low Cost Non Expiry Bundles</span>
+            </div>
+
+            <span class="id-step-label">1. Select Network</span>
+            <div class="id-network-grid" id="networkGrid"></div>
+
+            <span class="id-step-label">2. Recipient Phone Number</span>
+            <div class="id-phone-wrap">
+                <input type="tel" id="recipientPhone" class="id-field" placeholder="024XXXXXXX" maxlength="10" oninput="handleDataPhoneInput()">
+                <div id="phoneNetworkHint" class="id-network-hint"></div>
+            </div>
+
+            <span class="id-step-label">3. Choose Bundle</span>
+            <div class="id-bundle-grid" id="bundleGrid"></div>
+
+            <span class="id-step-label">4. Your Details (for receipt)</span>
+            <div class="id-fields-grid">
+                <div>
+                    <input type="text" id="customerName" class="id-field" placeholder="Your Name">
+                </div>
+                <div>
+                    <input type="email" id="customerEmail" class="id-field" placeholder="you@example.com">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sticky checkout bar -->
+    <div class="id-checkout-bar">
+        <div class="id-checkout-info">
+            <span class="id-checkout-phone" id="checkoutPhone">Select a bundle to continue</span>
+            <span class="id-checkout-total" id="checkoutTotal">GHS 0.00</span>
+        </div>
+        <button id="buyBtn" class="id-buy-btn" onclick="startInstantDataCheckout()">
+            <i class="fa-solid fa-bolt"></i> Buy Now
+        </button>
+    </div>
+
+    <!-- Result overlay -->
+    <div id="resultOverlay" class="id-overlay" onclick="if(event.target === this) closeInstantDataResult()">
+        <div class="id-result-card">
+            <div class="id-result-icon" id="resultIcon">✅</div>
+            <h3 class="id-result-title" id="resultTitle">Payment Initialized</h3>
+            <p class="id-result-desc" id="resultDesc"></p>
+            <div class="id-result-ref" id="resultRef">-</div>
+            <button class="id-result-btn" onclick="closeInstantDataResult()">Continue</button>
+        </div>
+    </div>
+
+    <script type="module" src="agentNav.js"></script>
+    <script type="module" src="instantData.js"></script>
+</body>
+</html>

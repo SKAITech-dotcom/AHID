@@ -37,12 +37,22 @@
     <div id="menuOverlay" class="menu-overlay" onclick="toggleMenu()"></div>
 
 <nav id="dropdownMenu" class="dropdown-menu">
+    <div class="drawer-header">
+      <div class="drawer-brand">
+        <img src="img/akaitech%20more%20final%20logo.jpeg" alt="Skaitech" class="drawer-logo">
+        <span class="drawer-brand-name">SKAITECH</span>
+      </div>
+      <button type="button" class="drawer-close-btn" onclick="toggleMenu()" aria-label="Close menu">&times;</button>
+    </div>
     <div class="dropdown-nav-list">
-        <a href="index.html" class="dropdown-nav-link dropdown-nav-link-active">Dashboard</a>
-        <a href="nonAgentTrachOrder.html" class="dropdown-nav-link">Track Order</a>
-        <a href="ourHelpDesk.html" class="dropdown-nav-link">Help Desk</a>
-        <a href="AFA.html" class="dropdown-nav-link">⚡AFA</a>
-        <a href="https://chat.whatsapp.com/Ebf1GFoh9Y64BiaFVqbHid" class="dropdown-nav-link">👥Community</a>
+        <a href="index.html" class="dropdown-nav-link dropdown-nav-link-active"><i class="fa-solid fa-house"></i> Dashboard</a>
+        <a href="airtime.html" class="dropdown-nav-link" onclick="return handleAirtimeClick(null, event)"><i class="fa-solid fa-mobile-screen-button"></i> Buy Airtime</a>
+        <a href="utilityBills.html" class="dropdown-nav-link" onclick="return handleUtilityClick(event, 'ecg')"><i class="fa-solid fa-bolt"></i> Utility Bills</a>
+        <a href="resultsChecker.html" class="dropdown-nav-link"><i class="fa-solid fa-receipt"></i> Results Checker</a>
+        <a href="nonAgentTrachOrder.html" class="dropdown-nav-link"><i class="fa-solid fa-magnifying-glass"></i> Track Order</a>
+        <a href="ourHelpDesk.html" class="dropdown-nav-link"><i class="fa-solid fa-headset"></i> Help Desk</a>
+        <a href="AFA.html" class="dropdown-nav-link"><i class="fa-solid fa-id-card"></i> AFA Registration</a>
+        <a href="https://chat.whatsapp.com/Ebf1GFoh9Y64BiaFVqbHid" target="_blank" class="dropdown-nav-link"><i class="fa-brands fa-whatsapp"></i> Community</a>
     </div>
 </nav>
 
@@ -64,44 +74,126 @@
           Provision MTN, Telecel, and AirtelTigo data packages instantly. Built for agents, resellers, and individuals.
         </p>
         <div class="hero-buttons">
-          <a href="login.html?register=true" class="btn-primary">Create Agent Account</a>
-          <a href="#networks" class="btn-secondary">View Available Packages</a>
+          <a href="airtime.html" class="btn-primary" style="background: #2563eb;" onclick="return handleAirtimeClick(null, event);">📱 Buy Airtime Now</a>
+          <a href="login.html?register=true" class="btn-secondary">Agent Portal</a>
         </div>
       </div>
     </section>
 
-   <!-- NETWORK PROVIDERS SECTION (GRANDMASTER STYLE CARDS) -->
-<section id="networks" class="partners-section">
-    
-</section>
-<div class="network-grid">
+    <!-- AIRTIME TOP-UP SECTION -->
+    <section id="airtime" class="partners-section" style="padding-top: 2rem;">
+      <div class="container">
+        <h2 class="section-title" style="text-align: center; margin-bottom: 0.5rem;">Instant Airtime Top-Up</h2>
+        <p style="text-align: center; color: #64748b; font-size: 0.95rem; margin-bottom: 1.5rem;">
+          Recharge MTN, Telecel, and AT numbers directly with instant automated delivery.
+        </p>
+      </div>
+      <div class="network-grid">
+        <!-- MTN Airtime -->
+        <a href="airtime.html?network=mtn" class="network-card-link" style="text-decoration: none; display: block;" onclick="return handleAirtimeClick('mtn', event);">
+          <div class="network-card">
+            <div class="network-icon-box mtn-box">MTN</div>
+            <span class="network-name">MTN Airtime</span>
+            <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
+          </div>
+        </a>
+
+        <!-- Telecel Airtime -->
+        <a href="airtime.html?network=telecel" class="network-card-link" style="text-decoration: none; display: block;" onclick="return handleAirtimeClick('telecel', event);">
+          <div class="network-card">
+            <div class="network-icon-box telecel-box">T</div>
+            <span class="network-name">Telecel Airtime</span>
+            <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
+          </div>
+        </a>
+
+        <!-- AT Airtime -->
+        <a href="airtime.html?network=at" class="network-card-link" style="text-decoration: none; display: block;" onclick="return handleAirtimeClick('at', event);">
+          <div class="network-card">
+            <div class="network-icon-box airteltigo-box">AT</div>
+            <span class="network-name">AT Airtime</span>
+            <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <!-- NETWORK PROVIDERS DATA SECTION -->
+    <section id="networks" class="partners-section" style="padding-top: 2rem;">
+      <div class="container">
+        <h2 class="section-title" style="text-align: center; margin-bottom: 0.5rem;">Instant Data</h2>
+        <p style="text-align: center; color: #64748b; font-size: 0.95rem; margin-bottom: 1.5rem;">
+          Instant automated data top-ups for MTN, Telecel, and AirtelTigo lines.
+        </p>
+      </div>
+    </section>
+    <div class="network-grid">
     <!-- MTN Card -->
-    <a href="nonAgentBuyers.html?network=mtn" class="network-card-link" style="text-decoration: none; display: block;">
+    <a href="instantData.html?network=mtn" class="network-card-link" style="text-decoration: none; display: block;">
         <div class="network-card">
             <div class="network-icon-box mtn-box">MTN</div>
-            <span class="network-name">MTN Data</span>
+            <span class="network-name">MTN Instant Data</span>
             <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
         </div>
     </a>
 
     <!-- Telecel Card -->
-    <a href="nonAgentBuyers.html?network=telecel" class="network-card-link" style="text-decoration: none; display: block;">
+    <a href="instantData.html?network=telecel" class="network-card-link" style="text-decoration: none; display: block;">
         <div class="network-card">
             <div class="network-icon-box telecel-box">T</div>
-            <span class="network-name">Telecel Data</span>
+            <span class="network-name">Telecel Instant Data</span>
             <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
         </div>
     </a>
 
     <!-- AirtelTigo Card -->
-    <a href="nonAgentBuyers.html?network=airteltigo" class="network-card-link" style="text-decoration: none; display: block;">
+    <a href="instantData.html?network=airteltigo" class="network-card-link" style="text-decoration: none; display: block;">
         <div class="network-card">
             <div class="network-icon-box airteltigo-box">AT</div>
-            <span class="network-name">AirtelTigo Data</span>
+            <span class="network-name">AirtelTigo Instant Data</span>
             <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant</span>
         </div>
     </a>
 </div>
+
+    <!-- UTILITY BILLS & TV SUBSCRIPTIONS SECTION -->
+    <section id="utilities" class="partners-section" style="padding-top: 2rem;">
+      <div class="container">
+        <h2 class="section-title" style="text-align: center; margin-bottom: 0.5rem;">Utility Bills &amp; TV Subscriptions</h2>
+        <p style="text-align: center; color: #64748b; font-size: 0.95rem; margin-bottom: 1.5rem;">
+          Instant recharges and bill settlements with automated receipt and token delivery.
+        </p>
+      </div>
+      <div class="network-grid">
+        <!-- ECG Prepaid Card -->
+        <a href="utilityBills.html?service=ecg" class="network-card-link" style="text-decoration: none; display: block;" onclick="return handleUtilityClick(event, 'ecg')">
+          <div class="network-card">
+            <div class="network-icon-box ecg-box"><i class="fa-solid fa-bolt"></i></div>
+            <span class="network-name">ECG Prepaid</span>
+            <span class="network-status"><i class="fa-solid fa-bolt"></i> Instant Token</span>
+          </div>
+        </a>
+
+        <!-- Ghana Water Card -->
+        <a href="utilityBills.html?service=water" class="network-card-link" style="text-decoration: none; display: block;" onclick="return handleUtilityClick(event, 'water')">
+          <div class="network-card">
+            <div class="network-icon-box water-box"><i class="fa-solid fa-droplet"></i></div>
+            <span class="network-name">Ghana Water</span>
+            <span class="network-status"><i class="fa-solid fa-circle-check"></i> Settle Bill</span>
+          </div>
+        </a>
+
+        <!-- TV Subscriptions Card -->
+        <a href="utilityBills.html?service=tv" class="network-card-link" style="text-decoration: none; display: block;" onclick="return handleUtilityClick(event, 'tv')">
+          <div class="network-card">
+            <div class="network-icon-box tv-box"><i class="fa-solid fa-tv"></i></div>
+            <span class="network-name">TV Subscriptions</span>
+            <span class="network-status"><i class="fa-solid fa-tv"></i> DStv • GOtv • StarTimes</span>
+          </div>
+        </a>
+      </div>
+    </section>
+
     <!-- FEATURES SECTION -->
     <section id="features" class="features-section">
       <div class="container">
@@ -165,23 +257,82 @@
 ">
     <i class="fa-brands fa-whatsapp"></i>
 </a>
-<script>
-// Toggle function for the side-sliding menu and background overlay
-function toggleMenu() {
-    const menu = document.getElementById('dropdownMenu');
-    const overlay = document.getElementById('menuOverlay');
-    
-    if (menu && overlay) {
-        menu.classList.toggle('active');
-        overlay.classList.toggle('active');
-    }
-}
+  <!-- AIRTIME AGENT ACCESS PROMPT MODAL -->
+  <div id="airtimeAgentGateModal" class="agent-gate-modal" onclick="if(event.target === this) closeAirtimeAgentModal()">
+    <div class="agent-gate-card">
+      <button type="button" class="agent-gate-close" onclick="closeAirtimeAgentModal()" aria-label="Close modal">&times;</button>
+      <div class="agent-gate-icon">
+        <i class="fa-solid fa-mobile-screen-button"></i>
+      </div>
+      <h3 class="agent-gate-title">Agent Registration Required</h3>
+      <p class="agent-gate-desc">
+        Only registered agents can purchase airtime. Please register as an agent to continue purchasing MTN, Telecel, and AT airtime.
+      </p>
+      <div class="agent-gate-actions">
+        <a href="login.html?register=true" class="agent-gate-btn-primary">
+          <i class="fa-solid fa-user-plus"></i> Register as Agent
+        </a>
+        <a href="javascript:void(0)" onclick="closeAirtimeAgentModal(); return false;" class="agent-gate-btn-secondary">
+          <i class="fa-solid fa-xmark"></i> Cancel
+        </a>
+      </div>
+    </div>
+  </div>
 
-</script>
+  <!-- AGENT ACCESS PROMPT MODAL -->
+  <div id="agentGateModal" class="agent-gate-modal" onclick="if(event.target === this) closeAgentModal()">
+    <div class="agent-gate-card">
+      <button type="button" class="agent-gate-close" onclick="closeAgentModal()" aria-label="Close modal">&times;</button>
+      <div class="agent-gate-icon">
+        <i class="fa-solid fa-shield-halved"></i>
+      </div>
+      <h3 class="agent-gate-title">Agent Account Required</h3>
+      <p class="agent-gate-desc">
+        Utility bill settlements (ECG Prepaid, Ghana Water, and TV Subscriptions) are available exclusively to verified Skaitech Agents.
+      </p>
+      <div class="agent-gate-actions">
+        <a href="login.html?register=true" class="agent-gate-btn-primary">
+          <i class="fa-solid fa-user-plus"></i> Create an Agent Account
+        </a>
+        <a href="login.html" class="agent-gate-btn-secondary">
+          <i class="fa-solid fa-right-to-bracket"></i> Sign In as Agent
+        </a>
+      </div>
+    </div>
+  </div>
 
-<footer>
-  <script type="module" src="script.js"></script>
-</footer>
+  <script>
+  // Toggle function for the side-sliding menu and background overlay
+  function toggleMenu() {
+      const menu = document.getElementById('dropdownMenu');
+      const overlay = document.getElementById('menuOverlay');
+      const symbol = document.getElementById('menuIconSymbol');
+      
+      if (menu) {
+          menu.classList.toggle('active');
+      }
+      if (overlay) {
+          overlay.classList.toggle('active');
+      }
+      if (symbol && menu) {
+          symbol.innerHTML = menu.classList.contains('active') ? '&times;' : '&#8801;';
+      }
+  }
+
+  function openAgentModal() {
+      const modal = document.getElementById('agentGateModal');
+      if (modal) modal.classList.add('active');
+  }
+
+  function closeAgentModal() {
+      const modal = document.getElementById('agentGateModal');
+      if (modal) modal.classList.remove('active');
+  }
+  </script>
+
+  <footer>
+    <script type="module" src="script.js"></script>
+  </footer>
 
 </body>
 </html>

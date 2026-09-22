@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient.js';
+import { checkAgentAccessServer } from './agentAccessCheck.js';
 /* ==========================================================================
    SKAITECH MASTER APPLICATION SCRIPT
    ========================================================================== */
@@ -24,25 +25,52 @@ function generateAgentCode() {
 }
 
 async function ensureAgentProfile(userId, agentName, agentCode, phone = '') {
-  const profileData = { id: userId, full_name: agentName, agent_code: agentCode, phone };
-  const profileResult = await supabase.from('profiles').upsert(profileData, { onConflict: 'id' });
-  const agentResult = await supabase.from('agents').upsert({
-    id: userId,
-    full_name: agentName,
-    agent_code: agentCode,
-    phone,
-    role: 'agent'
-  }, { onConflict: 'id' });
-  const walletResult = await supabase.from('wallets').upsert({
-    id: userId,
-    balance: 0.00
-  }, { onConflict: 'id' });
+  try {
+    const profileData = { id: userId, full_name: agentName, agent_code: agentCode, phone };
+    const profileResult = await supabase.from('profiles').upsert(profileData, { onConflict: 'id' });
 
-  return {
-    profileError: profileResult.error,
-    agentError: agentResult.error,
-    walletError: walletResult.error
-  };
+    // Check if user is an admin to avoid demoting
+    let role = 'agent';
+    try {
+      const { data: existingAgent } = await supabase
+        .from('agents')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      if (existingAgent?.role === 'admin') {
+        role = 'admin';
+      }
+    } catch (_) {}
+
+    const agentResult = await supabase.from('agents').upsert({
+      id: userId,
+      full_name: agentName,
+      agent_code: agentCode,
+      phone,
+      role: role
+    }, { onConflict: 'id' });
+
+    const walletResult = await supabase.from('wallets').upsert({
+      id: userId,
+      balance: 0.00
+    }, { onConflict: 'id' });
+
+    // Also update auth user metadata with role and code
+    try {
+      await supabase.auth.updateUser({
+        data: { role, full_name: agentName, agent_code: agentCode }
+      });
+    } catch (_) {}
+
+    return {
+      profileError: profileResult.error,
+      agentError: agentResult.error,
+      walletError: walletResult.error
+    };
+  } catch (err) {
+    console.error('ensureAgentProfile error:', err);
+    return { profileError: err, agentError: err, walletError: err };
+  }
 }
 
 function ensureLocalWebServer() {
@@ -61,6 +89,16 @@ async function getValidAgentSession() {
 }
 
 // --- AUTHENTICATION & REGISTRATION LOGIC ---
+// After sign-in/registration, return the user to the service they were
+// trying to reach (only same-site .html targets are allowed).
+function postAuthRedirect() {
+  const redirect = new URLSearchParams(window.location.search).get('redirect');
+  if (redirect && /^[a-zA-Z0-9_\-]+\.html([?#].*)?$/.test(redirect)) {
+    return redirect;
+  }
+  return 'dashboard.html';
+}
+
 async function handleLogin(event) {
   if (event) event.preventDefault();
   const identifierInput = document.getElementById('loginEmail') || document.getElementById('regName');
@@ -101,7 +139,13 @@ async function handleLogin(event) {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, agent_code')
+      .select('full_name, agent_code, phone')
+      .eq('id', data.user.id)
+      .single();
+
+    const { data: agentRow } = await supabase
+      .from('agents')
+      .select('id, role')
       .eq('id', data.user.id)
       .single();
 
@@ -110,17 +154,17 @@ async function handleLogin(event) {
 
     const effectiveAgentCode = agentCode || generateAgentCode();
 
-    if (!profile) {
-      const setupErrors = await ensureAgentProfile(data.user.id, agentName, effectiveAgentCode, '');
+    if (!profile || !agentRow || !['agent', 'admin'].includes(agentRow.role)) {
+      const setupErrors = await ensureAgentProfile(data.user.id, agentName, effectiveAgentCode, profile?.phone || '');
       if (setupErrors.profileError || setupErrors.agentError || setupErrors.walletError) {
-        console.error('Account setup failed after sign-in:', setupErrors);
+        console.warn('Account setup notice after sign-in:', setupErrors);
       }
     }
 
     localStorage.setItem('currentAgentName', agentName);
     localStorage.setItem('agent_name', agentName);
     localStorage.setItem('currentAgentCode', effectiveAgentCode);
-    window.location.href = 'dashboard.html';
+    window.location.href = postAuthRedirect();
   } catch (err) {
     console.error('Supabase sign-in failed:', err);
     if (err instanceof TypeError && err.message.toLowerCase().includes('fetch')) {
@@ -165,7 +209,8 @@ async function handleRegistration(event) {
           data: {
             full_name: agentName,
             phone: phone,
-            agent_code: generatedCode
+            agent_code: generatedCode,
+            role: 'agent'
           }
         }
       });
@@ -212,7 +257,7 @@ async function handleRegistration(event) {
     setCookie('currentAgentCode', generatedCode);
   }
 
-  window.location.href = 'dashboard.html';
+  window.location.href = postAuthRedirect();
 }
 
  window.switchTab = function(tab) {
@@ -519,20 +564,32 @@ function toggleAccordion(headerElement) {
 
 //  // REALTIME ORDER SEARCH FILTER
 let currentFilter = 'all';
+let currentServiceTab = 'all';
 
 // SET ACTIVE FILTER PILL
 function setFilter(status, element) {
     currentFilter = status;
 
     // Update pill active classes
-    const buttons = document.querySelectorAll('.status-pills .pill-btn');
+    const buttons = document.querySelectorAll('#statusPills .pill-btn');
     buttons.forEach(btn => btn.classList.remove('active'));
     if (element) element.classList.add('active');
 
     filterOrders();
 }
 
-// FILTER ORDERS BY STATUS & PHONE SEARCH
+// SET ACTIVE SERVICE TYPE TAB (airtime / utility / all)
+function setServiceTab(tab, element) {
+    currentServiceTab = tab;
+
+    const buttons = document.querySelectorAll('#serviceTabs .pill-btn');
+    buttons.forEach(btn => btn.classList.remove('active'));
+    if (element) element.classList.add('active');
+
+    filterOrders();
+}
+
+// FILTER ORDERS BY STATUS, SERVICE TYPE & PHONE SEARCH
 function filterOrders() {
   const searchInput = document.getElementById('orderSearch');
   if (!searchInput) return;
@@ -543,9 +600,10 @@ function filterOrders() {
 
   rows.forEach(row => {
     const statusMatch = (currentFilter === 'all') || (row.getAttribute('data-status') === currentFilter);
+    const serviceMatch = (currentServiceTab === 'all') || (row.getAttribute('data-service') === currentServiceTab);
     const phoneMatch = row.innerText.toLowerCase().includes(searchText);
 
-    if (statusMatch && phoneMatch) {
+    if (statusMatch && serviceMatch && phoneMatch) {
       row.style.display = '';
       visibleCount++;
     } else {
@@ -562,6 +620,14 @@ function filterOrders() {
   // Toggle between Empty State message and Data Table display
   const emptyState = document.getElementById('emptyState');
   const table = document.getElementById('ordersTable');
+  const emptyText = document.querySelector('#emptyState p');
+  if (emptyText) {
+    emptyText.textContent = currentServiceTab === 'airtime'
+      ? "You haven't placed any airtime purchases yet, or try searching with a different reference or phone number."
+      : currentServiceTab === 'utility'
+      ? "You haven't settled any utility bills yet, or try searching with a different reference or phone number."
+      : "You haven't placed any orders yet, or try searching with a different phone number.";
+  }
 
   if (visibleCount === 0) {
     if (emptyState) emptyState.style.display = 'block';
@@ -573,26 +639,151 @@ function filterOrders() {
 }
 // LOAD AND DISPLAY ORDERS WITH STATUS ACTIONS
 // RENDER TABLE (AUTOMATIC DISPLAY - NO DROPDOWN)
-function loadStoredOrders() {
+function maskPhoneDisplay(phone) {
+    const clean = String(phone || '').replace(/\D/g, '');
+    if (!clean) return phone || '-';
+    if (clean.length <= 6) return clean.length <= 2 ? clean : clean.slice(0, 1) + '*'.repeat(clean.length - 2) + clean.slice(-1);
+    return clean.slice(0, 3) + '*'.repeat(clean.length - 7) + clean.slice(-4);
+}
+
+function updateTransactionSummary(orders) {
+    const airtimeCount = orders.filter(o => o.type === 'airtime').length;
+    const utilityCount = orders.filter(o => o.type === 'utility').length;
+    const completed = orders.filter(o => o.status === 'Completed').length;
+    const failed = orders.filter(o => o.status === 'Failed' || o.status === 'Canceled').length;
+    const pending = orders.filter(o => o.status === 'Pending' || o.status === 'Processing').length;
+
+    const statAirtime = document.getElementById('statAirtime');
+    const statUtility = document.getElementById('statUtility');
+    const statCompleted = document.getElementById('statCompleted');
+    const statFailed = document.getElementById('statFailed');
+    const statPending = document.getElementById('statPending');
+
+    if (statAirtime) statAirtime.textContent = airtimeCount;
+    if (statUtility) statUtility.textContent = utilityCount;
+    if (statCompleted) statCompleted.textContent = completed;
+    if (statFailed) statFailed.textContent = failed;
+    if (statPending) statPending.textContent = pending;
+}
+
+async function loadStoredOrders() {
     const tableBody = document.getElementById('ordersTableBody');
     if (!tableBody) return;
 
-    const savedOrders = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
+    let savedOrders = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
+
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            // Server-scoped transactions (airtime + utility) from the agent-transactions edge function.
+            const txData = await fetchAgentTransactions();
+
+            // Data bundle orders remain scoped via RLS to the authenticated agent.
+            const { data: dataOrders } = await supabase
+                .from('agent_data_orders')
+                .select('*')
+                .eq('agent_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            const remoteOrders = [];
+            if (txData?.airtime) {
+                txData.airtime.forEach(o => {
+                    remoteOrders.push({
+                        id: o.reference || o.id.slice(0, 8),
+                        type: 'airtime',
+                        network: o.networkLabel,
+                        phone: o.phoneMasked,
+                        package: `Airtime (GHS ${Number(o.amount).toFixed(2)})`,
+                        status: o.statusLabel,
+                        providerRef: o.providerReference || '',
+                        date: new Date(o.createdAt).toLocaleDateString()
+                    });
+                });
+            }
+            if (txData?.utility) {
+                txData.utility.forEach(o => {
+                    remoteOrders.push({
+                        id: o.reference || o.id.slice(0, 8),
+                        type: 'utility',
+                        network: o.billLabel,
+                        phone: o.phoneMasked,
+                        package: `${o.packageName || o.billLabel} (GHS ${Number(o.amount).toFixed(2)}) • Acct ${o.accountMasked}`,
+                        status: o.statusLabel,
+                        providerRef: o.providerReference || '',
+                        date: new Date(o.createdAt).toLocaleDateString()
+                    });
+                });
+            }
+            if (dataOrders) {
+                dataOrders.forEach(o => {
+                    remoteOrders.push({
+                        id: o.provider_reference || o.id.slice(0, 8),
+                        type: 'data',
+                        network: (o.network_type || '').toUpperCase(),
+                        phone: maskPhoneDisplay(o.phone),
+                        package: `${o.volume_mb >= 1024 ? (o.volume_mb / 1024) + 'GB' : o.volume_mb + 'MB'} (GHS ${Number(o.amount).toFixed(2)})`,
+                        status: o.status === 'successful' ? 'Completed' : (o.status === 'failed' ? 'Canceled' : 'Processing'),
+                        providerRef: o.provider_reference || '',
+                        date: new Date(o.created_at).toLocaleDateString()
+                    });
+                });
+            }
+
+            if (remoteOrders.length > 0) {
+                const existingIds = new Set(remoteOrders.map(r => String(r.id).toUpperCase()));
+                savedOrders = [...remoteOrders, ...savedOrders.filter(s => !existingIds.has(String(s.id).toUpperCase()))];
+            }
+        }
+    } catch (e) {
+        console.warn('Could not load remote agent orders:', e);
+    }
+
+    try {
+        const localAirtime = JSON.parse(localStorage.getItem('skaitech_airtime_orders') || '[]');
+        const existingIds = new Set(savedOrders.map(s => String(s.id).toUpperCase()));
+        localAirtime.forEach(o => {
+            if (o.reference && !existingIds.has(String(o.reference).toUpperCase())) {
+                const isDelivered = o.airtimeStatus === 'delivered';
+                const isFailed = o.airtimeStatus === 'failed';
+                savedOrders.push({
+                    id: o.reference,
+                    type: 'airtime',
+                    network: (o.network || 'AIRTIME').toUpperCase(),
+                    phone: maskPhoneDisplay(o.phone),
+                    package: `Airtime (GHS ${Number(o.amount).toFixed(2)})`,
+                    status: isDelivered ? 'Completed' : (isFailed ? 'Failed' : 'Processing'),
+                    providerRef: '',
+                    date: o.createdAt ? new Date(o.createdAt).toLocaleDateString() : 'Recent'
+                });
+            }
+        });
+    } catch {
+        // Ignore local cache read error
+    }
+
+    // Update summary stat cards
+    updateTransactionSummary(savedOrders);
+
     tableBody.innerHTML = '';
 
-    // 1. Filter orders based on active tab
+    // 1. Filter orders based on active tab and service type
     const filteredOrders = savedOrders.filter(order => {
+        if (currentServiceTab !== 'all' && order.type !== currentServiceTab) return false;
         if (currentFilter === 'all') return true;
-        return order.status.toLowerCase() === currentFilter.toLowerCase();
+        return (order.status || '').toLowerCase() === currentFilter.toLowerCase();
     });
 
     // 2. Handle empty state display
     const emptyState = document.getElementById('emptyState');
+    const table = document.getElementById('ordersTable');
     if (emptyState) {
         if (filteredOrders.length === 0) {
             emptyState.style.display = 'block';
+            if (table) table.style.display = 'none';
         } else {
             emptyState.style.display = 'none';
+            if (table) table.style.display = 'table';
         }
     }
 
@@ -604,14 +795,20 @@ function loadStoredOrders() {
     // 4. Render rows
     paginatedOrders.forEach(order => {
         const row = document.createElement('tr');
-        row.setAttribute('data-status', order.status.toLowerCase());
+        row.setAttribute('data-status', (order.status || '').toLowerCase());
+        row.setAttribute('data-service', (order.type || 'data'));
+        const providerRefCell = order.providerRef ? `<span style="font-size: 0.75rem; font-family: monospace; color: #64748b;">${order.providerRef}</span>` : '<span style="color: #cbd5e1;">-</span>';
         row.innerHTML = `
             <td style="padding: 10px;"><strong>#${order.id}</strong></td>
-            <td style="padding: 10px;">${order.network}</td>
-            <td style="padding: 10px;">${order.phone}</td>
-            <td style="padding: 10px;">${order.package}</td>
+            <td style="padding: 10px;">${order.network || '-'}</td>
+            <td style="padding: 10px;">${order.phone || '-'}</td>
+            <td style="padding: 10px;">${order.package || '-'}</td>
             <td style="padding: 10px;">
-                <span class="status-badge badge-${order.status.toLowerCase()}">${order.status}</span>
+                <span class="status-badge badge-${(order.status || 'pending').toLowerCase()}">${order.status || 'Pending'}</span>
+            </td>
+            <td style="padding: 10px;">${providerRefCell}</td>
+            <td style="padding: 10px;">
+                <span style="font-size: 0.8rem; color: #64748b;">${order.date || ''}</span>
             </td>
         `;
         tableBody.appendChild(row);
@@ -831,14 +1028,17 @@ if (menuToggleBtn && dropdownMenu) {
 
 function toggleMenu() {
     const dropdown = document.getElementById('dropdownMenu');
+    const overlay = document.getElementById('menuOverlay');
     const symbol = document.getElementById('menuIconSymbol');
 
-    dropdown.classList.toggle('show');
-
-    if (symbol.innerText === 'Ã¢â€°Â¡') {
-        symbol.innerText = 'Ã¢Å“â€¢';
-    } else {
-        symbol.innerText = 'Ã¢â€°Â¡';
+    if (dropdown) {
+        dropdown.classList.toggle('active');
+    }
+    if (overlay) {
+        overlay.classList.toggle('active');
+    }
+    if (symbol && dropdown) {
+        symbol.innerHTML = dropdown.classList.contains('active') ? '&times;' : '&#8801;';
     }
 }
 
@@ -885,7 +1085,7 @@ function checkOrderBalanceBeforeAction(orderPrice) {
     let balance = parseFloat(localStorage.getItem('agent_wallet_balance')) || 0;
     if (balance < orderPrice) {
         alert(`Ã¢Å¡Â Ã¯Â¸Â Warning: Your account balance (GHS ${balance.toFixed(2)}) is too low for this transaction! Please fund your wallet.`);
-        window.location.href = 'agentwallet.html';
+        window.location.href = 'agentWallet.html';
         return false;
     }
     return true;
@@ -899,6 +1099,93 @@ document.addEventListener('DOMContentLoaded', () => {
         popupBal.innerText = `GHS ${bal.toFixed(2)}`;
     }
 });
+/* ---- AGENT-ONLY SERVICE GATING (server-verified, redirects to auth) ---- */
+// Builds the Sign In / Register URL with an agent prompt and a return target.
+function agentActionLoginUrl(redirectPath) {
+    const params = new URLSearchParams();
+    params.set('action', 'agent');
+    params.set('notice', 'agent');
+    params.set('register', 'true');
+    if (redirectPath) params.set('redirect', redirectPath);
+    return `login.html?${params.toString()}`;
+}
+
+// Sends visitors who are not verified agents to the Sign In / Sign Up page
+// with a prompt to create an agent account.
+function redirectToAgentAuth(redirectPath) {
+    window.location.href = agentActionLoginUrl(redirectPath);
+    return false;
+}
+
+async function handleUtilityClick(event, service = 'ecg') {
+    if (event) event.preventDefault();
+    const target = `utilityBills.html?service=${encodeURIComponent(service)}`;
+
+    try {
+        const { isAgent } = await checkAgentAccessServer();
+        if (isAgent) {
+            window.location.href = target;
+            return false;
+        }
+    } catch (err) {
+        console.warn('Error checking agent authorization for utility service:', err);
+    }
+
+    return redirectToAgentAuth(target);
+}
+
+function openAgentModal() {
+    const modal = document.getElementById('agentGateModal');
+    if (modal) {
+        modal.classList.add('active');
+    } else {
+        if (confirm('Skaitech Utility Bill payments (ECG Prepaid, Ghana Water, and TV Subscriptions) require a verified Agent account.\n\nWould you like to register as an Agent now?')) {
+            window.location.href = 'login.html?register=true';
+        }
+    }
+}
+
+function closeAgentModal() {
+    const modal = document.getElementById('agentGateModal');
+    if (modal) modal.classList.remove('active');
+}
+
+/* ---- AIRTIME AGENT-ONLY GATING (server-verified) ---- */
+async function handleAirtimeClick(networkKey, event) {
+    if (event) event.preventDefault();
+    const target = networkKey ? `airtime.html?network=${encodeURIComponent(networkKey)}` : 'airtime.html';
+
+    try {
+        const { isAgent } = await checkAgentAccessServer();
+        if (isAgent) {
+            window.location.href = target;
+            return false;
+        }
+    } catch (err) {
+        console.warn('Agent check failed before airtime navigation:', err);
+    }
+
+    return redirectToAgentAuth(target);
+}
+
+function openAirtimeAgentModal() {
+    const modal = document.getElementById('airtimeAgentGateModal');
+    if (modal) {
+        modal.classList.add('active');
+        return;
+    }
+    if (confirm('Agent Registration Required\n\nOnly registered agents can purchase airtime. Please register as an agent to continue.')) {
+        window.location.href = 'login.html?register=true';
+    } else {
+        return false;
+    }
+}
+
+function closeAirtimeAgentModal() {
+    const modal = document.getElementById('airtimeAgentGateModal');
+    if (modal) modal.classList.remove('active');
+}
+
 // Global Window Bindings for HTML Inline Event Handlers
 window.toggleDrawer = toggleDrawer;
 window.toggleAccordion = toggleAccordion;
@@ -907,6 +1194,7 @@ window.openBuyModal = openBuyModal;
 window.closeBuyModal = closeBuyModal;
 window.processPurchase = processPurchase;
 window.setFilter = setFilter;
+window.setServiceTab = setServiceTab;
 window.filterOrders = filterOrders;
 window.changePage = changePage;
 window.changePageSize = changePageSize;
@@ -923,6 +1211,12 @@ window.handleReportMessage = handleReportMessage;
 window.loadStoredOrders = loadStoredOrders;
 window.loadDashboardAgentInfo = loadDashboardAgentInfo;
 window.loadUserData = loadUserData;
+window.handleUtilityClick = handleUtilityClick;
+window.openAgentModal = openAgentModal;
+window.closeAgentModal = closeAgentModal;
+window.handleAirtimeClick = handleAirtimeClick;
+window.openAirtimeAgentModal = openAirtimeAgentModal;
+window.closeAirtimeAgentModal = closeAirtimeAgentModal;
 
 async function loadUserData() {
   const currentPath = window.location.pathname.toLowerCase();
@@ -942,7 +1236,7 @@ async function loadUserData() {
 
   const isProtectedAgentPage = currentPath.endsWith('dashboard.html') ||
     currentPath.endsWith('orders.html') ||
-    currentPath.endsWith('agentwallet.html') ||
+    currentPath.endsWith('agentWallet.html') ||
     currentPath.endsWith('deposit.html') ||
     currentPath.endsWith('store.html') ||
     currentPath.endsWith('agentafa.html');
@@ -963,11 +1257,50 @@ async function loadUserData() {
 
       if (user && !userError) {
         // Enforce verified agent role for protected agent pages
-        const { data: agentData, error: agentError } = await supabase
+        let { data: agentData, error: agentError } = await supabase
           .from('agents')
           .select('id, role, full_name, agent_code')
           .eq('id', user.id)
           .single();
+
+        // If agent record doesn't exist or is invalid, check user metadata or profiles
+        if (isProtectedAgentPage && (agentError || !agentData || !['agent', 'admin'].includes(agentData.role))) {
+          const metaRole = user.user_metadata?.role;
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('full_name, agent_code, phone')
+            .eq('id', user.id)
+            .single();
+
+          if (profileData || metaRole === 'agent' || metaRole === 'admin') {
+            const name = profileData?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Agent';
+            const code = profileData?.agent_code || user.user_metadata?.agent_code || generateAgentCode();
+            const phone = profileData?.phone || user.user_metadata?.phone || '';
+
+            // Auto-heal agent record
+            await ensureAgentProfile(user.id, name, code, phone);
+
+            // Re-fetch agent record
+            const { data: refreshedAgent } = await supabase
+              .from('agents')
+              .select('id, role, full_name, agent_code')
+              .eq('id', user.id)
+              .single();
+
+            if (refreshedAgent && ['agent', 'admin'].includes(refreshedAgent.role)) {
+              agentData = refreshedAgent;
+              agentError = null;
+            } else {
+              agentData = {
+                id: user.id,
+                role: metaRole === 'admin' ? 'admin' : 'agent',
+                full_name: name,
+                agent_code: code
+              };
+              agentError = null;
+            }
+          }
+        }
 
         if (isProtectedAgentPage && (agentError || !agentData || !['agent', 'admin'].includes(agentData.role))) {
           console.warn('Unauthorized access attempt to agent portal:', user.id);

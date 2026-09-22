@@ -36,19 +36,29 @@ export async function requireAdmin(request: Request) {
 
 export async function requireAgent(request: Request) {
   const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
-  if (!token) throw new Error('Authentication is required.');
+  if (!token) throw new Error('Authentication is required. Please sign in as an agent.');
   const admin = adminClient();
   const { data: { user }, error } = await admin.auth.getUser(token);
-  if (error || !user) throw new Error('Your session is invalid.');
-  const { data: agent, error: agentError } = await admin
+  if (error || !user) throw new Error('Your session is invalid. Please sign in again.');
+
+  const metadataRole = user.user_metadata?.role;
+  const { data: agent } = await admin
     .from('agents')
     .select('id, role, full_name, agent_code')
     .eq('id', user.id)
     .single();
-  if (agentError || !agent || !['agent', 'admin'].includes(agent.role)) {
-    throw new Error('Verified agent access is required.');
+
+  const isAgent = (metadataRole === 'agent' || metadataRole === 'admin') ||
+                  (agent && ['agent', 'admin'].includes(agent.role));
+
+  if (!isAgent) {
+    throw new Error('Agent account required. Only verified Skaitech agents can access utility services.');
   }
-  return { admin, user, agent };
+  return {
+    admin,
+    user,
+    agent: agent ?? { id: user.id, role: metadataRole || 'agent', full_name: user.user_metadata?.full_name || 'Agent', agent_code: '' },
+  };
 }
 
 export async function getOptionalAgent(request: Request) {
@@ -75,7 +85,7 @@ export async function getOptionalAgent(request: Request) {
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 export const corsPreflight = () => new Response('ok', { headers: corsHeaders });

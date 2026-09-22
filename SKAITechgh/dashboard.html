@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Skaitech - Data Topup Panel</title>
+  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
   
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
-  <meta http-equiv="X-Frame-Options" content="DENY">
   
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -32,26 +32,28 @@
       </button>
       <span class="gt-brand">Skaitech gh</span>
     </div>
-
-    
-      
-      </div>
-      <div class="user-avatar" id="userAvatarInitials">SM</div>
+    <div class="gt-header-right">
+      <div class="user-avatar" id="userAvatarInitials">AG</div>
     </div>
   </header>
 
   <!-- SIDE DRAWER OVERLAY & MENU -->
   <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleDrawer()"></div>
   <aside id="sideDrawer" class="side-drawer">
-    <span class="drawer-section-label">AGENT</span>
-     <a href="dashboard.html" class="drawer-item active" onclick="toggleDrawer()">
-  <i class="fa-solid fa-border-all"></i> Dashboard
-</a>
-      <a href="orders.html" class="drawer-item" onclick="toggleDrawer()">
-  <i class="fa-solid fa-cart-shopping"></i> Orders
-</a>
-      <a href="ourHelpDesk.html" class="drawer-item">
-        <i class="fa-solid fa-triangle-exclamation"></i> Our Help Desk
+    <div class="drawer-header">
+      <div class="drawer-brand">
+        <img src="img/akaitech%20more%20final%20logo.jpeg" alt="Skaitech" class="drawer-logo">
+        <span class="drawer-brand-name">SKAITECH</span>
+      </div>
+      <button type="button" class="drawer-close-btn" onclick="toggleDrawer()" aria-label="Close menu">&times;</button>
+    </div>
+    <span class="drawer-section-label">AGENT PORTAL</span>
+    <nav class="drawer-nav">
+      <a href="dashboard.html" class="drawer-item active">
+        <i class="fa-solid fa-border-all"></i> Dashboard
+      </a>
+      <a href="orders.html" class="drawer-item">
+        <i class="fa-solid fa-cart-shopping"></i> Orders
       </a>
       <a href="agentWallet.html" class="drawer-item">
         <i class="fa-solid fa-wallet"></i> Wallet
@@ -60,33 +62,52 @@
         <i class="fa-solid fa-money-bill-transfer"></i> Deposit
       </a>
       <a href="agentAFA.HTML" class="drawer-item">
-        <i class=""></i> AFA
+        <i class="fa-solid fa-users"></i> Agent AFA
       </a>
-
       <a href="STORE.HTML" class="drawer-item">
-        <i class="fa-solid fa-store"></i> Store
+        <i class="fa-solid fa-store"></i> Store &amp; Pricing
       </a>
     </nav>
-    <a href="resultsChecker.html" class="drawer-item">
-    <i class="fa-solid fa-receipt"></i> Results Checker
-</a>
-    <!-- Or if you are using an ID or data attribute for a single-page view switch, use that instead -->
-</li>
 
     <div class="drawer-divider"></div>
 
+    <span class="drawer-section-label">SERVICES</span>
     <nav class="drawer-nav">
-    <a href="https://chat.whatsapp.com/EbflGFoh9Y64BiaFVqbHid" target="_blank" class="drawer-item">
+      <a href="airtime.html" class="drawer-item">
+        <i class="fa-solid fa-mobile-screen-button"></i> Buy Airtime
+      </a>
+      <a href="nonAgentBuyers.html" class="drawer-item">
+        <i class="fa-solid fa-wifi"></i> Buy Data
+      </a>
+      <a href="utilityBills.html" class="drawer-item">
+        <i class="fa-solid fa-bolt"></i> Utility Bills
+      </a>
+      <a href="resultsChecker.html" class="drawer-item">
+        <i class="fa-solid fa-receipt"></i> Results Checker
+      </a>
+      <a href="nonAgentTrachOrder.html" class="drawer-item">
+        <i class="fa-solid fa-magnifying-glass"></i> Track Order
+      </a>
+    </nav>
+
+    <div class="drawer-divider"></div>
+
+    <span class="drawer-section-label">SUPPORT</span>
+    <nav class="drawer-nav">
+      <a href="ourHelpDesk.html" class="drawer-item">
+        <i class="fa-solid fa-headset"></i> Our Help Desk
+      </a>
+      <a href="https://chat.whatsapp.com/EbflGFoh9Y64BiaFVqbHid" target="_blank" class="drawer-item">
         <i class="fa-brands fa-whatsapp"></i> Community
-    </a>
-</nav>
+      </a>
+    </nav>
   </aside>
 
   <!-- MAIN DASHBOARD CONTENT -->
   <main class="gt-dashboard-body">
     <!-- WELCOME USER BANNER -->
 <div class="agent-welcome">
-  <h2>Welcome back, <span id="displayAgentName">Loading...</span></h2>
+  <h2>Welcome back, <span id="displayAgentName">Agent</span></h2>
   <span class="agent-code" id="displayAgentCode">AGENT CODE: ---</span>
 </div>
    
@@ -127,30 +148,31 @@
   <div class="accordion-header" onclick="toggleAccordion(this)">
     <span class="accordion-title">How to fund your agent wallet</span>
     <div class="flex items-center gap-2">
-      <span class="badge-pill">3 options</span>
+      <span class="badge-pill">Paystack Only</span>
       <i class="fa-solid fa-chevron-down accordion-arrow"></i>
     </div>
   </div>
   <div class="accordion-content">
-    <p class="accordion-desc"> how you  to fund your agent wallet.</p>
+    <p class="accordion-desc">Fund your agent wallet securely via Paystack.</p>
     
-    <!-- EDITABLE DEPOSIT AGENT ACCOUNT   OPTIONS -->
+    <!-- EDITABLE DEPOSIT AGENT ACCOUNT OPTIONS -->
     <div class="deposit-option">
-      <div class="option-title"><i class="fa-solid fa-wallet"></i> ExpressPay checkout</div>
-      <p>Instant wallet funding through ExpressPay.</p>
-    </div>
-    <div class="deposit-option">
-      <div class="option-title"><i class="fa-solid fa-building-columns"></i> Direct deposit (manual)</div>
-      <p>Submit and verify a direct MoMo transfer reference.</p>
-    </div>
-    <div class="deposit-option">
-      <div class="option-title"><i class="fa-solid fa-money-bill-transfer"></i> Cashout deposit flow</div>
-      <p>Use the guided cashout-assisted MoMo deposit process.</p>
+      <div class="option-title"><i class="fa-solid fa-credit-card"></i> Paystack checkout (Instant)</div>
+      <p>Instant automated wallet funding through Paystack (card & mobile money).</p>
     </div>
   </div>
 </div> 
 
-   
+    <!-- AIRTIME QUICK ACTION BANNER -->
+    <div style="background: linear-gradient(135deg, #1e40af, #2563eb); border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; color: white; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);">
+      <div>
+        <h4 style="margin: 0 0 4px; font-size: 1rem; font-weight: 800;">📱 Buy Airtime Top-Up</h4>
+        <p style="margin: 0; font-size: 0.82rem; opacity: 0.9;">Instant airtime top-up for MTN, Telecel, and AT. Deduct directly from your agent wallet balance.</p>
+      </div>
+      <a href="airtime.html" style="background: white; color: #1e40af; padding: 8px 14px; border-radius: 8px; font-weight: 700; text-decoration: none; font-size: 0.85rem; white-space: nowrap; margin-left: 12px;">
+        Buy Airtime &rarr;
+      </a>
+    </div>
 
     <!-- TOPUP FORM & PACKAGES CARD -->
     <div class="topup-card">
@@ -165,7 +187,7 @@
           <i class="fa-solid fa-signal"></i> MTN
         </button>
         <button class="net-stack-btn net-telecel" onclick="selectNetwork('Telecel')">
-          <i class="fa-solid fa-wifi"></i> Telecel
+          <i class="fa-solid fa-wifi"></i> Telecel (Out of Stock)
         </button>
        <button class="net-stack-btn net-ishare" onclick="selectNetwork('AirtelTigo')">
   <i class="fa-solid fa-mobile-screen"></i> AirtelTigo
@@ -205,10 +227,10 @@
     </div>
   </div>
 </div>
-</body>
+
 <!-- EXTERNAL JAVASCRIPT FILE -->
-  <script src="script.js"></script>
-  <script src="agentWallet.html"></script>
-  <script src="logOut.js"></script>
+  <script type="module" src="script.js"></script>
+  <script type="module" src="agentWallet.js"></script>
+  <script type="module" src="logOut.js"></script>
 </body>
 </html>

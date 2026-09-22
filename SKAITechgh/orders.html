@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Skaitech - Orders</title>
+  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -25,37 +26,68 @@
   <!-- SIDE DRAWER OVERLAY & MENU -->
   <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleDrawer()"></div>
   <aside id="sideDrawer" class="side-drawer">
-  <span class="drawer-section-label">AGENT</span>
-  <nav class="drawer-nav">
-    <a href="dashboard.html" class="drawer-item" onclick="toggleDrawer()">
-      <i class="fa-solid fa-border-all"></i> Dashboard
-    </a>
-    <a href="orders.html" class="drawer-item active" onclick="toggleDrawer()">
-      <i class="fa-solid fa-cart-shopping"></i> Orders
-    </a>
-    <a href="ourHelpDesk.html" class="drawer-item" onclick="toggleDrawer()">
-      <i class="fa-solid fa-triangle-exclamation"></i> Our Help Desk
-    </a>
-    <a href="agentWallet.html" class="drawer-item" onclick="toggleDrawer()">
-      <i class="fa-solid fa-wallet"></i> Wallet
-    </a>
-    <a href="deposit.html" class="drawer-item" onclick="toggleDrawer()">
-      <i class="fa-solid fa-money-bill-transfer"></i> Deposit
-    </a>
-    <a href="agentAFA.HTML" class="drawer-item" onclick="toggleDrawer()">
-      <i class="fa-solid fa-users"></i> AFA
-    </a>
-    <a href="STORE.HTML" class="drawer-item" onclick="toggleDrawer()">
-      <i class="fa-solid fa-store"></i> Store
-    </a>
-    <a href="resultsChecker.html" class="drawer-item">
-    <i class="fa-solid fa-receipt"></i> Results Checker
-</a>
-    <a href="https://chat.whatsapp.com/EbflGFoh9Y64BiaFVqbHid" class="drawer-item" onclick="toggleDrawer()">
-      <i class="fa-solid fa-comments"></i> Community
-    </a>
-  </nav>
-</aside>
+    <div class="drawer-header">
+      <div class="drawer-brand">
+        <img src="img/akaitech%20more%20final%20logo.jpeg" alt="Skaitech" class="drawer-logo">
+        <span class="drawer-brand-name">SKAITECH</span>
+      </div>
+      <button type="button" class="drawer-close-btn" onclick="toggleDrawer()" aria-label="Close menu">&times;</button>
+    </div>
+    <span class="drawer-section-label">AGENT PORTAL</span>
+    <nav class="drawer-nav">
+      <a href="dashboard.html" class="drawer-item">
+        <i class="fa-solid fa-border-all"></i> Dashboard
+      </a>
+      <a href="orders.html" class="drawer-item active">
+        <i class="fa-solid fa-cart-shopping"></i> Orders
+      </a>
+      <a href="agentWallet.html" class="drawer-item">
+        <i class="fa-solid fa-wallet"></i> Wallet
+      </a>
+      <a href="deposit.html" class="drawer-item">
+        <i class="fa-solid fa-money-bill-transfer"></i> Deposit
+      </a>
+      <a href="agentAFA.HTML" class="drawer-item">
+        <i class="fa-solid fa-users"></i> Agent AFA
+      </a>
+      <a href="STORE.HTML" class="drawer-item">
+        <i class="fa-solid fa-store"></i> Store &amp; Pricing
+      </a>
+    </nav>
+
+    <div class="drawer-divider"></div>
+
+    <span class="drawer-section-label">SERVICES</span>
+    <nav class="drawer-nav">
+      <a href="airtime.html" class="drawer-item">
+        <i class="fa-solid fa-mobile-screen-button"></i> Buy Airtime
+      </a>
+      <a href="nonAgentBuyers.html" class="drawer-item">
+        <i class="fa-solid fa-wifi"></i> Buy Data
+      </a>
+      <a href="utilityBills.html" class="drawer-item">
+        <i class="fa-solid fa-bolt"></i> Utility Bills
+      </a>
+      <a href="resultsChecker.html" class="drawer-item">
+        <i class="fa-solid fa-receipt"></i> Results Checker
+      </a>
+      <a href="nonAgentTrachOrder.html" class="drawer-item">
+        <i class="fa-solid fa-magnifying-glass"></i> Track Order
+      </a>
+    </nav>
+
+    <div class="drawer-divider"></div>
+
+    <span class="drawer-section-label">SUPPORT</span>
+    <nav class="drawer-nav">
+      <a href="ourHelpDesk.html" class="drawer-item">
+        <i class="fa-solid fa-headset"></i> Our Help Desk
+      </a>
+      <a href="https://chat.whatsapp.com/EbflGFoh9Y64BiaFVqbHid" target="_blank" class="drawer-item">
+        <i class="fa-brands fa-whatsapp"></i> Community
+      </a>
+    </nav>
+  </aside>
   
 
   <!-- MAIN ORDERS CONTENT -->
@@ -100,7 +132,7 @@
             <th>Phone</th>
             <th>Package</th>
             <th>Status</th>
-            <th>Action</th>
+            <th>Date</th>
           </tr>
         </thead>
         <tbody id="ordersTableBody">
@@ -108,34 +140,31 @@
         </tbody>
       </table>
     </div>
+
+    <!-- PAGINATION CONTROLS -->
+    <div class="pagination-container" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+      
+      <div class="page-size-selector">
+        <label for="pageSize" style="font-weight: 600; font-size: 14px; margin-right: 5px;">Show:</label>
+        <select id="pageSize" onchange="changePageSize(this.value)" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer;">
+          <option value="10" selected>10</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+        <span style="font-size: 14px; color: #555;">orders per page</span>
+      </div>
+
+      <div class="pagination-buttons" style="display: flex; align-items: center; gap: 10px;">
+        <button id="prevBtn" onclick="changePage(-1)" style="padding: 6px 14px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc;">Previous</button>
+        <span id="pageIndicator" style="font-weight: bold; font-size: 14px;">Page 1</span>
+        <button id="nextBtn" onclick="changePage(1)" style="padding: 6px 14px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc;">Next</button>
+      </div>
+
+    </div>
   </main>
 
-  <script src="script.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>
-
-<!-- PAGINATION CONTROLS -->
-<div class="pagination-container" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
-  
-  <div class="page-size-selector">
-    <label for="pageSize" style="font-weight: 600; font-size: 14px; margin-right: 5px;">Show:</label>
-    <select id="pageSize" onchange="changePageSize(this.value)" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer;">
-      <option value="10" selected>10</option>
-      <option value="20">20</option>
-      <option value="30">30</option>
-      <option value="50">50</option>
-      <option value="100">100</option>
-    </select>
-    <span style="font-size: 14px; color: #555;">orders per page</span>
-  </div>
-
-  <div class="pagination-buttons" style="display: flex; align-items: center; gap: 10px;">
-    <button id="prevBtn" onclick="changePage(-1)" style="padding: 6px 14px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc;">Previous</button>
-    <span id="pageIndicator" style="font-weight: bold; font-size: 14px;">Page 1</span>
-    <button id="nextBtn" onclick="changePage(1)" style="padding: 6px 14px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc;">Next</button>
-  </div>
-
-</div>
-</div>
-
-

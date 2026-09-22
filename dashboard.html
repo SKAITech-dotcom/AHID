@@ -18,64 +18,11 @@
     <div>
         <i class="fa-solid fa-wallet"></i> Agent Wallet Balance: <span id="popupBalanceVal" style="font-weight: 800; text-decoration: underline;">GHS 0.00</span>
     </div>
-    <a href="agentwallet.html" style="background: white; color: #1e40af; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 0.8rem; font-weight: 700;">View Wallet</a>
+    <a href="agentWallet.html" style="background: white; color: #1e40af; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 0.8rem; font-weight: 700;">View Wallet</a>
 </div>
 
     <!-- Rest of your dashboard cards/forms follow below -->
 </main>
-
-  <!-- TOP HEADER NAVBAR -->
-  <header class="gt-header">
-    <div class="gt-header-left">
-      <button class="hamburger-btn" onclick="toggleDrawer()">
-        <i class="fa-solid fa-bars"></i>
-      </button>
-      <span class="gt-brand">Skaitech gh</span>
-    </div>
-    <div class="gt-header-right">
-      <div class="user-avatar" id="userAvatarInitials">AG</div>
-    </div>
-  </header>
-
-  <!-- SIDE DRAWER OVERLAY & MENU -->
-  <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleDrawer()"></div>
-  <aside id="sideDrawer" class="side-drawer">
-    <span class="drawer-section-label">AGENT</span>
-    <nav class="drawer-nav">
-      <a href="dashboard.html" class="drawer-item active">
-        <i class="fa-solid fa-border-all"></i> Dashboard
-      </a>
-      <a href="orders.html" class="drawer-item">
-        <i class="fa-solid fa-cart-shopping"></i> Orders
-      </a>
-      <a href="ourHelpDesk.html" class="drawer-item">
-        <i class="fa-solid fa-triangle-exclamation"></i> Our Help Desk
-      </a>
-      <a href="agentWallet.html" class="drawer-item">
-        <i class="fa-solid fa-wallet"></i> Wallet
-      </a>
-      <a href="deposit.html" class="drawer-item">
-        <i class="fa-solid fa-money-bill-transfer"></i> Deposit
-      </a>
-      <a href="agentAFA.HTML" class="drawer-item">
-        <i class="fa-solid fa-users"></i> AFA
-      </a>
-      <a href="STORE.HTML" class="drawer-item">
-        <i class="fa-solid fa-store"></i> Store
-      </a>
-      <a href="resultsChecker.html" class="drawer-item">
-        <i class="fa-solid fa-receipt"></i> Results Checker
-      </a>
-    </nav>
-
-    <div class="drawer-divider"></div>
-
-    <nav class="drawer-nav">
-      <a href="https://chat.whatsapp.com/EbflGFoh9Y64BiaFVqbHid" target="_blank" class="drawer-item">
-        <i class="fa-brands fa-whatsapp"></i> Community
-      </a>
-    </nav>
-  </aside>
 
   <!-- MAIN DASHBOARD CONTENT -->
   <main class="gt-dashboard-body">
@@ -137,7 +84,16 @@
   </div>
 </div> 
 
-   
+    <!-- AIRTIME QUICK ACTION BANNER -->
+    <div style="background: linear-gradient(135deg, #1e40af, #2563eb); border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; color: white; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);">
+      <div>
+        <h4 style="margin: 0 0 4px; font-size: 1rem; font-weight: 800;">📱 Buy Airtime Top-Up</h4>
+        <p style="margin: 0; font-size: 0.82rem; opacity: 0.9;">Instant airtime top-up for MTN, Telecel, and AT. Deduct directly from your agent wallet balance.</p>
+      </div>
+      <a href="airtime.html" style="background: white; color: #1e40af; padding: 8px 14px; border-radius: 8px; font-weight: 700; text-decoration: none; font-size: 0.85rem; white-space: nowrap; margin-left: 12px;">
+        Buy Airtime &rarr;
+      </a>
+    </div>
 
     <!-- TOPUP FORM & PACKAGES CARD -->
     <div class="topup-card">
@@ -194,6 +150,7 @@
 </div>
 
 <!-- EXTERNAL JAVASCRIPT FILE -->
+  <script type="module" src="agentNav.js"></script>
   <script type="module" src="script.js"></script>
   <script type="module" src="agentWallet.js"></script>
   <script type="module" src="logOut.js"></script>

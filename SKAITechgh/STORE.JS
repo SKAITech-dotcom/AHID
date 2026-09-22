@@ -1,3 +1,8 @@
+import { supabase } from './supabaseClient.js';
+import { requireVerifiedAgent } from './agentAuthGuard.js';
+
+let currentAgentData = null;
+
 // Simple tab switching function
 function switchTab(tabName) {
     const tabs = ['overview', 'store', 'pricing', 'withdrawals'];
@@ -43,15 +48,34 @@ const priceKeys = [
     'price_airteltigo_5gb', 'price_airteltigo_6gb', 'price_airteltigo_8gb', 'price_airteltigo_10gb'
 ];
 
-// Save all custom prices to localStorage
-function saveStorePrices() {
+// Save all custom prices to backend and localStorage
+async function saveStorePrices() {
+    const prices = {};
     priceKeys.forEach(key => {
         const inputEl = document.getElementById(key);
-        if (inputEl) {
-            localStorage.setItem(key, inputEl.value);
+        if (inputEl && inputEl.value !== '') {
+            const val = parseFloat(inputEl.value);
+            if (!isNaN(val)) {
+                prices[key] = val;
+                localStorage.setItem(key, inputEl.value);
+            }
         }
     });
-    alert("✅ All custom prices updated and saved successfully!");
+
+    try {
+        const { data, error } = await supabase.functions.invoke('manage-agent-pricing', {
+            body: { prices }
+        });
+        if (error || data?.error) {
+            console.warn('Backend pricing save notice:', error || data?.error);
+            alert("✅ Custom prices saved locally! (Backend sync pending)");
+            return;
+        }
+        alert("✅ All custom prices securely updated and saved to your agent account!");
+    } catch (err) {
+        console.error('Failed to sync pricing to backend:', err);
+        alert("✅ Custom prices saved locally!");
+    }
 }
 
 // Withdrawal action handlers
@@ -63,8 +87,14 @@ function transferToBalance() {
     alert("Store credit successfully transferred to main wallet balance!");
 }
 
-// Load saved values on page start
-document.addEventListener('DOMContentLoaded', () => {
+// Load saved values on page start and verify agent access
+document.addEventListener('DOMContentLoaded', async () => {
+    // 1. Enforce verified agent authentication
+    const authResult = await requireVerifiedAgent({ redirectOnFail: true });
+    if (!authResult) return;
+    currentAgentData = authResult.agent;
+
+    // 2. Load cached prices first
     priceKeys.forEach(key => {
         const savedValue = localStorage.getItem(key);
         const inputEl = document.getElementById(key);
@@ -72,4 +102,41 @@ document.addEventListener('DOMContentLoaded', () => {
             inputEl.value = savedValue;
         }
     });
+
+    // 3. Fetch server-authoritative agent pricing from Supabase Edge Function
+    try {
+        const { data, error } = await supabase.functions.invoke('manage-agent-pricing');
+        if (!error && data?.prices) {
+            Object.entries(data.prices).forEach(([key, val]) => {
+                const inputEl = document.getElementById(key);
+                if (inputEl) {
+                    inputEl.value = Number(val).toFixed(2);
+                    localStorage.setItem(key, inputEl.value);
+                }
+            });
+        }
+    } catch (pricingErr) {
+        console.warn('Could not load remote agent prices, using local cache:', pricingErr);
+    }
+
+    // 4. Update dynamic storefront link
+    const linkInput = document.getElementById('storeLinkInput');
+    if (linkInput) {
+        const origin = window.location.origin;
+        const pathname = window.location.pathname;
+        const repoSegment = pathname.split('/').filter(Boolean)[0];
+        const baseUrl = repoSegment && pathname.includes(`/${repoSegment}/`)
+            ? `${origin}/${repoSegment}`
+            : origin;
+
+        const agentParam = currentAgentData?.agent_code || 'skaitech_gh';
+        linkInput.value = `${baseUrl}/nonAgentBuyers.html?agent=${encodeURIComponent(agentParam)}`;
+    }
 });
+
+// Bind STORE functions to window for HTML onclick attributes
+window.switchTab = switchTab;
+window.copyStoreLink = copyStoreLink;
+window.saveStorePrices = saveStorePrices;
+window.withdrawCredit = withdrawCredit;
+window.transferToBalance = transferToBalance;

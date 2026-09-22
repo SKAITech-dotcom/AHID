@@ -369,7 +369,24 @@
 </head>
 <body>
 
+  <header class="site-header">
+    <div class="container" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 1rem;">
+      <a href="index.html" style="text-decoration: none;">
+        <img src="img/akaitech more final logo.jpeg" alt="Skaitech Logo" style="height: 38px; border-radius: 6px;">
+      </a>
+      <div>
+        <a href="index.html" class="nav-link" style="margin-right: 15px;">Home</a>
+        <a href="nonAgentTrachOrder.html" class="nav-link" style="margin-right: 15px;">Track Order</a>
+        <a href="resultsChecker.html" class="nav-link" style="margin-right: 15px;">Results Checker</a>
+        <a href="login.html" class="btn-login">Agent Login</a>
+      </div>
+    </div>
+  </header>
+
   <main class="bill-wrapper">
+    <a href="index.html" class="back-nav">
+      <i class="fa-solid fa-arrow-left"></i> Back to Home
+    </a>
 
     <!-- Top Status Banner if redirected from Paystack -->
     <div id="paymentResultNotice" class="notice"></div>
@@ -556,7 +573,6 @@
     &copy; 2026 Skaitech Ghana. All rights reserved. Powered by Paystack.
   </footer>
 
-  <script type="module" src="agentNav.js"></script>
   <script type="module" src="utilityBills.js"></script>
 </body>
 </html>

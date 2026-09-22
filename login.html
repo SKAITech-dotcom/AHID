@@ -32,7 +32,13 @@
   <!-- AUTHENTICATION SECTION -->
   <main class="auth-wrapper">
     <div class="auth-card">
-      
+
+      <!-- AGENT-ONLY SERVICE PROMPT (shown when redirected from Airtime/Utility) -->
+      <div id="authNotice" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; border-radius: 12px; padding: 12px 14px; font-size: 0.85rem; font-weight: 600; line-height: 1.45; margin-bottom: 16px;">
+        <i class="fa-solid fa-shield-halved"></i>
+        <strong>Airtime &amp; Utility Bills are Agent-only.</strong> Create an agent account or sign in as a verified agent to continue.
+      </div>
+
       <!-- TAB TOGGLES -->
       <div class="auth-tabs">
         <button id="loginTab" class="auth-tab active" onclick="switchTab('login')">Sign In</button>
@@ -149,6 +155,10 @@
         setTimeout(() => {
           if (typeof window.switchTab === 'function') window.switchTab('register');
         }, 50);
+      }
+      if (params.get('notice') === 'agent') {
+        const notice = document.getElementById('authNotice');
+        if (notice) notice.style.display = 'block';
       }
     });
   </script>
