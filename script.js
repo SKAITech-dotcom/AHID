@@ -350,39 +350,32 @@ const networkPackages = {
     themeClass: 'theme-mtn',
     logoUrl: 'img/mtn-logo.png',
     packages: [
-      { size: '1 GB', price: 4.50 },
-      { size: '2 GB', price: 9.00 },
-      { size: '3 GB', price: 14.00 },
-      { size: '4 GB', price: 18.00 },
+      { size: '2 GB', price: 8.80 },
+      { size: '3 GB', price: 13.20 },
+      { size: '4 GB', price: 17.60 },
       { size: '5 GB', price: 22.00 },
-      { size: '6 GB', price: 26.00 },
-      { size: '8 GB', price: 33.00 },
-      { size: '10 GB', price: 43.00 },
-      { size: '15 GB', price: 61.00 }
+      { size: '6 GB', price: 26.10 },
+      { size: '8 GB', price: 34.80 },
+      { size: '10 GB', price: 42.00 },
+      { size: '15 GB', price: 63.00 },
+      { size: '20 GB', price: 84.00 },
+      { size: '25 GB', price: 103.75 },
+      { size: '30 GB', price: 121.50 },
+      { size: '40 GB', price: 160.00 },
+      { size: '50 GB', price: 200.00 }
     ]
   },
   'Telecel': {
     label: 'TELECEL',
     themeClass: 'theme-telecel',
     logoUrl: 'img/telecel-logo.png',
-    outOfStock: true,
     packages: [
-      { size: '5 GB', price: 18.50 },
-      { size: '10 GB', price: 35.00 },
-      { size: '11 GB', price: 39.00 },
-      { size: '15 GB', price: 52.00 },
-      { size: '16 GB', price: 58.00 },
-      { size: '20 GB', price: 69.00 },
-      { size: '22 GB', price: 79.00 },
-      { size: '25 GB', price: 86.00 },
-      { size: '27 GB', price: 98.00 },
-      { size: '30 GB', price: 103.00 },
-      { size: '33 GB', price: 114.00 },
-      { size: '40 GB', price: 137.00 },
-      { size: '44 GB', price: 150.00 },
-      { size: '50 GB', price: 171.00 },
-      { size: '100 GB', price: 357.00 },
-      { size: '110 GB', price: 370.00 }
+      { size: '10 GB', price: 40.00 },
+      { size: '15 GB', price: 60.00 },
+      { size: '20 GB', price: 78.00 },
+      { size: '30 GB', price: 114.00 },
+      { size: '40 GB', price: 151.00 },
+      { size: '50 GB', price: 185.00 }
     ]
   },
   'AirtelTigo': {
@@ -390,9 +383,17 @@ const networkPackages = {
     themeClass: 'theme-airteltigo',
     logoUrl: 'img/airtel-logo.png',
     packages: [
-      { size: '1 GB', price: 4.50 },
-      { size: '2 GB', price: 9.00 },
-      { size: '3 GB', price: 15.00 }
+      { size: '1 GB', price: 4.20 },
+      { size: '2 GB', price: 8.39 },
+      { size: '3 GB', price: 12.58 },
+      { size: '4 GB', price: 16.78 },
+      { size: '5 GB', price: 20.97 },
+      { size: '6 GB', price: 25.17 },
+      { size: '7 GB', price: 29.36 },
+      { size: '8 GB', price: 33.56 },
+      { size: '9 GB', price: 37.53 },
+      { size: '10 GB', price: 40.84 },
+      { size: '15 GB BigTime', price: 60.71 }
     ]
   }
 };
@@ -440,10 +441,6 @@ ${data.outOfStock ? `
 let currentOrder = null;
 
 function openBuyModal(network, size, price) {
-    if (network && network.toUpperCase() === 'TELECEL') {
-        alert("Telecel data bundle is currently out of stock.");
-        return;
-    }
     currentOrder = { network, size, price: parseFloat(price) };
     const modal = document.getElementById('buyModal');
     const title = document.getElementById('modalTitle');
@@ -461,10 +458,6 @@ function closeBuyModal() {
 }
 
 async function processPurchase() {
-    if (currentOrder && currentOrder.network && currentOrder.network.toUpperCase() === 'TELECEL') {
-        alert("Telecel data bundle is currently out of stock.");
-        return;
-    }
     const phoneInput = document.getElementById('recipientPhone');
     const phone = phoneInput ? phoneInput.value.trim() : '';
 
