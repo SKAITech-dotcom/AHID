@@ -1,4 +1,5 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
+import { buySwiftPackage, resolveSwiftPackage } from '../_shared/swiftProvider.ts';
 
 const NETWORKS = new Set(['mtn', 'telecel', 'airteltigo']);
 const catalog: Record<string, Record<number, number>> = {
@@ -30,30 +31,13 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-function providerSucceeded(payload: Record<string, unknown>) {
-  const nestedData = payload.data && typeof payload.data === 'object' ? payload.data as Record<string, unknown> : {};
-  if (payload.success === true || payload.status === true || nestedData.status === true) return true;
-  const status = String(payload.status ?? nestedData.status ?? '').toLowerCase();
-  if (['failed', 'failure', 'error', 'cancelled', 'canceled'].includes(status)) return false;
-  return ['success', 'successful', 'completed'].includes(status);
-}
-
-function providerAmount(payload: Record<string, unknown>) {
-  const nestedData = payload.data && typeof payload.data === 'object' ? payload.data as Record<string, unknown> : {};
-  // RemaData's get-cost-price endpoint returns `api_price` at the top level.
-  // Keep the other aliases for compatibility with provider response variants.
-  const value = payload.api_price ?? payload.cost ?? payload.price ?? payload.amount ?? payload.costPrice
-    ?? nestedData.api_price ?? nestedData.cost ?? nestedData.price ?? nestedData.amount ?? nestedData.costPrice;
-  const amount = Number(value);
-  return Number.isFinite(amount) && amount > 0 ? amount : null;
-}
-
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   let orderId: string | null = null;
   let providerAccepted = false;
+  try {
     const { admin, user } = await requireAgent(request);
 
     const body = await request.json();
@@ -67,17 +51,18 @@ Deno.serve(async (request) => {
     const saleAmount = catalog[networkType]?.[volumeInMB];
     if (!saleAmount) return json({ error: 'This bundle is not available at the current agent price.' }, 400);
 
-    const apiKey = Deno.env.get('DATA_API_KEY');
-    if (!apiKey) throw new Error('RemaData API is not configured.');
-
-    const costResponse = await fetch('https://remadata.com/api/get-cost-price', {
-      method: 'POST',
-      headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ networkType, volumeInMB }),
-    });
-    const costPayload = await costResponse.json().catch(() => ({}));
-    const providerCost = providerAmount(costPayload);
-    if (!costResponse.ok || providerCost === null) return json({ error: 'Unable to confirm the current bundle price.' }, 502);
+    let providerCost: number;
+    let swiftPackage;
+    try {
+      swiftPackage = await resolveSwiftPackage(networkType, volumeInMB);
+    } catch (error) {
+      return json({ error: errorMessage(error, 'Unable to confirm the current bundle price.') }, 502);
+    }
+    if (!swiftPackage) return json({ error: 'Unable to confirm the current bundle price.' }, 502);
+    providerCost = Number(swiftPackage.price);
+    if (!Number.isFinite(providerCost) || providerCost <= 0) {
+      return json({ error: 'Unable to confirm the current bundle price.' }, 502);
+    }
 
     const reference = `DATA-${crypto.randomUUID()}`;
     const { data: reservedOrder, error: reserveError } = await admin.rpc('reserve_agent_data_order', {
@@ -94,23 +79,18 @@ Deno.serve(async (request) => {
     }
     orderId = reservedOrder;
 
-    const response = await fetch('https://remadata.com/api/buy-data', {
-      method: 'POST',
-      headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ref: reference, phone, volumeInMB, networkType }),
-    });
-    const providerPayload = await response.json().catch(() => ({ raw: 'Invalid provider response' }));
-    const success = response.ok && providerSucceeded(providerPayload);
+    const dispatch = await buySwiftPackage(swiftPackage.id, phone);
+    const success = dispatch.success;
     providerAccepted = success;
     const { error: completeError } = await admin.rpc('complete_agent_data_order', {
       p_order_id: orderId,
       p_success: success,
-      p_provider_response: providerPayload,
+      p_provider_response: dispatch.payload,
     });
     if (completeError) throw completeError;
 
-    if (!success) return json({ error: 'The bundle provider did not accept the order.', orderReference: reference }, 502);
-    return json({ success: true, orderReference: reference, status: 'successful', amount: saleAmount });
+    if (!success) return json({ error: dispatch.failureReason || 'The bundle provider did not accept the order.', orderReference: reference }, 502);
+    return json({ success: true, orderReference: reference, providerReference: dispatch.orderId, status: dispatch.status || 'successful', amount: saleAmount });
   } catch (error) {
     if (orderId && !providerAccepted) {
       try {

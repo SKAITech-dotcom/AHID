@@ -1,26 +1,11 @@
 import { adminClient, json } from '../_shared/supabase.ts';
 import { dispatchAirtimeTopup } from '../_shared/airtimeProvider.ts';
+import { buySwiftPackage, resolveSwiftPackage } from '../_shared/swiftProvider.ts';
 
 async function signatureFor(payload: string, secret: string) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']);
   const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
   return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function providerSucceeded(payload: Record<string, unknown>) {
-  const nestedData = payload.data && typeof payload.data === 'object' ? payload.data as Record<string, unknown> : {};
-  if (payload.success === true || payload.status === true || nestedData.status === true) return true;
-  const status = String(payload.status ?? nestedData.status ?? '').toLowerCase();
-  if (['failed', 'failure', 'error', 'cancelled', 'canceled'].includes(status)) return false;
-  return ['success', 'successful', 'completed'].includes(status);
-}
-
-function providerAmount(payload: Record<string, unknown>) {
-  const nestedData = payload.data && typeof payload.data === 'object' ? payload.data as Record<string, unknown> : {};
-  const value = payload.api_price ?? payload.cost ?? payload.price ?? payload.amount ?? payload.costPrice
-    ?? nestedData.api_price ?? nestedData.cost ?? nestedData.price ?? nestedData.amount ?? nestedData.costPrice;
-  const amount = Number(value);
-  return Number.isFinite(amount) && amount > 0 ? amount : null;
 }
 
 Deno.serve(async (request) => {
@@ -69,17 +54,13 @@ Deno.serve(async (request) => {
       }
 
       const companyAgentId = Deno.env.get('PUBLIC_DATA_AGENT_ID');
-      const apiKey = Deno.env.get('DATA_API_KEY');
-      if (!companyAgentId || !apiKey) throw new Error('Public data provider funding is not configured.');
+      if (!companyAgentId) throw new Error('Public data provider funding is not configured.');
       await admin.from('public_data_orders').update({ status: 'processing' }).eq('id', order.id).eq('status', 'pending_payment');
 
-      const costResponse = await fetch('https://remadata.com/api/get-cost-price', {
-        method: 'POST', headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ networkType: order.network_type, volumeInMB: order.volume_mb }),
-      });
-      const costPayload = await costResponse.json().catch(() => ({}));
-      const providerCost = providerAmount(costPayload);
-      if (!costResponse.ok || providerCost === null) throw new Error('Unable to confirm the provider bundle price.');
+      const swiftPackage = await resolveSwiftPackage(order.network_type, order.volume_mb);
+      if (!swiftPackage) throw new Error('Unable to confirm the provider bundle price.');
+      const providerCost = Number(swiftPackage.price);
+      if (!Number.isFinite(providerCost) || providerCost <= 0) throw new Error('Unable to confirm the provider bundle price.');
 
       const providerReference = `PUB-DATA-${crypto.randomUUID()}`;
       const { data: providerOrderId, error: reserveError } = await admin.rpc('reserve_agent_data_order', {
@@ -88,15 +69,12 @@ Deno.serve(async (request) => {
       });
       if (reserveError) throw reserveError;
 
-      let success = false;
       let providerPayload: Record<string, unknown> = {};
+      let success = false;
       try {
-        const providerResponse = await fetch('https://remadata.com/api/buy-data', {
-          method: 'POST', headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ref: providerReference, phone: order.customer_phone, volumeInMB: order.volume_mb, networkType: order.network_type }),
-        });
-        providerPayload = await providerResponse.json().catch(() => ({ raw: 'Invalid provider response' }));
-        success = providerResponse.ok && providerSucceeded(providerPayload);
+        const dispatch = await buySwiftPackage(swiftPackage.id, order.customer_phone);
+        providerPayload = dispatch.payload;
+        success = dispatch.success;
       } catch (providerError) {
         providerPayload = { error: providerError instanceof Error ? providerError.message : 'Provider request failed.' };
       }
