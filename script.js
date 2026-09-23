@@ -1143,6 +1143,42 @@ function closeAgentModal() {
     if (modal) modal.classList.remove('active');
 }
 
+/* ---- INSTANT DATA AGENT-ONLY GATING (server-verified) ---- */
+async function handleInstantDataClick(networkKey, event) {
+    if (event) event.preventDefault();
+    const target = networkKey ? `instantData.html?network=${encodeURIComponent(networkKey)}` : 'instantData.html';
+
+    try {
+        const { isAgent } = await checkAgentAccessServer();
+        if (isAgent) {
+            window.location.href = target;
+            return false;
+        }
+    } catch (err) {
+        console.warn('Agent check failed before instant data navigation:', err);
+    }
+
+    return redirectToAgentAuth(target);
+}
+
+function openInstantDataAgentModal() {
+    const modal = document.getElementById('instantDataAgentGateModal');
+    if (modal) {
+        modal.classList.add('active');
+        return;
+    }
+    if (confirm('Agent Registration Required\n\nOnly registered agents can purchase instant data. Register as an agent to continue.')) {
+        window.location.href = 'login.html?register=true';
+    } else {
+        return false;
+    }
+}
+
+function closeInstantDataAgentModal() {
+    const modal = document.getElementById('instantDataAgentGateModal');
+    if (modal) modal.classList.remove('active');
+}
+
 /* ---- AIRTIME AGENT-ONLY GATING (server-verified) ---- */
 async function handleAirtimeClick(networkKey, event) {
     if (event) event.preventDefault();
@@ -1210,6 +1246,9 @@ window.closeAgentModal = closeAgentModal;
 window.handleAirtimeClick = handleAirtimeClick;
 window.openAirtimeAgentModal = openAirtimeAgentModal;
 window.closeAirtimeAgentModal = closeAirtimeAgentModal;
+window.handleInstantDataClick = handleInstantDataClick;
+window.openInstantDataAgentModal = openInstantDataAgentModal;
+window.closeInstantDataAgentModal = closeInstantDataAgentModal;
 
 async function loadUserData() {
   const currentPath = window.location.pathname.toLowerCase();
