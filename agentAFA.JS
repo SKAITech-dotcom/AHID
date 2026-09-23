@@ -1,4 +1,5 @@
 import { requireVerifiedAgent } from './agentAuthGuard.js';
+import { supabase } from './supabaseClient.js';
 
 function escapeHtml(value) {
     return String(value)
@@ -12,7 +13,7 @@ function escapeHtml(value) {
 document.addEventListener('DOMContentLoaded', async () => {
     const authResult = await requireVerifiedAgent({ redirectOnFail: true });
     if (!authResult) return;
-    loadAfaRequests();
+    await loadAfaRequests();
 });
 
 // Open/Close Modal handlers
@@ -26,8 +27,19 @@ function closeAddAfaModal() {
     if (modal) modal.style.display = 'none';
 }
 
+async function setAfaStatus(reference, status) {
+    const { data, error } = await supabase.functions.invoke('manage-afa-registrations', {
+        body: { action: 'update_status', reference, status }
+    });
+    if (error || data?.error) {
+        alert(data?.error || error?.message || 'Unable to update status. Please try again.');
+        return;
+    }
+    await loadAfaRequests();
+}
+
 // Save a new AFA registration
-function submitNewAfa() {
+async function submitNewAfa() {
     const name = document.getElementById('afaName').value.trim();
     const phone = document.getElementById('afaPhone').value.trim();
     const town = document.getElementById('afaTown').value.trim();
@@ -38,51 +50,56 @@ function submitNewAfa() {
         return;
     }
 
-    const newEntry = {
-        id: 'AFA-' + Math.floor(1000 + Math.random() * 9000),
-        name: name,
-        phone: phone,
-        town: town,
-        idNumber: idNumber,
-        status: 'Pending', // Status options: Pending, Processing, Completed, Cancelled
-        date: new Date().toLocaleDateString()
-    };
+    const { data, error } = await supabase.functions.invoke('manage-afa-registrations', {
+        body: { action: 'create', fullName: name, phone, town, idNumber }
+    });
 
-    const afaList = JSON.parse(localStorage.getItem('skaitechAfaList')) || [];
-    afaList.unshift(newEntry);
-    localStorage.setItem('skaitechAfaList', JSON.stringify(afaList));
+    if (error || data?.error) {
+        alert(data?.error || error?.message || 'Unable to submit registration. Please try again.');
+        return;
+    }
 
     alert("✅ AFA Registration submitted successfully!");
     closeAddAfaModal();
-    
+
     // Clear fields
     document.getElementById('afaName').value = '';
     document.getElementById('afaPhone').value = '';
     document.getElementById('afaTown').value = '';
     document.getElementById('afaIdNumber').value = '';
 
-    loadAfaRequests();
+    await loadAfaRequests();
 }
 
-// Load and render AFA list from localStorage
-function loadAfaRequests(filterQuery = '') {
-    const afaList = JSON.parse(localStorage.getItem('skaitechAfaList')) || [];
+// Load and render AFA list from the backend
+async function loadAfaRequests(filterQuery = '') {
     const container = document.getElementById('afaDataList');
     const emptyState = document.getElementById('emptyAfaState');
 
     if (!container || !emptyState) return;
 
-    container.innerHTML = '';
+    const query = filterQuery.trim();
 
-    // Filter based on search query (by phone, name, town, or ID)
-    const filtered = afaList.filter(item => {
-        const query = filterQuery.toLowerCase();
-        return (item.name && item.name.toLowerCase().includes(query)) ||
-               (item.phone && item.phone.toLowerCase().includes(query)) ||
-               (item.town && item.town.toLowerCase().includes(query)) ||
-               (item.idNumber && item.idNumber.toLowerCase().includes(query)) ||
-               (item.id && item.id.toLowerCase().includes(query));
+    const functionName = query
+        ? `manage-afa-registrations?query=${encodeURIComponent(query)}`
+        : 'manage-afa-registrations';
+
+    const { data, error } = await supabase.functions.invoke(functionName, {
+        method: 'GET',
     });
+
+    let registrations = data?.registrations || [];
+
+    const filtered = query
+        ? registrations.filter(item => {
+            const q = query.toLowerCase();
+            return (item.full_name && item.full_name.toLowerCase().includes(q)) ||
+                   (item.phone && item.phone.toLowerCase().includes(q)) ||
+                   (item.town && item.town.toLowerCase().includes(q)) ||
+                   (item.id_number && item.id_number.toLowerCase().includes(q)) ||
+                   (item.reference && item.reference.toLowerCase().includes(q));
+        })
+        : registrations;
 
     if (filtered.length === 0) {
         emptyState.innerHTML = '<p style="font-size: 15px; margin-bottom: 15px;">No AFA requests found.</p>';
@@ -94,6 +111,8 @@ function loadAfaRequests(filterQuery = '') {
     emptyState.style.display = 'none';
     container.style.display = 'flex';
 
+    container.innerHTML = '';
+
     filtered.forEach(item => {
         // Status badge color coding
         let badgeColor = '#f59e0b'; // Pending (Yellow/Orange)
@@ -103,19 +122,25 @@ function loadAfaRequests(filterQuery = '') {
 
         const card = document.createElement('div');
         card.style.cssText = "background: #fdfdfd; border: 1px solid #eaeaea; padding: 15px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;";
-        
+
+        const statusOptions = ['Pending', 'Processing', 'Completed', 'Cancelled']
+            .map(s => `<option value="${s}"${s === item.status ? ' selected' : ''}>${s}</option>`)
+            .join('');
+
         card.innerHTML = `
             <div>
-                <div style="font-weight: 600; color: #1f2937; font-size: 15px; margin-bottom: 3px;">${escapeHtml(item.name)} <span style="font-size: 12px; color: #666; font-weight: normal;">(${escapeHtml(item.id)})</span></div>
+                <div style="font-weight: 600; color: #1f2937; font-size: 15px; margin-bottom: 3px;">${escapeHtml(item.full_name)} <span style="font-size: 12px; color: #666; font-weight: normal;">(${escapeHtml(item.reference)})</span></div>
                 <div style="font-size: 13px; color: #4b5563; display: flex; gap: 15px; flex-wrap: wrap;">
                     <span><i class="fa-solid fa-phone"></i> ${escapeHtml(item.phone)}</span>
                     <span><i class="fa-solid fa-location-dot"></i> ${escapeHtml(item.town)}</span>
-                    <span><i class="fa-solid fa-id-card"></i> ${escapeHtml(item.idNumber)}</span>
+                    <span><i class="fa-solid fa-id-card"></i> ${escapeHtml(item.id_number)}</span>
                 </div>
             </div>
             <div style="display: flex; align-items: center; gap: 12px;">
-                <span style="background: ${badgeColor}; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;">${escapeHtml(item.status)}</span>
-                <span style="font-size: 12px; color: #9ca3af;">${escapeHtml(item.date)}</span>
+                <select onchange="setAfaStatus('${item.reference}', this.value)" style="background: ${badgeColor}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; border: none; cursor: pointer;">
+                    ${statusOptions}
+                </select>
+                <span style="font-size: 12px; color: #9ca3af;">${new Date(item.created_at).toLocaleDateString()}</span>
             </div>
         `;
         container.appendChild(card);
@@ -134,3 +159,4 @@ window.closeAddAfaModal = closeAddAfaModal;
 window.submitNewAfa = submitNewAfa;
 window.filterAfaList = filterAfaList;
 window.loadAfaRequests = loadAfaRequests;
+window.setAfaStatus = setAfaStatus;

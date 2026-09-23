@@ -9,8 +9,12 @@ function escapeHtml(value) {
         .replaceAll("'", '&#039;');
 }
 
+function submitFormError(message) {
+    alert(message || 'Unable to submit registration. Please try again.');
+}
+
 // Handle New Registration Submission
-function submitRegistration() {
+async function submitRegistration() {
     const name = document.getElementById('regName').value.trim();
     const phone = document.getElementById('regPhone').value.trim();
     const town = document.getElementById('regTown').value.trim();
@@ -22,24 +26,17 @@ function submitRegistration() {
         return;
     }
 
-    let records = JSON.parse(localStorage.getItem('skaitech_afa')) || [];
+    const { data, error } = await supabase.functions.invoke('create-afa-registration', {
+        body: { fullName: name, phone, town, idType, idNumber }
+    });
 
-    const newRecord = {
-        fullName: name,
-        phone: phone,
-        town: town,
-        idNum: `${idType} (${idNumber})`,
-        amount: "GHS 8.00",
-        type: "AFA",
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        status: "PENDING / PROCESSING"
-    };
+    if (error || data?.error) {
+        submitFormError(data?.error || error?.message);
+        return;
+    }
 
-    records.unshift(newRecord);
-    localStorage.setItem('skaitech_afa', JSON.stringify(records));
+    alert(data.message || 'AFA Registration submitted successfully! You can now track your status below.');
 
-    alert('AFA Registration submitted successfully! You can now track your status below.');
-    
     // Clear inputs
     document.getElementById('regName').value = '';
     document.getElementById('regPhone').value = '';
@@ -49,35 +46,33 @@ function submitRegistration() {
 }
 
 // Handle Status Tracking Lookup
-function trackAfa() {
+async function trackAfa() {
     const inputField = document.getElementById('afaQuery');
     const resultBox = document.getElementById('afaResult');
 
     if (!inputField || !resultBox) return;
 
-    const query = inputField.value.trim().toLowerCase();
+    const query = inputField.value.trim();
 
     if (!query) {
         alert('Please enter your phone number or ID number.');
         return;
     }
 
-    const records = JSON.parse(localStorage.getItem('skaitech_afa')) || [];
+    resultBox.style.display = 'block';
+    resultBox.innerHTML = `<p style="color: #6b7280; font-weight: 600; margin: 0;">Searching…</p>`;
 
-    if (records.length === 0) {
-        resultBox.style.display = 'block';
-        resultBox.innerHTML = `<p style="color: #b45309; font-weight: 600; margin: 0;">No AFA records found in the system yet. Please register above first!</p>`;
+    const { data, error } = await supabase.functions.invoke('get-afa-registration', {
+        body: { query }
+    });
+
+    if (error || data?.error) {
+        resultBox.innerHTML = `<p style="color: #dc2626; font-weight: 600; margin: 0;">${escapeHtml(data?.error || 'Unable to check registration status. Please try again.')}</p>`;
         return;
     }
 
-    const found = records.find(item => 
-        item.phone.toLowerCase().includes(query) || 
-        item.idNum.toLowerCase().includes(query) || 
-        item.fullName.toLowerCase().includes(query)
-    );
-
+    const found = data.registrations?.[0];
     if (!found) {
-        resultBox.style.display = 'block';
         resultBox.innerHTML = `<p style="color: #b45309; font-weight: 600; margin: 0;">No active AFA registration matched: "${escapeHtml(query)}"</p>`;
         return;
     }
@@ -88,7 +83,7 @@ function trackAfa() {
             <div style="font-weight: 800; color: #b45309; margin-bottom: 10px; font-size: 1rem;">Registration Found!</div>
             
             <div class="field-label">FULL NAME</div>
-            <div class="field-val">${escapeHtml(found.fullName)}</div>
+            <div class="field-val">${escapeHtml(found.full_name)}</div>
 
             <div class="field-label">PHONE NUMBER</div>
             <div class="field-val">${escapeHtml(found.phone)}</div>
@@ -97,7 +92,10 @@ function trackAfa() {
             <div class="field-val">${escapeHtml(found.town)}</div>
 
             <div class="field-label">ID NUMBER</div>
-            <div class="field-val">${escapeHtml(found.idNum)}</div>
+            <div class="field-val">${escapeHtml(found.id_type)} (${escapeHtml(found.id_number)})</div>
+
+            <div class="field-label">REFERENCE</div>
+            <div class="field-val">${escapeHtml(found.reference)}</div>
 
             <div class="field-label">REGISTRATION STATUS</div>
             <div style="display: inline-block; background: #d97706; color: white; padding: 3px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; margin-top: 4px;">

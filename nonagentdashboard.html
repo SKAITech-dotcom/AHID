@@ -337,7 +337,9 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    import { supabase } from './supabaseClient.js';
+
     function toggleDrawer() {
       const drawer = document.getElementById('sideDrawer');
       const overlay = document.getElementById('sidebarOverlay');
@@ -357,12 +359,40 @@
       if (modal) modal.classList.remove('active');
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
       const container = document.getElementById('recentOrdersContainer');
-      const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
-      if (orders.length === 0) {
+      const cached = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
+      if (cached.length === 0) {
         container.innerHTML = '<p style="color: #94a3b8; font-size: 0.9rem; margin: 16px 0;">No past orders found in this browser. <a href="instantData.html" style="color: #2563eb;">Buy data</a> or <a href="utilityBills.html" style="color: #2563eb;">pay a bill</a> to get started.</p>';
         return;
+      }
+
+      let orders = cached;
+      try {
+        const tracks = [];
+        for (const cachedOrder of cached.slice(0, 5)) {
+          if (!cachedOrder.trackingId) continue;
+          tracks.push(
+            supabase.functions.invoke('track-order', { body: { reference: cachedOrder.trackingId } })
+              .then(res => ({ order: res.data?.order, error: res.error || res.data?.error }))
+          );
+        }
+        const results = await Promise.all(tracks);
+        results.forEach((result, i) => {
+          const current = cached[i];
+          if (!result.order || result.error) return;
+          if (current) {
+            current.network = result.order.network || current.network;
+            current.size = result.order.package || current.size;
+            current.price = result.order.price || current.price;
+            current.status = result.order.status || current.status;
+            current.date = result.order.date || current.date;
+          }
+        });
+        orders = cached;
+        localStorage.setItem('skaitech_orders', JSON.stringify(orders));
+      } catch (err) {
+        orders = cached;
       }
 
       let html = '<table class="order-table"><thead><tr><th>Reference</th><th>Service</th><th>Details</th><th>Price</th><th>Status</th></tr></thead><tbody>';
