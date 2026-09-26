@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient.js';
 import { checkAgentAccessServer } from './agentAccessCheck.js';
+import { applyWalletBalance, refreshWalletBalance } from './walletBalance.js';
 
 // Service page visitors must be sent to here to sign in / register as agents.
 const AGENT_AUTH_URL = 'login.html?action=agent&notice=agent&register=true&redirect=utilityBills.html';
@@ -252,14 +253,14 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
   const isAgent = await checkAgentAccess();
   if (!isAgent) {
     btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-lock"></i> Pay with Paystack';
+    btn.innerHTML = '<i class="fa-solid fa-lock"></i> Pay with Wallet Balance';
     showNotice('Agent account required. Please register or sign in as an agent to pay utility bills.', true);
     openAgentModal();
     return;
   }
 
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Initializing Paystack...';
-  showNotice('Connecting to secure payment gateway...');
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Charging wallet...';
+  showNotice('Charging your agent wallet and generating your receipt...');
 
   const billType = currentCategory === 'tv' ? currentTvProvider : currentCategory;
   const accountNumber = $('accountNumber').value.trim();
@@ -285,10 +286,12 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
     });
 
     if (error || data?.error) {
-      throw new Error(data?.error || error?.message || 'Failed to initiate payment.');
+      throw new Error(data?.error || error?.message || 'Failed to process payment.');
     }
 
-    // Cache pending order info locally
+    if (Number.isFinite(Number(data.walletBalance))) applyWalletBalance(data.walletBalance);
+
+    // Cache the completed order for tracking
     sessionStorage.setItem('skaitech_utility_payment', JSON.stringify({
       reference: data.reference,
       email: customerEmail,
@@ -299,11 +302,47 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
       amount,
     }));
 
-    window.location.href = data.authorizationUrl;
+    // Show the receipt + token immediately (wallet payment is synchronous).
+    const noticeEl = $('paymentResultNotice');
+    if (noticeEl) {
+      noticeEl.className = 'notice show info';
+      noticeEl.textContent = data.message || 'Payment successful.';
+    }
+    const receipt = $('receiptCard');
+    if (receipt) {
+      receipt.style.display = 'block';
+      $('receiptRef').textContent = data.reference;
+      $('receiptService').textContent = (data.billType || billType).toUpperCase() + (packageName ? ` - ${packageName}` : '');
+      $('receiptAccount').textContent = accountNumber;
+      $('receiptName').textContent = customerName || 'Customer';
+      $('receiptPhone').textContent = customerPhone;
+      $('receiptAmount').textContent = `GHS ${Number(data.amount || amount).toFixed(2)}`;
+      $('receiptDate').textContent = new Date().toLocaleString();
+      if (data.token) {
+        const tokenContainer = $('tokenContainer');
+        if (tokenContainer) tokenContainer.style.display = 'block';
+        $('receiptToken').textContent = data.token;
+      }
+      const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
+      if (!orders.some(o => o.trackingId === data.reference)) {
+        orders.unshift({
+          trackingId: data.reference,
+          network: (data.billType || billType).toUpperCase(),
+          size: packageName || 'BILL PAYMENT',
+          price: `GHS ${Number(data.amount || amount).toFixed(2)}`,
+          name: customerName || 'Customer',
+          phone: customerPhone,
+          status: 'Successful',
+          date: new Date().toLocaleString(),
+        });
+        localStorage.setItem('skaitech_orders', JSON.stringify(orders));
+      }
+    }
+    if ($('utilityBillForm')) $('utilityBillForm').reset();
   } catch (err) {
     showNotice(err.message || 'Error processing request.', true);
     btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-lock"></i> Pay with Paystack';
+    btn.innerHTML = '<i class="fa-solid fa-lock"></i> Pay with Wallet Balance';
   }
 });
 
@@ -422,3 +461,4 @@ async function initAgentCheck() {
 checkUrlServiceParam();
 checkPaymentReturn();
 initAgentCheck();
+refreshWalletBalance();

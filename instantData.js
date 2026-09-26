@@ -1,4 +1,6 @@
 import { supabase } from './supabaseClient.js';
+import { checkAgentAccessServer } from './agentAccessCheck.js';
+import { applyWalletBalance, refreshWalletBalance } from './walletBalance.js';
 
 const NETWORK_KEYS = ['mtn', 'telecel', 'airteltigo'];
 const DETECT_PREFIXES = {
@@ -185,8 +187,8 @@ export function closeInstantDataResult() {
   $('resultOverlay').classList.remove('active');
 }
 
-// CHECKOUT: initializes Paystack payment (existing public-data backend).
-// After payment confirmation the webhook triggers automated bundle delivery.
+// CHECKOUT: wallet-first instant data purchase. The bundle price is charged
+// from the verified agent's wallet; delivery failure auto-refunds the wallet.
 export async function startInstantDataCheckout() {
   if (checkoutBusy) return;
 
@@ -211,11 +213,22 @@ export async function startInstantDataCheckout() {
     return;
   }
 
+  const { isAgent } = await checkAgentAccessServer();
+  if (!isAgent) {
+    const params = new URLSearchParams();
+    params.set('action', 'agent');
+    params.set('notice', 'agent');
+    params.set('register', 'true');
+    params.set('redirect', 'instantData.html');
+    window.location.href = `login.html?${params.toString()}`;
+    return;
+  }
+
   const bundle = BUNDLES[selectedNetwork][selectedBundleIndex];
   checkoutBusy = true;
   const btn = $('buyBtn');
   btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Preparing checkout...';
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Charging wallet...';
   clearNotice();
 
   try {
@@ -229,31 +242,35 @@ export async function startInstantDataCheckout() {
       },
     });
     if (error) throw error;
-    if (!data?.authorizationUrl) throw new Error(data?.error || 'Unable to start payment.');
+    if (data?.success !== true) throw new Error(data?.message || data?.error || 'Unable to complete the purchase.');
 
-    sessionStorage.setItem('skaitech_public_payment', JSON.stringify({
-      reference: data.reference,
-      email,
+    if (Number.isFinite(Number(data.walletBalance))) applyWalletBalance(data.walletBalance);
+
+    const statusIcon = data.status === 'successful' ? '✅' : '⚠️';
+    const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
+    orders.unshift({
+      trackingId: data.orderReference,
+      network: NETWORK_META[selectedNetwork].label,
+      size: bundle.size,
+      price: `GHS ${bundle.price.toFixed(2)}`,
       name,
       phone,
-      networkType: selectedNetwork,
-      bundleSize: bundle.size,
-      amount: data.netAmount,
-    }));
+      status: data.status === 'successful' ? 'Successful' : 'Failed',
+      date: new Date().toLocaleString(),
+    });
+    localStorage.setItem('skaitech_orders', JSON.stringify(orders));
 
     openResult(
-      'Checkout Ready',
-      'Your payment is being prepared. You will be redirected to the secure checkout to confirm.',
-      data.reference,
-      '⚡'
+      data.status === 'successful' ? 'Bundle Delivered!' : 'Delivery Issue',
+      data.message || (data.status === 'successful'
+        ? 'The bundle has been delivered to the recipient line. Your wallet balance was updated.'
+        : 'Delivery failed and your wallet has been refunded.'),
+      data.orderReference,
+      statusIcon,
     );
-
-    setTimeout(() => {
-      window.location.href = data.authorizationUrl;
-    }, 900);
   } catch (err) {
     console.warn('Instant data checkout error:', err);
-    showNotice(err.message || 'Unable to start secure payment. Please try again.', true);
+    showNotice(err.message || 'Unable to complete the purchase. Please try again.', true);
     btn.disabled = false;
     btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Buy Now';
     checkoutBusy = false;
@@ -318,6 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderBundles();
   updateCheckoutBar();
   handlePaymentCallback();
+  refreshWalletBalance();
 
   // Pre-fill email from an existing session if available.
   supabase.auth.getSession().then(({ data }) => {

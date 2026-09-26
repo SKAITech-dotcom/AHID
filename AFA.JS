@@ -20,14 +20,16 @@ async function submitRegistration() {
     const town = document.getElementById('regTown').value.trim();
     const idType = document.getElementById('regIdType').value;
     const idNumber = document.getElementById('regIdNumber').value.trim();
+    const dateOfBirth = document.getElementById('regDateOfBirth').value.trim();
+    const occupation = document.getElementById('regOccupation').value.trim();
 
-    if (!name || !phone || !town || !idType || !idNumber) {
+    if (!name || !phone || !town || !idType || !idNumber || !dateOfBirth || !occupation) {
         alert('Please fill out all registration fields.');
         return;
     }
 
     const { data, error } = await supabase.functions.invoke('create-afa-registration', {
-        body: { fullName: name, phone, town, idType, idNumber }
+        body: { fullName: name, phone, town, idType, idNumber, dateOfBirth, occupation }
     });
 
     if (error || data?.error) {

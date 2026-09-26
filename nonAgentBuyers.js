@@ -1,4 +1,6 @@
 import { supabase } from './supabaseClient.js';
+import { checkAgentAccessServer } from './agentAccessCheck.js';
+import { applyWalletBalance, refreshWalletBalance } from './walletBalance.js';
 
 const paymentReference = new URLSearchParams(window.location.search).get('reference');
 // Read the network from URL parameters
@@ -163,7 +165,7 @@ async function showPaymentResult() {
     }
 }
 
-// Order Submission
+// Order Submission (wallet-first: charged from the verified agent's wallet)
 async function submitOrder(size, price, index) {
     const nameInput = document.getElementById(`name_${index}`);
     const emailInput = document.getElementById(`email_${index}`);
@@ -177,18 +179,41 @@ async function submitOrder(size, price, index) {
         alert('Please fill in your name, email, and phone number.');
         return;
     }
+
+    const { isAgent } = await checkAgentAccessServer();
+    if (!isAgent) {
+        const params = new URLSearchParams();
+        params.set('action', 'agent');
+        params.set('notice', 'agent');
+        params.set('register', 'true');
+        params.set('redirect', `nonAgentBuyers.html${window.location.search}`);
+        alert('Data purchases are available only to verified Skaitech Agents. Please sign in as an agent.');
+        window.location.href = `login.html?${params.toString()}`;
+        return;
+    }
+
     const button = document.querySelector(`#orderForm_${index} .action-btn`);
-    if (button) { button.disabled = true; button.textContent = 'Opening secure checkout...'; }
+    if (button) { button.disabled = true; button.textContent = 'Charging wallet...'; }
     try {
         const { data, error } = await supabase.functions.invoke('create-public-data-payment', {
             body: { name, email, phone, networkType: network, volumeInMB: Number.parseFloat(size) * 1024 }
         });
         if (error) throw error;
-        if (!data?.authorizationUrl) throw new Error(data?.error || 'Unable to start payment.');
-        sessionStorage.setItem('skaitech_public_payment', JSON.stringify({ reference: data.reference, email, name, phone }));
-        window.location.href = data.authorizationUrl;
+        if (data?.success !== true) throw new Error(data?.message || data?.error || 'Unable to complete the purchase.');
+
+        if (Number.isFinite(Number(data.walletBalance))) applyWalletBalance(data.walletBalance);
+
+        sessionStorage.setItem('skaitech_public_payment', JSON.stringify({ reference: data.orderReference, email, name, phone }));
+        if (data.status === 'successful') {
+            const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
+            orders.unshift({ trackingId: data.orderReference, network: network.toUpperCase(), size, price, name, phone, status: 'Successful', date: new Date().toLocaleString() });
+            localStorage.setItem('skaitech_orders', JSON.stringify(orders));
+            alert(`Purchase successful. Bundle delivered to ${phone}.\nTracking ID: ${data.orderReference}`);
+        } else {
+            alert(data.message || 'Purchase could not be completed. Your wallet has been refunded.');
+        }
     } catch (error) {
-        alert(error.message || 'Unable to start secure payment.');
+        alert(error.message || 'Unable to complete the purchase.');
         if (button) { button.disabled = false; button.textContent = 'Confirm Order'; }
     }
 }
@@ -196,5 +221,7 @@ async function submitOrder(size, price, index) {
 // Bind nonAgentBuyers functions to window for HTML onclick attributes
 window.toggleOrderForm = toggleOrderForm;
 window.submitOrder = submitOrder;
+
+refreshWalletBalance();
 
 showPaymentResult();

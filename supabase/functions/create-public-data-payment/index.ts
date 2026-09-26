@@ -1,4 +1,6 @@
-import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
+import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
+import { buySwiftPackage, resolveSwiftPackage } from '../_shared/swiftProvider.ts';
+import { chargeWallet, refundWallet } from '../_shared/wallet.ts';
 
 const catalog: Record<string, Record<number, number>> = {
   mtn: {
@@ -19,15 +21,22 @@ const catalog: Record<string, Record<number, number>> = {
   },
 };
 
-function getCustomerCoveredGrossAmount(netAmount: number) {
-  const feeRate = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.015');
-  const safeRate = Number.isFinite(feeRate) && feeRate >= 0 && feeRate < 1 ? feeRate : 0.015;
-  return Math.round(((netAmount / (1 - safeRate)) + Number.EPSILON) * 100) / 100;
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message) return message;
+  }
+  return fallback;
 }
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+
+  let reference = '';
+  let orderId: string | null = null;
+
   try {
     const body = await request.json();
     const networkType = String(body.networkType || '').trim().toLowerCase();
@@ -41,31 +50,103 @@ Deno.serve(async (request) => {
       return json({ error: 'Enter valid customer details and select a supported package.' }, 400);
     }
 
-    const reference = `PUB-${crypto.randomUUID()}`;
-    const admin = adminClient();
-    const { error } = await admin.from('public_data_orders').insert({
+    // WALLET-FIRST: instant data is paid from the verified agent's wallet.
+    const { admin, user } = await requireAgent(request);
+    const agentId = user.id;
+
+    reference = `PUB-${crypto.randomUUID()}`;
+
+    const walletBalance = await chargeWallet(agentId, reference, saleAmount, 'Instant data purchase', {
+      service: 'instant_data',
+      network_type: networkType,
+      volume_mb: volumeInMB,
+    });
+
+    const { data: order, error: orderError } = await admin.from('public_data_orders').insert({
       payment_reference: reference, customer_name: customerName, customer_email: customerEmail,
       customer_phone: customerPhone, network_type: networkType, volume_mb: volumeInMB,
-      sale_amount: saleAmount,
-    });
-    if (error) throw error;
+      sale_amount: saleAmount, status: 'pending_payment', agent_id: agentId,
+    }).select('id').single();
+    if (orderError) throw orderError;
+    orderId = order.id;
 
-    const secret = Deno.env.get('PAYSTACK_SECRET_KEY');
-    const siteUrl = Deno.env.get('SITE_URL');
-    if (!secret || !siteUrl) throw new Error('Public data payments are not configured yet.');
-    const grossAmount = getCustomerCoveredGrossAmount(saleAmount);
-    const feeAmount = Math.round((grossAmount - saleAmount + Number.EPSILON) * 100) / 100;
-    const response = await fetch('https://api.paystack.co/transaction/initialize', {
-      method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: customerEmail, amount: Math.round(grossAmount * 100), currency: 'GHS', reference,
-        callback_url: `${siteUrl}/nonAgentBuyers.html?network=${networkType}&reference=${encodeURIComponent(reference)}`,
-        metadata: { payment_type: 'public_data', public_order_id: reference, network_type: networkType, volume_mb: volumeInMB, net_amount: saleAmount, fee_amount: feeAmount, gross_amount: grossAmount }, }),
+    const companyAgentId = Deno.env.get('PUBLIC_DATA_AGENT_ID');
+    if (!companyAgentId) throw new Error('Public data provider funding is not configured.');
+
+    const swiftPackage = await resolveSwiftPackage(networkType, volumeInMB);
+    if (!swiftPackage) throw new Error('Unable to confirm the provider bundle price.');
+    const providerCost = Number(swiftPackage.price);
+    if (!Number.isFinite(providerCost) || providerCost <= 0) throw new Error('Unable to confirm the provider bundle price.');
+
+    const providerReference = `PUB-DATA-${crypto.randomUUID()}`;
+    const { data: providerOrderId, error: reserveError } = await admin.rpc('reserve_agent_data_order', {
+      p_agent_id: companyAgentId, p_reference: providerReference, p_network_type: networkType,
+      p_phone: customerPhone, p_volume_mb: volumeInMB, p_amount: Math.round(providerCost * 100) / 100,
     });
-    const payment = await response.json();
-    if (!response.ok || payment.status !== true || !payment.data?.authorization_url) throw new Error(payment.message || 'Paystack could not initialize payment.');
-    return json({ authorizationUrl: payment.data.authorization_url, reference, email: customerEmail, netAmount: saleAmount, feeAmount, grossAmount });
+    if (reserveError) throw reserveError;
+
+    const dispatch = await buySwiftPackage(swiftPackage.id, customerPhone);
+    await admin.rpc('complete_agent_data_order', {
+      p_order_id: providerOrderId, p_success: dispatch.success, p_provider_response: dispatch.payload,
+    });
+    await admin.rpc('mark_public_data_order', {
+      p_order_id: order.id,
+      p_status: dispatch.success ? 'successful' : 'failed',
+      p_provider_amount: providerCost,
+      p_provider_reference: providerReference,
+      p_provider_response: dispatch.payload,
+    });
+
+    if (!dispatch.success) {
+      const refundedBalance = await refundWallet(agentId, reference, saleAmount, 'Instant data provider failed');
+      return json({
+        success: false,
+        refunded: true,
+        walletBalance: refundedBalance,
+        orderReference: reference,
+        message: `Bundle delivery failed: ${dispatch.failureReason || 'The provider did not accept the order.'} Your wallet has been refunded.`,
+      }, 502);
+    }
+
+    return json({
+      success: true,
+      walletBalance,
+      orderReference: reference,
+      status: 'successful',
+      message: `Your ${Math.round(volumeInMB / 1024)}GB bundle has been delivered to ${customerPhone}.`,
+    });
   } catch (error) {
-    console.error(error);
-    return json({ error: error instanceof Error ? error.message : 'Unable to start payment.' }, 500);
+    console.error('Public data payment error:', error);
+    if (orderId && reference) {
+      try {
+        const admin = adminClient();
+        const { data: order } = await admin.from('public_data_orders')
+          .select('sale_amount, status, agent_id')
+          .eq('id', orderId)
+          .maybeSingle();
+        if (order && !['successful'].includes(order.status)) {
+          const saleAmount = Number(order.sale_amount);
+          const buyerAgentId = order.agent_id ?? '';
+          if (buyerAgentId && saleAmount > 0) {
+            await refundWallet(buyerAgentId, reference, saleAmount, 'Instant data purchase failed').catch(() => {});
+          }
+          await admin.rpc('mark_public_data_order', {
+            p_order_id: orderId, p_status: 'failed', p_provider_amount: null,
+            p_provider_reference: null, p_provider_response: { error: errorMessage(error, 'Unexpected error') },
+          });
+        }
+      } catch (innerError) {
+        console.error('Instant data refund/rollback failed:', innerError);
+      }
+    }
+    const msg = errorMessage(error, 'Unable to complete data purchase.');
+    const status = /authentication is required|session is invalid/i.test(msg)
+      ? 401
+      : /agent account required/i.test(msg)
+      ? 403
+      : msg.toLowerCase().includes('insufficient')
+      ? 400
+      : 500;
+    return json({ error: msg, insufficientFunds: msg.toLowerCase().includes('insufficient') || undefined }, status);
   }
 });

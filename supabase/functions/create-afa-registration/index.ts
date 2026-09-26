@@ -1,8 +1,19 @@
-import { adminClient, corsPreflight, getOptionalAgent, json } from '../_shared/supabase.ts';
+import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
+import { chargeWallet, refundWallet, WalletError } from '../_shared/wallet.ts';
+import { submitAfaRegistration } from '../_shared/afaProvider.ts';
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+
+  let reference = '';
+  let agentId = '';
+  let walletDebited = false;
+  let registrationId: string | null = null;
+  let feeAmount = Number(Deno.env.get('AFA_FEE_AMOUNT') ?? '8');
+
   try {
     const body = await request.json();
     const fullName = String(body.fullName || '').trim();
@@ -10,16 +21,37 @@ Deno.serve(async (request) => {
     const town = String(body.town || '').trim();
     const idType = String(body.idType || '').trim();
     const idNumber = String(body.idNumber || '').trim();
+    const dateOfBirth = String(body.dateOfBirth || '').trim();
+    const occupation = String(body.occupation || '').trim();
+    const priceId = String(body.priceId || '').trim();
+    const amountVal = Number(body.amount);
 
-    if (!fullName || !phone || !town || !idType || !idNumber) {
+    feeAmount = Number.isFinite(amountVal) && amountVal > 0
+      ? Math.round(amountVal * 100) / 100
+      : Number(Deno.env.get('AFA_FEE_AMOUNT') ?? '8');
+
+    if (!fullName || !phone || !town || !idType || !idNumber || !occupation) {
       return json({ error: 'All registration fields are required.' }, 400);
     }
+    if (!ISO_DATE.test(dateOfBirth) || Number.isNaN(new Date(dateOfBirth).getTime())) {
+      return json({ error: 'A valid date of birth (YYYY-MM-DD) is required.' }, 400);
+    }
+    if (!/^0\d{9}$/.test(phone)) {
+      return json({ error: 'Please enter a valid 10-digit Ghanaian phone number.' }, 400);
+    }
 
-    const requester = await getOptionalAgent(request);
-    const reference = `AFA-${crypto.randomUUID()}`;
-    const amount = 8.00;
+    const { admin, user } = await requireAgent(request);
+    agentId = user.id;
 
-    const { data, error } = await adminClient()
+    reference = `AFA-${crypto.randomUUID()}`;
+
+    const walletBalance = await chargeWallet(user.id, reference, feeAmount, 'AFA Registration Fee', {
+      service: 'afa_registration',
+      id_number: idNumber,
+    });
+    walletDebited = true;
+
+    const { data: registration, error: insertError } = await admin
       .from('afa_registrations')
       .insert({
         reference,
@@ -28,21 +60,102 @@ Deno.serve(async (request) => {
         town,
         id_type: idType,
         id_number: idNumber,
-        amount,
+        date_of_birth: dateOfBirth,
+        occupation,
+        price_id: priceId || null,
+        amount: feeAmount,
         status: 'Pending',
-        source: requester ? 'agent' : 'public',
-        created_by: requester?.agent?.id ?? null,
+        source: 'agent',
+        created_by: user.id,
       })
-      .select('reference, full_name, phone, town, id_type, id_number, amount, status, created_at')
+      .select('reference, full_name, phone, town, id_type, id_number, date_of_birth, occupation, price_id, amount, status, source, created_at')
+      .single();
+    if (insertError) throw insertError;
+    registrationId = registration.id;
+
+    const submitResult = await submitAfaRegistration({
+      fullName,
+      phoneNumber: phone,
+      town,
+      occupation,
+      priceId,
+      idNumber,
+      idType,
+      dateOfBirth,
+      reference,
+    });
+
+    if (!submitResult.success) {
+      await admin
+        .from('afa_registrations')
+        .update({
+          status: 'Cancelled',
+          failure_reason: submitResult.failureReason,
+          provider_response: submitResult.providerResponse ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', registrationId);
+
+      const refundedBalance = await refundWallet(
+        user.id,
+        reference,
+        feeAmount,
+        'AFA registration rejected by provider',
+      );
+
+      return json({
+        success: false,
+        refunded: true,
+        walletBalance: refundedBalance,
+        message: `AFA registration was not accepted: ${submitResult.failureReason || 'Provider declined.'} Your wallet has been refunded.`,
+      }, 502);
+    }
+
+    const { data: updated } = await admin
+      .from('afa_registrations')
+      .update({
+        status: 'Processing',
+        provider_reference: submitResult.providerReference ?? null,
+        provider_response: submitResult.providerResponse ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', registrationId)
+      .select('reference, full_name, phone, town, id_type, id_number, date_of_birth, occupation, price_id, amount, status, source, created_at, provider_reference')
       .single();
 
-    if (error) throw error;
-
     return json({
-      registration: data,
+      success: true,
+      walletBalance,
+      registration: {
+        ...(updated ?? registration),
+        reference,
+        amount: feeAmount,
+      },
       message: 'AFA Registration submitted successfully! You can now track your status.',
     }, 201);
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : 'Unable to submit registration.' }, 500);
+    if (walletDebited && registrationId) {
+      const admin = adminClient();
+      try {
+        await admin
+          .from('afa_registrations')
+          .update({ status: 'Cancelled', updated_at: new Date().toISOString() })
+          .eq('id', registrationId);
+        await refundWallet(agentId, reference, feeAmount, 'Automatic refund for failed AFA registration');
+      } catch (innerError) {
+        console.error('Rollback failed for AFA registration:', innerError);
+      }
+    }
+    console.error('create-afa-registration error:', error);
+    const message = error instanceof Error ? error.message : 'Unable to submit AFA registration.';
+    const isInsufficient = error instanceof WalletError && error.code === 'insufficient';
+    const status = isInsufficient
+      ? 400
+      : /authentication is required|session is invalid/i.test(message)
+      ? 401
+      : /agent account required/i.test(message)
+      ? 403
+      : 500;
+    return json({ error: message, insufficientFunds: isInsufficient || undefined }, status);
   }
 });

@@ -1,13 +1,8 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { dispatchAirtimeTopup } from '../_shared/airtimeProvider.ts';
+import { refundWallet, getWalletBalance } from '../_shared/wallet.ts';
 
 const VALID_NETWORKS = new Set(['mtn', 'telecel', 'at']);
-
-function getCustomerCoveredGrossAmount(netAmount: number) {
-  const feeRate = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.015');
-  const safeRate = Number.isFinite(feeRate) && feeRate >= 0 && feeRate < 1 ? feeRate : 0.015;
-  return Math.round(((netAmount / (1 - safeRate)) + Number.EPSILON) * 100) / 100;
-}
 
 async function findIdempotentOrder(admin: ReturnType<typeof adminClient>, key: string, agentId: string) {
   if (!key) return null;
@@ -28,7 +23,6 @@ Deno.serve(async (request) => {
     const body = await request.json();
     const network = String(body.network ?? '').trim().toLowerCase();
     const phone = String(body.phone ?? '').trim();
-    const paymentMethod = String(body.paymentMethod ?? 'paystack').trim().toLowerCase();
     const rawAmount = Number(body.amount);
     const customerName = String(body.customerName ?? body.name ?? '').trim();
     let customerEmail = String(body.customerEmail ?? body.email ?? '').trim().toLowerCase();
@@ -47,231 +41,122 @@ Deno.serve(async (request) => {
       return json({ error: 'Airtime amount must be between GHS 1.00 and GHS 500.00.' }, 400);
     }
 
-    const netAmount = Math.round(rawAmount * 100) / 100;
-
-    // ---------------------------------------------------------------------
-    // SECURITY: Airtime is an AGENTS-ONLY service. Both the wallet flow and
-    // the Paystack flow require a verified, authenticated Agent session.
-    // A value sent from the frontend is never trusted.
-    // ---------------------------------------------------------------------
+    // WALLET-FIRST: airtime is an AGENTS-ONLY service paid from the agent wallet.
     const { admin, user } = await requireAgent(request);
     const agentId = user.id;
+    const netAmount = Math.round(rawAmount * 100) / 100;
     customerEmail = customerEmail || user.email || 'agent@skaitechgh.com';
 
-    // -------------------------------------------------------------
-    // FLOW A: AGENT WALLET PAYMENT
-    // -------------------------------------------------------------
-    if (paymentMethod === 'wallet') {
-      if (clientRequestId) {
-        const existing = await findIdempotentOrder(admin, clientRequestId, agentId);
-        if (existing && existing.payment_method === 'wallet') {
-          return json({
-            success: true,
-            idempotent: true,
-            paymentMethod: 'wallet',
-            reference: existing.payment_reference,
-            amount: existing.amount,
-            network: existing.network,
-            phone: existing.recipient_phone,
-            airtimeStatus: existing.airtime_status,
-            message: 'This airtime purchase was already submitted. No duplicate charge was made.',
-          });
-        }
+    if (clientRequestId) {
+      const existing = await findIdempotentOrder(admin, clientRequestId, agentId);
+      if (existing && existing.payment_method === 'wallet') {
+        return json({
+          success: true,
+          idempotent: true,
+          paymentMethod: 'wallet',
+          reference: existing.payment_reference,
+          amount: existing.amount,
+          network: existing.network,
+          phone: existing.recipient_phone,
+          airtimeStatus: existing.airtime_status,
+          message: existing.airtime_status === 'failed'
+            ? 'This airtime attempt already failed and was refunded.'
+            : 'This airtime purchase was already submitted. No duplicate charge was made.',
+        });
       }
+    }
 
-      const reference = `AIR-${crypto.randomUUID()}`;
+    const reference = `AIR-${crypto.randomUUID()}`;
+    const serviceName = network === 'at' ? 'AT' : network.charAt(0).toUpperCase() + network.slice(1);
 
-      // 1. Atomically deduct from wallet and create order marked as paid
-      const { data: orderData, error: orderError } = await admin.rpc('purchase_agent_airtime', {
-        p_agent_id: agentId,
-        p_reference: reference,
-        p_phone: phone,
-        p_network: network,
-        p_amount: netAmount,
-        p_customer_name: customerName || user.user_metadata?.full_name || 'Agent',
-        p_customer_email: customerEmail,
-      });
+    // 1. Atomically deduct from wallet, create order, and log the ledger debit.
+    const { data: orderData, error: orderError } = await admin.rpc('purchase_agent_airtime', {
+      p_agent_id: agentId,
+      p_reference: reference,
+      p_phone: phone,
+      p_network: network,
+      p_amount: netAmount,
+      p_customer_name: customerName || user.user_metadata?.full_name || 'Agent',
+      p_customer_email: customerEmail,
+    });
 
-      if (orderError) {
-        console.error('Wallet deduction error:', orderError);
-        return json({ error: orderError.message || 'Failed to process wallet payment.' }, 400);
-      }
+    if (orderError) {
+      console.error('Wallet deduction error:', orderError);
+      const isInsufficient = String(orderError.message || '').toLowerCase().includes('insufficient');
+      return json({ error: orderError.message || 'Failed to process wallet payment.', insufficientFunds: isInsufficient || undefined }, 400);
+    }
 
-      if (clientRequestId) {
-        await admin.from('airtime_orders').update({ idempotency_key: clientRequestId }).eq('id', orderData.id);
-      }
+    if (clientRequestId) {
+      await admin.from('airtime_orders').update({ idempotency_key: clientRequestId }).eq('id', orderData.id);
+    }
 
-      // 2. Dispatch airtime to provider (Hubtel)
-      const dispatchResult = await dispatchAirtimeTopup({
-        phone,
-        network: network as 'mtn' | 'telecel' | 'at',
-        amount: netAmount,
-        reference,
-      });
+    // 2. Dispatch airtime to the provider (Hubtel).
+    const dispatchResult = await dispatchAirtimeTopup({
+      phone,
+      network: network as 'mtn' | 'telecel' | 'at',
+      amount: netAmount,
+      reference,
+    });
 
-      // 3. Update order with fulfillment status
+    // 3a. DELIVERED -> mark order fulfilled.
+    if (dispatchResult.success && dispatchResult.status === 'delivered') {
       await admin.rpc('fulfil_airtime_order', {
         p_order_id: orderData.id,
-        p_airtime_status: dispatchResult.status,
+        p_airtime_status: 'delivered',
         p_provider_reference: dispatchResult.providerReference ?? null,
         p_provider_response: dispatchResult.providerResponse ?? null,
-        p_failure_reason: dispatchResult.failureReason ?? null,
+        p_failure_reason: null,
       });
-
+      const walletBalance = await getWalletBalance(agentId);
       return json({
         success: true,
         paymentMethod: 'wallet',
+        walletBalance,
         reference,
         amount: netAmount,
         network,
         phone,
-        airtimeStatus: dispatchResult.status,
-        message: dispatchResult.status === 'delivered'
-          ? 'Airtime top-up successful!'
-          : dispatchResult.status === 'pending_provider'
-          ? 'Payment processed. Airtime dispatch queued pending provider API credentials.'
-          : `Airtime delivery failed: ${dispatchResult.failureReason || 'Provider declined'}`,
+        airtimeStatus: 'delivered',
+        message: `${serviceName} airtime top-up successful!`,
       });
     }
 
-    // -------------------------------------------------------------
-    // FLOW B: PAYSTACK CHECKOUT GATEWAY (MOMO & CARDS) — AGENTS ONLY
-    // -------------------------------------------------------------
-    if (!customerEmail || !/^\S+@\S+\.\S+$/.test(customerEmail)) {
-      customerEmail = `${phone}@customer.skaitechgh.com`;
-    }
+    // 3b. FAILED / PENDING_PROVIDER -> refund the wallet and mark the order failed.
+    const failureReason = dispatchResult.failureReason || 'The airtime provider did not accept the top-up.';
+    await admin.from('airtime_orders').update({
+      payment_status: 'failed',
+      airtime_status: 'failed',
+      provider_reference: dispatchResult.providerReference ?? null,
+      provider_response: dispatchResult.providerResponse ?? null,
+      failure_reason: failureReason,
+      updated_at: new Date().toISOString(),
+    }).eq('id', orderData.id);
 
-    const grossAmount = getCustomerCoveredGrossAmount(netAmount);
-    const feeAmount = Math.round((grossAmount - netAmount + Number.EPSILON) * 100) / 100;
-
-    let reference: string;
-    if (clientRequestId) {
-      const existing = await findIdempotentOrder(admin, clientRequestId, agentId);
-      if (existing && existing.payment_method === 'paystack') {
-        if (existing.payment_status === 'paid' || existing.airtime_status === 'delivered') {
-          return json({
-            success: true,
-            idempotent: true,
-            reference: existing.payment_reference,
-            amount: existing.amount,
-            network: existing.network,
-            phone: existing.recipient_phone,
-            airtimeStatus: existing.airtime_status,
-            message: 'This airtime purchase was already completed.',
-          });
-        }
-        reference = existing.payment_reference;
-      } else {
-        reference = `AIR-${crypto.randomUUID()}`;
-        try {
-          const { error: insertError } = await admin.from('airtime_orders').insert({
-            user_id: agentId,
-            agent_id: agentId,
-            payment_reference: reference,
-            recipient_phone: phone,
-            network,
-            amount: netAmount,
-            fee_amount: feeAmount,
-            gross_amount: grossAmount,
-            payment_method: 'paystack',
-            payment_status: 'pending_payment',
-            airtime_status: 'pending',
-            customer_name: customerName,
-            customer_email: customerEmail,
-            idempotency_key: clientRequestId,
-          });
-          if (insertError) throw insertError;
-        } catch (insertError) {
-          const code = (insertError as { code?: string })?.code ?? '';
-          if (code === '23505' && clientRequestId) {
-            const dupe = await findIdempotentOrder(admin, clientRequestId, agentId);
-            if (dupe && dupe.payment_method === 'paystack') {
-              reference = dupe.payment_reference;
-            } else {
-              return json({ error: 'This purchase is already being processed. Please wait.' }, 409);
-            }
-          } else {
-            throw insertError;
-          }
-        }
-      }
-    } else {
-      reference = `AIR-${crypto.randomUUID()}`;
-      const { error: insertError } = await admin.from('airtime_orders').insert({
-        user_id: agentId,
-        agent_id: agentId,
-        payment_reference: reference,
-        recipient_phone: phone,
-        network,
-        amount: netAmount,
-        fee_amount: feeAmount,
-        gross_amount: grossAmount,
-        payment_method: 'paystack',
-        payment_status: 'pending_payment',
-        airtime_status: 'pending',
-        customer_name: customerName,
-        customer_email: customerEmail,
-      });
-      if (insertError) throw insertError;
-    }
-
-    // 2. Initialize Paystack transaction
-    const paystackSecret = Deno.env.get('PAYSTACK_SECRET_KEY');
-    const siteUrl = Deno.env.get('SITE_URL');
-    if (!paystackSecret || !siteUrl) {
-      throw new Error('Payment configuration is missing (PAYSTACK_SECRET_KEY or SITE_URL).');
-    }
-
-    const callbackUrl = `${siteUrl.replace(/\/$/, '')}/airtime.html?reference=${encodeURIComponent(reference)}`;
-
-    const paystackResponse = await fetch('https://api.paystack.co/transaction/initialize', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${paystackSecret}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email: customerEmail,
-        amount: Math.round(grossAmount * 100),
-        currency: 'GHS',
-        reference,
-        callback_url: callbackUrl,
-        metadata: {
-          payment_type: 'airtime',
-          phone,
-          network,
-          net_amount: netAmount,
-          fee_amount: feeAmount,
-          gross_amount: grossAmount,
-          agent_id: agentId,
-        },
-      }),
-    });
-
-    const payment = await paystackResponse.json();
-
-    if (!paystackResponse.ok || payment.status !== true || !payment.data?.authorization_url) {
-      console.error('Paystack initialization failure:', payment);
-      throw new Error(payment.message || 'Paystack could not initialize payment.');
-    }
+    const walletBalance = await refundWallet(agentId, reference, netAmount, `${serviceName} airtime provider failed`);
 
     return json({
-      authorizationUrl: payment.data.authorization_url,
+      success: false,
+      refunded: true,
+      paymentMethod: 'wallet',
+      walletBalance,
       reference,
-      netAmount,
-      feeAmount,
-      grossAmount,
-      phone,
+      amount: netAmount,
       network,
-    });
+      phone,
+      airtimeStatus: 'failed',
+      message: `Airtime delivery failed: ${failureReason} Your wallet has been refunded.`,
+    }, 502);
   } catch (error) {
-    console.error('Airtime payment creation error:', error);
-    const message = error instanceof Error ? error.message : 'Unable to initialize airtime purchase.';
-    const status = /authentication is required|session is invalid/i.test(message)
+    console.error('Airtime payment error:', error);
+    const message = error instanceof Error ? error.message : 'Unable to process airtime purchase.';
+    const isInsufficient = error instanceof WalletError && error.code === 'insufficient';
+    const status = isInsufficient
+      ? 400
+      : /authentication is required|session is invalid/i.test(message)
       ? 401
       : /agent account required/i.test(message)
       ? 403
       : 500;
-    return json({ error: message }, status);
+    return json({ error: message, insufficientFunds: isInsufficient || undefined }, status);
   }
 });

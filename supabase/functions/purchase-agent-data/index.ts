@@ -85,8 +85,12 @@ Deno.serve(async (request) => {
     });
     if (completeError) throw completeError;
 
-    if (!success) return json({ error: dispatch.failureReason || 'The bundle provider did not accept the order.', orderReference: reference }, 502);
-    return json({ success: true, orderReference: reference, providerReference: dispatch.orderId, status: dispatch.status || 'successful', amount: saleAmount });
+    if (!success) {
+      const { data: balanceRefunded } = await admin.from('wallets').select('balance').eq('id', user.id).maybeSingle();
+      return json({ error: dispatch.failureReason || 'The bundle provider did not accept the order.', orderReference: reference, refunded: true, walletBalance: Number(balanceRefunded?.balance ?? 0) }, 502);
+    }
+    const { data: wallet } = await admin.from('wallets').select('balance').eq('id', user.id).maybeSingle();
+    return json({ success: true, orderReference: reference, providerReference: dispatch.orderId, status: dispatch.status || 'successful', amount: saleAmount, walletBalance: Number(wallet?.balance ?? 0) });
   } catch (error) {
     if (orderId && !providerAccepted) {
       try {

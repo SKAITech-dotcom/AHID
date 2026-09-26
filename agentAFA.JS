@@ -44,14 +44,16 @@ async function submitNewAfa() {
     const phone = document.getElementById('afaPhone').value.trim();
     const town = document.getElementById('afaTown').value.trim();
     const idNumber = document.getElementById('afaIdNumber').value.trim();
+    const dateOfBirth = document.getElementById('afaDob').value.trim();
+    const occupation = document.getElementById('afaOccupation').value.trim();
 
-    if (!name || !phone || !town || !idNumber) {
+    if (!name || !phone || !town || !idNumber || !dateOfBirth || !occupation) {
         alert("Please fill in all required fields.");
         return;
     }
 
     const { data, error } = await supabase.functions.invoke('manage-afa-registrations', {
-        body: { action: 'create', fullName: name, phone, town, idNumber }
+        body: { action: 'create', fullName: name, phone, town, idNumber, dateOfBirth, occupation }
     });
 
     if (error || data?.error) {
