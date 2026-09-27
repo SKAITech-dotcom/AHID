@@ -2,7 +2,9 @@
  * AFA (Aid & Food Allowance / Farmer) Provider Integration for Skaitech Ghana
  * Provider: GrandTechHub AFA API
  *
- * Endpoint: POST https://backend.grandtech.cloud/api/afa
+ * Endpoint: POST https://backend.grandtechub.cloud/api/afa
+ *   (the provider's own docs say "backend.grandtech.cloud", which does not
+ *    resolve - the real host is grandtechub.cloud)
  * Headers:  x-api-key: <GRANDTECH_API_KEY>
  *           Content-Type: application/json
  * Body:     { fullName, phoneNumber, town, occupation, priceId, idNumber,
@@ -28,7 +30,7 @@ export interface AfaSubmitResult {
   failureReason?: string;
 }
 
-const GRANDTECH_AFA_DEFAULT_URL = 'https://backend.grandtech.cloud/api/afa';
+const GRANDTECH_AFA_DEFAULT_URL = 'https://backend.grandtechub.cloud/api/afa';
 
 /**
  * Base AFA endpoint. Override with GRANDTECH_AFA_URL when the provider moves or
