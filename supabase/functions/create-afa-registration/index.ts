@@ -12,7 +12,9 @@ Deno.serve(async (request) => {
   let agentId = '';
   let walletDebited = false;
   let registrationId: string | null = null;
-  let feeAmount = Number(Deno.env.get('AFA_FEE_AMOUNT') ?? '8');
+  // Price is server-side only. A client-supplied `amount` is ignored so an
+  // agent cannot underpay for a registration.
+  const feeAmount = Math.round(Number(Deno.env.get('AFA_FEE_AMOUNT') ?? '12') * 100) / 100;
 
   try {
     const body = await request.json();
@@ -24,11 +26,6 @@ Deno.serve(async (request) => {
     const dateOfBirth = String(body.dateOfBirth || '').trim();
     const occupation = String(body.occupation || '').trim();
     const priceId = String(body.priceId || '').trim();
-    const amountVal = Number(body.amount);
-
-    feeAmount = Number.isFinite(amountVal) && amountVal > 0
-      ? Math.round(amountVal * 100) / 100
-      : Number(Deno.env.get('AFA_FEE_AMOUNT') ?? '8');
 
     if (!fullName || !phone || !town || !idType || !idNumber || !occupation) {
       return json({ error: 'All registration fields are required.' }, 400);

@@ -43,10 +43,8 @@ Deno.serve(async (request) => {
         const dateOfBirth = String(body.dateOfBirth || '').trim();
         const occupation = String(body.occupation || '').trim();
         const priceId = String(body.priceId || '').trim();
-        const amountVal = Number(body.amount);
-        const feeAmount = Number.isFinite(amountVal) && amountVal > 0
-          ? Math.round(amountVal * 100) / 100
-          : Number(Deno.env.get('AFA_FEE_AMOUNT') ?? '8');
+        // Price is server-side only; a client-supplied `amount` is ignored.
+        const feeAmount = Math.round(Number(Deno.env.get('AFA_FEE_AMOUNT') ?? '12') * 100) / 100;
 
         if (!fullName || !phone || !town || !idNumber || !occupation) {
           return json({ error: 'All registration fields are required.' }, 400);
