@@ -1,5 +1,6 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
+import { resolveAgentBundlePrice } from '../_shared/pricing.ts';
 
 const NETWORKS = new Set(['mtn', 'telecel', 'airteltigo']);
 const catalog: Record<string, Record<number, number>> = {
@@ -13,7 +14,7 @@ const catalog: Record<string, Record<number, number>> = {
   },
   airteltigo: {
     1024: 4.2, 2048: 8.39, 3072: 12.58, 4096: 16.78, 5120: 20.97,
-    6144: 25.17, 7168: 29.36, 8192: 33.56, 9216: 37.53, 10240: 40.84,
+    6144: 25.17, 7168: 29.36, 8192: 33.56, 10240: 40.84,
     15360: 60.71,
   },
 };
@@ -44,8 +45,15 @@ Deno.serve(async (request) => {
     if (!/^0\d{9}$/.test(phone)) return json({ error: 'Enter a valid 10-digit Ghanaian phone number.' }, 400);
     if (!NETWORKS.has(networkType)) return json({ error: 'Unsupported network.' }, 400);
     if (!Number.isInteger(volumeInMB) || volumeInMB <= 0 || volumeInMB > 204800) return json({ error: 'Invalid bundle volume.' }, 400);
-    const saleAmount = catalog[networkType]?.[volumeInMB];
-    if (!saleAmount) return json({ error: 'This bundle is not available at the current agent price.' }, 400);
+    const catalogPrice = catalog[networkType]?.[volumeInMB];
+    if (!catalogPrice) return json({ error: 'This bundle is not available at the current agent price.' }, 400);
+    // The agent's own price from the Store > Pricing tab wins over the catalog.
+    const saleAmount = await resolveAgentBundlePrice(
+      admin, user.id, networkType, volumeInMB, catalogPrice,
+    );
+    if (!Number.isFinite(saleAmount) || saleAmount <= 0) {
+      return json({ error: 'This bundle is not available at the current agent price.' }, 400);
+    }
 
     let providerCost: number;
     let dataPackage;

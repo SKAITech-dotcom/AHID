@@ -73,7 +73,6 @@ const packagesData = {
         { size: '6GB', price: 'GHS 25.17', validity: 'One-time payment' },
         { size: '7GB', price: 'GHS 29.36', validity: 'One-time payment' },
         { size: '8GB', price: 'GHS 33.56', validity: 'One-time payment' },
-        { size: '9GB', price: 'GHS 37.53', validity: 'One-time payment' },
         { size: '10GB', price: 'GHS 40.84', validity: 'One-time payment' },
         { size: '15GB BigTime', price: 'GHS 60.71', validity: 'One-time payment' }
     ]

@@ -396,7 +396,6 @@ const networkPackages = {
       { size: '6 GB', price: 25.17 },
       { size: '7 GB', price: 29.36 },
       { size: '8 GB', price: 33.56 },
-      { size: '9 GB', price: 37.53 },
       { size: '10 GB', price: 40.84 },
       { size: '15 GB BigTime', price: 60.71 }
     ]

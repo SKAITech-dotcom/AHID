@@ -75,7 +75,6 @@ const BUNDLES = {
     { size: '6GB', mB: 6144, price: 25.17 },
     { size: '7GB', mB: 7168, price: 29.36 },
     { size: '8GB', mB: 8192, price: 33.56 },
-    { size: '9GB', mB: 9216, price: 37.53 },
     { size: '10GB', mB: 10240, price: 40.84 },
     { size: '15GB', mB: 15360, price: 60.71 },
   ],

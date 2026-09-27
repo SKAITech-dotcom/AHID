@@ -26,6 +26,16 @@ export interface GrandTechPackage {
   priceGhs: number;
   providerNetwork: string;
   network: string;
+  /** Units already sold, or null when the provider does not track it. */
+  sales: number | null;
+  /** Sales cap, or null when unlimited. */
+  limit: number | null;
+  /**
+   * True when the package exists but has hit its sales cap. The order endpoint
+   * still accepts these, so relying on acceptance to detect them means
+   * charging customers for bundles that never arrive.
+   */
+  soldOut: boolean;
 }
 
 export interface GrandTechBuyResult {
@@ -101,21 +111,33 @@ export async function fetchGrandTechPackages(): Promise<GrandTechPackage[]> {
       if (!pkg.id || !providerNetwork || !Number.isFinite(priceGhs) || !Number.isFinite(sizeGb)) {
         return null;
       }
+      // Number(null) is 0, so null has to be ruled out before coercing or every
+      // uncapped package would look like it had hit a limit of zero.
+      const sales = pkg.sales === null || pkg.sales === undefined
+        ? null
+        : (Number.isFinite(Number(pkg.sales)) ? Number(pkg.sales) : null);
+      const limit = pkg.limit === null || pkg.limit === undefined
+        ? null
+        : (Number.isFinite(Number(pkg.limit)) ? Number(pkg.limit) : null);
       return {
         id: String(pkg.id),
         sizeGb,
         priceGhs: Math.round(priceGhs * 100) / 100,
         providerNetwork,
         network: providerNetwork.toLowerCase(),
+        sales,
+        limit,
+        soldOut: limit !== null && sales !== null && sales >= limit,
       } satisfies GrandTechPackage;
     })
     .filter((pkg): pkg is GrandTechPackage => pkg !== null);
 }
 
 /**
- * Finds the provider package for a network + volume. When a size is offered by
- * more than one product (for example a daily and a monthly variant) the
- * cheapest one wins, which is what protects the agent's margin.
+ * Finds the provider package for a network + volume, or null when the provider
+ * cannot actually deliver it - either because the size does not exist or
+ * because it has hit its sales cap. A null result must abort the order and
+ * refund the wallet.
  */
 export async function resolveGrandTechPackage(
   networkType: string,
@@ -126,10 +148,68 @@ export async function resolveGrandTechPackage(
   const sizeGb = volumeInMB / 1024;
 
   const matches = packages
-    .filter((pkg) => pkg.providerNetwork === providerNetwork && pkg.sizeGb === sizeGb)
+    .filter((pkg) => pkg.providerNetwork === providerNetwork && pkg.sizeGb === sizeGb && !pkg.soldOut)
     .sort((a, b) => a.priceGhs - b.priceGhs);
 
   return matches[0] ?? null;
+}
+
+/** Provider order status vocabulary, mapped onto our own states. */
+export type GrandTechOrderState = 'successful' | 'failed' | 'processing';
+
+const SUCCESSFUL_STATES = new Set(['SUCCESSFUL', 'SUCCESS', 'COMPLETED', 'DELIVERED', 'FULFILLED']);
+const FAILED_STATES = new Set(['FAILED', 'FAILURE', 'REJECTED', 'CANCELLED', 'CANCELED', 'EXPIRED']);
+
+export function mapGrandTechOrderState(status: string): GrandTechOrderState {
+  const normalized = String(status || '').trim().toUpperCase();
+  if (SUCCESSFUL_STATES.has(normalized)) return 'successful';
+  if (FAILED_STATES.has(normalized)) return 'failed';
+  return 'processing';
+}
+
+/**
+ * Reads the live status of a provider order. The provider accepts orders long
+ * before the bundle is delivered, and orders can sit in PENDING/PROCESSING
+ * indefinitely, so acceptance alone must never be treated as delivery.
+ */
+export async function fetchGrandTechOrderStatus(
+  providerOrderId: string,
+): Promise<{ state: GrandTechOrderState; status: string; createdAt: string | null } | null> {
+  if (!providerOrderId) return null;
+
+  let url = `${grandtechDataBaseUrl()}/api/orders`;
+  // The provider paginates, so walk the pages until the order shows up.
+  for (let page = 1; page <= 5; page += 1) {
+    const response = await fetch(`${url}?page=${page}&limit=100`, {
+      headers: { 'x-api-key': grandtechApiKey(), Accept: 'application/json' },
+    });
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok || !Array.isArray(payload?.payload)) return null;
+
+    const orders = payload.payload as Record<string, unknown>[];
+    const match = orders.find((o) => String(o.orderId ?? '') === String(providerOrderId));
+    if (match) {
+      const packages = Array.isArray(match.packages) ? match.packages as Record<string, unknown>[] : [];
+      const statuses = packages.map((p) => String(p.status ?? ''));
+      // An order with several packages only counts as delivered if all of them are.
+      let state: GrandTechOrderState = 'processing';
+      if (statuses.length && statuses.every((s) => mapGrandTechOrderState(s) === 'successful')) {
+        state = 'successful';
+      } else if (statuses.length && statuses.every((s) => mapGrandTechOrderState(s) === 'failed')) {
+        state = 'failed';
+      }
+      return {
+        state,
+        status: statuses.join(',') || 'UNKNOWN',
+        createdAt: match.createdAt ? String(match.createdAt) : null,
+      };
+    }
+
+    const totalPages = Number(payload.totalPages ?? 1);
+    if (!Number.isFinite(totalPages) || page >= totalPages) break;
+  }
+
+  return null;
 }
 
 /**

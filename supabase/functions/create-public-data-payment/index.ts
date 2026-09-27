@@ -1,6 +1,7 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
 import { chargeWallet, refundWallet } from '../_shared/wallet.ts';
+import { resolveAgentBundlePrice } from '../_shared/pricing.ts';
 
 const catalog: Record<string, Record<number, number>> = {
   mtn: {
@@ -16,7 +17,7 @@ const catalog: Record<string, Record<number, number>> = {
   airteltigo: {
     5: 0.5, 10: 1, 20: 2, 30: 3, 50: 5, 100: 10, 150: 15, 200: 20,
     1024: 4.2, 2048: 8.39, 3072: 12.58, 4096: 16.78, 5120: 20.97,
-    6144: 25.17, 7168: 29.36, 8192: 33.56, 9216: 37.53, 10240: 40.84,
+    6144: 25.17, 7168: 29.36, 8192: 33.56, 10240: 40.84,
     15360: 60.71,
   },
 };
@@ -44,15 +45,25 @@ Deno.serve(async (request) => {
     const customerName = String(body.name || '').trim();
     const customerEmail = String(body.email || '').trim().toLowerCase();
     const customerPhone = String(body.phone || '').trim();
-    const saleAmount = catalog[networkType]?.[volumeInMB];
+    const catalogPrice = catalog[networkType]?.[volumeInMB];
 
-    if (!customerName || customerName.length > 120 || !/^\S+@\S+\.\S+$/.test(customerEmail) || !/^0\d{9}$/.test(customerPhone) || !saleAmount) {
+    if (!customerName || customerName.length > 120 ||
+      !/^\S+@\S+\.\S+$/.test(customerEmail) || !/^0\d{9}$/.test(customerPhone) || !catalogPrice) {
       return json({ error: 'Enter valid customer details and select a supported package.' }, 400);
     }
 
     // WALLET-FIRST: instant data is paid from the verified agent's wallet.
     const { admin, user } = await requireAgent(request);
     const agentId = user.id;
+
+    // The agent's own price from the Store > Pricing tab wins over the catalog,
+    // so editing a price there actually changes what customers are charged.
+    const saleAmount = await resolveAgentBundlePrice(
+      admin, agentId, networkType, volumeInMB, catalogPrice,
+    );
+    if (!Number.isFinite(saleAmount) || saleAmount <= 0) {
+      return json({ error: 'Enter valid customer details and select a supported package.' }, 400);
+    }
 
     reference = `PUB-${crypto.randomUUID()}`;
 
@@ -89,12 +100,16 @@ Deno.serve(async (request) => {
     await admin.rpc('complete_agent_data_order', {
       p_order_id: providerOrderId, p_success: dispatch.success, p_provider_response: dispatch.payload,
     });
+    // The provider accepting the order is not delivery: GrandTechHub fulfils
+    // asynchronously and can leave an order PENDING/PROCESSING indefinitely.
+    // Stay in 'processing' and let get-public-data-order reconcile, so a dropped
+    // order is refunded instead of being reported as delivered.
     await admin.rpc('mark_public_data_order', {
       p_order_id: order.id,
-      p_status: dispatch.success ? 'successful' : 'failed',
+      p_status: dispatch.success ? 'processing' : 'failed',
       p_provider_amount: providerCost,
       p_provider_reference: providerReference,
-      p_provider_response: dispatch.payload,
+      p_provider_response: { ...dispatch.payload, provider: dataPackage.provider, providerOrderId: dispatch.orderId ?? null },
     });
 
     if (!dispatch.success) {
@@ -112,8 +127,8 @@ Deno.serve(async (request) => {
       success: true,
       walletBalance,
       orderReference: reference,
-      status: 'successful',
-      message: `Your ${Math.round(volumeInMB / 1024)}GB bundle has been delivered to ${customerPhone}.`,
+      status: 'processing',
+      message: `Your ${Math.round(volumeInMB / 1024)}GB bundle order was accepted and is being delivered to ${customerPhone}.`,
     });
   } catch (error) {
     console.error('Public data payment error:', error);

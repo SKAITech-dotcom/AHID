@@ -10,7 +10,9 @@
 import { buySwiftPackage, resolveSwiftPackage } from './swiftProvider.ts';
 import {
   buyGrandTechPackage,
+  fetchGrandTechOrderStatus,
   resolveGrandTechPackage,
+  type GrandTechOrderState,
   type GrandTechPackage,
 } from './grandtechDataProvider.ts';
 
@@ -94,4 +96,28 @@ export async function buyDataPackage(
     payload: result.payload,
     failureReason: result.failureReason,
   };
+}
+
+/**
+ * Live delivery status for an order we already placed. Returns null when the
+ * provider cannot be consulted, which callers must treat as "still unknown"
+ * rather than as a failure.
+ */
+export async function fetchDataOrderStatus(
+  provider: DataProviderName,
+  providerOrderId: string,
+): Promise<{ state: GrandTechOrderState; status: string } | null> {
+  if (provider !== 'grandtech') return null;
+  const result = await fetchGrandTechOrderStatus(providerOrderId);
+  return result ? { state: result.state, status: result.status } : null;
+}
+
+/**
+ * How long an accepted order may sit undelivered before we assume the provider
+ * dropped it and refund the customer. Generous, because a late delivery we then
+ * refund is a loss, but bounded so nobody is left having paid for nothing.
+ */
+export function dataOrderStuckMinutes(): number {
+  const configured = Number(Deno.env.get('DATA_ORDER_STUCK_MINUTES'));
+  return Number.isFinite(configured) && configured > 0 ? configured : 45;
 }
