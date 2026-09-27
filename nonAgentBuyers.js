@@ -40,6 +40,7 @@ const themes = {
 // Package Data sets
 const packagesData = {
     mtn: [
+        { size: '1GB', price: 'GHS 4.30', validity: 'One-time payment' },
         { size: '2GB', price: 'GHS 8.80', validity: 'One-time payment' },
         { size: '3GB', price: 'GHS 13.20', validity: 'One-time payment' },
         { size: '4GB', price: 'GHS 17.60', validity: 'One-time payment' },
@@ -55,6 +56,7 @@ const packagesData = {
         { size: '50GB', price: 'GHS 200.00', validity: 'One-time payment' }
     ],
     telecel: [
+        { size: '5GB', price: 'GHS 21.00', validity: 'One-time payment' },
         { size: '10GB', price: 'GHS 40.00', validity: 'One-time payment' },
         { size: '15GB', price: 'GHS 60.00', validity: 'One-time payment' },
         { size: '20GB', price: 'GHS 78.00', validity: 'One-time payment' },
