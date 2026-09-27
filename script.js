@@ -50,10 +50,13 @@ async function ensureAgentProfile(userId, agentName, agentCode, phone = '') {
       role: role
     }, { onConflict: 'id' });
 
+    // Create the wallet row only if it does not exist yet. Never write a
+    // balance here: upserting would overwrite a real balance with 0.00 on
+    // every page load. Balances are server-only (see the RLS policies).
     const walletResult = await supabase.from('wallets').upsert({
       id: userId,
       balance: 0.00
-    }, { onConflict: 'id' });
+    }, { onConflict: 'id', ignoreDuplicates: true });
 
     // Also update auth user metadata with role and code
     try {
