@@ -118,6 +118,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // 4. Update dynamic storefront link
+    // The agent code is deliberately NOT included: the storefront never read it
+    // and the backend attributes orders via the signed-in agent, so exposing it
+    // in a shareable URL only leaked it.
     const linkInput = document.getElementById('storeLinkInput');
     if (linkInput) {
         const origin = window.location.origin;
@@ -127,8 +130,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ? `${origin}/${repoSegment}`
             : origin;
 
-        const agentParam = currentAgentData?.agent_code || 'skaitech_gh';
-        linkInput.value = `${baseUrl}/nonAgentBuyers.html?agent=${encodeURIComponent(agentParam)}`;
+        linkInput.value = `${baseUrl}/nonAgentBuyers.html`;
     }
 });
 

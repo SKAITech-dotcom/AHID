@@ -5,7 +5,9 @@ import { applyWalletBalance, refreshWalletBalance } from './walletBalance.js';
 const paymentReference = new URLSearchParams(window.location.search).get('reference');
 // Read the network from URL parameters
 const urlParams = new URLSearchParams(window.location.search);
-const network = urlParams.get('network') || 'mtn';
+const NETWORK_KEYS = ['mtn', 'telecel', 'airteltigo'];
+let network = urlParams.get('network') || 'mtn';
+if (!NETWORK_KEYS.includes(network)) network = 'mtn';
 
 const bannerElem = document.getElementById('networkBanner');
 const listElem = document.getElementById('packageList');
@@ -34,8 +36,6 @@ const themes = {
         badgeText: '#1e40af' 
     }
 };
-
-const currentTheme = themes[network] || themes['mtn'];
 
 // Package Data sets
 const packagesData = {
@@ -77,34 +77,69 @@ const packagesData = {
     ]
 };
 
-const currentPackages = packagesData[network] || packagesData['mtn'];
+const NETWORK_LABELS = {
+    mtn: { label: 'MTN', short: 'MTN' },
+    telecel: { label: 'Telecel', short: 'Telecel' },
+    airteltigo: { label: 'AirtelTigo', short: 'AT' },
+};
 
-// Set Top Banner
-if (bannerElem) {
-    bannerElem.innerText = currentTheme.name;
-    bannerElem.style.background = currentTheme.gradient;
+// Switches the storefront to another network and keeps the URL shareable.
+function setNetwork(next) {
+    if (!NETWORK_KEYS.includes(next) || next === network) return;
+    network = next;
+    const url = new URL(window.location.href);
+    url.searchParams.set('network', next);
+    window.history.replaceState({}, '', url);
+    renderStorefront();
 }
 
-// Generate Product Cards HTML
-if (listElem) {
-    let htmlContent = '';
-    
-    currentPackages.forEach((pkg, index) => {
-        htmlContent += `
+function renderStorefront() {
+    const theme = themes[network] || themes['mtn'];
+    const packages = packagesData[network] || packagesData['mtn'];
+
+    // Set Top Banner
+    if (bannerElem) {
+        bannerElem.innerText = theme.name;
+        bannerElem.style.background = theme.gradient;
+    }
+
+    // Network switcher
+    const switcherElem = document.getElementById('networkSwitcher');
+    if (switcherElem) {
+        switcherElem.innerHTML = NETWORK_KEYS.map((key) => {
+            const active = key === network;
+            const t = themes[key];
+            return `
+                <button onclick="setNetwork('${key}')" data-network="${key}"
+                    style="flex: 1; padding: 10px 8px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer;
+                        border: 2px solid ${active ? t.primary : '#e5e7eb'};
+                        background: ${active ? t.gradient : '#ffffff'};
+                        color: ${active ? '#ffffff' : '#374151'};">
+                    ${NETWORK_LABELS[key].label}
+                </button>`;
+        }).join('');
+    }
+
+    // Generate Product Cards HTML
+    if (listElem) {
+        let htmlContent = '';
+
+        packages.forEach((pkg, index) => {
+            htmlContent += `
             <div class="product-card">
                 <div class="card-badge">
                     <i class="fa-solid fa-circle" style="font-size: 6px; color: #10b981;"></i> ${network.toUpperCase()}
                 </div>
                 <div class="data-size">
-                    <i class="fa-solid fa-wifi" style="font-size: 1rem; color: ${currentTheme.primary};"></i> ${pkg.size}
+                    <i class="fa-solid fa-wifi" style="font-size: 1rem; color: ${theme.primary};"></i> ${pkg.size}
                 </div>
-                <div class="data-price" style="color: ${currentTheme.primary};">${pkg.price}</div>
+                <div class="data-price" style="color: ${theme.primary};">${pkg.price}</div>
                 <div class="payment-type">${pkg.validity}</div>
-                
-                <button onclick="toggleOrderForm(${index})" class="action-btn" style="background: ${currentTheme.gradient};">
+
+                <button onclick="toggleOrderForm(${index})" class="action-btn" style="background: ${theme.gradient};">
                     <i class="fa-solid fa-bag-shopping"></i> Buy Now
                 </button>
-                
+
                 <!-- Hidden Checkout Input Form with Cancel Button -->
                 <div id="orderForm_${index}" style="display: none;" class="form-container">
                     <label style="font-size: 0.8rem; font-weight: 700; color: #374151;">Your Name:</label>
@@ -112,12 +147,12 @@ if (listElem) {
 
                     <label style="font-size: 0.8rem; font-weight: 700; color: #374151;">Your Email:</label>
                     <input type="email" id="email_${index}" placeholder="you@example.com" class="form-input">
-                    
+
                     <label style="font-size: 0.8rem; font-weight: 700; color: #374151;">Recipient Phone (${network.toUpperCase()}):</label>
                     <input type="tel" id="phone_${index}" placeholder="024XXXXXXX" class="form-input">
-                    
+
                     <div style="display: flex; gap: 8px; margin-top: 4px;">
-                        <button onclick="submitOrder('${pkg.size}', '${pkg.price}', ${index})" class="action-btn" style="background: ${currentTheme.gradient}; flex: 2; margin-top: 0;">
+                        <button onclick="submitOrder('${pkg.size}', '${pkg.price}', ${index})" class="action-btn" style="background: ${theme.gradient}; flex: 2; margin-top: 0;">
                             Confirm Order
                         </button>
                         <button onclick="toggleOrderForm(${index})" style="background: #e5e7eb; color: #374151; border: none; padding: 12px; border-radius: 10px; font-weight: 700; font-size: 0.9rem; cursor: pointer; flex: 1;">
@@ -127,10 +162,13 @@ if (listElem) {
                 </div>
             </div>
         `;
-    });
+        });
 
-    listElem.innerHTML = htmlContent;
+        listElem.innerHTML = htmlContent;
+    }
 }
+
+renderStorefront();
 
 // Toggle Form Visibility
 function toggleOrderForm(index) {
@@ -221,6 +259,7 @@ async function submitOrder(size, price, index) {
 // Bind nonAgentBuyers functions to window for HTML onclick attributes
 window.toggleOrderForm = toggleOrderForm;
 window.submitOrder = submitOrder;
+window.setNetwork = setNetwork;
 
 refreshWalletBalance();
 
