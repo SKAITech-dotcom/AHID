@@ -86,19 +86,47 @@ Deno.serve(async (request) => {
     const dispatch = await buyDataPackage(dataPackage, networkType, phone);
     const success = dispatch.success;
     providerAccepted = success;
-    const { error: completeError } = await admin.rpc('complete_agent_data_order', {
-      p_order_id: orderId,
-      p_success: success,
-      p_provider_response: dispatch.payload,
-    });
-    if (completeError) throw completeError;
 
     if (!success) {
+      // Provider rejected it outright: settle as failed, which refunds.
+      const { error: completeError } = await admin.rpc('complete_agent_data_order', {
+        p_order_id: orderId,
+        p_success: false,
+        p_provider_response: dispatch.payload,
+      });
+      if (completeError) throw completeError;
       const { data: balanceRefunded } = await admin.from('wallets').select('balance').eq('id', user.id).maybeSingle();
       return json({ error: dispatch.failureReason || 'The bundle provider did not accept the order.', orderReference: reference, refunded: true, walletBalance: Number(balanceRefunded?.balance ?? 0) }, 502);
     }
+
+    // Provider accepted it, which is not delivery. Record the provider order id
+    // so it can be reconciled later and leave the order in 'processing'.
+    const { error: dispatchError } = await admin.rpc('record_agent_data_dispatch', {
+      p_order_id: orderId,
+      p_provider: dispatch.provider,
+      p_provider_order_id: dispatch.orderId ?? null,
+      p_provider_response: dispatch.payload,
+    });
+    if (dispatchError) throw dispatchError;
+
+    // The 5-character code is what the agent reads out to the customer.
+    const { data: dispatched } = await admin
+      .from('agent_data_orders')
+      .select('short_code')
+      .eq('id', orderId)
+      .maybeSingle();
+
     const { data: wallet } = await admin.from('wallets').select('balance').eq('id', user.id).maybeSingle();
-    return json({ success: true, orderReference: reference, providerReference: dispatch.orderId, status: dispatch.status || 'successful', amount: saleAmount, walletBalance: Number(wallet?.balance ?? 0) });
+    return json({
+      success: true,
+      orderReference: reference,
+      shortCode: dispatched?.short_code ?? null,
+      providerReference: dispatch.orderId ?? null,
+      // Delivery is asynchronous; the dashboard reconciles this later.
+      status: 'processing',
+      amount: saleAmount,
+      walletBalance: Number(wallet?.balance ?? 0),
+    });
   } catch (error) {
     if (orderId && !providerAccepted) {
       try {

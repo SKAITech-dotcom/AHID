@@ -4,6 +4,67 @@ import { checkAgentAccessServer } from './agentAccessCheck.js';
    SKAITECH MASTER APPLICATION SCRIPT
    ========================================================================== */
 
+/* ==========================================================================
+   ORDER STATUS MODEL
+
+   Every service (airtime, utility, data) reports its status in its own
+   vocabulary: 'delivered', 'paid', 'successful', 'Processing', 'FAILED'... The
+   dashboard therefore maps all of them onto ONE canonical state before it
+   counts, filters or renders anything, so a row can never silently fall
+   outside every filter and vanish from the summary totals.
+   ========================================================================== */
+const ORDER_STATUS = Object.freeze({
+    PENDING: 'pending',
+    PROCESSING: 'processing',
+    COMPLETED: 'completed',
+    FAILED: 'failed',
+    CANCELLED: 'cancelled'
+});
+
+const ORDER_STATUS_LABELS = {
+    [ORDER_STATUS.PENDING]: 'Pending',
+    [ORDER_STATUS.PROCESSING]: 'Processing',
+    [ORDER_STATUS.COMPLETED]: 'Completed',
+    [ORDER_STATUS.FAILED]: 'Failed',
+    [ORDER_STATUS.CANCELLED]: 'Cancelled'
+};
+
+function normalizeOrderStatus(rawStatus) {
+    const value = String(rawStatus ?? '').trim().toLowerCase();
+    if (!value) return ORDER_STATUS.PENDING;
+    if (['successful', 'success', 'completed', 'complete', 'delivered', 'fulfilled', 'paid', 'approved'].includes(value)) {
+        return ORDER_STATUS.COMPLETED;
+    }
+    if (['cancelled', 'canceled', 'void', 'voided'].includes(value)) return ORDER_STATUS.CANCELLED;
+    if (['failed', 'failure', 'fail', 'rejected', 'expired', 'declined', 'error'].includes(value)) {
+        return ORDER_STATUS.FAILED;
+    }
+    if (['processing', 'in_progress', 'inprogress', 'accepted', 'dispatched', 'pending_provider'].includes(value)) {
+        return ORDER_STATUS.PROCESSING;
+    }
+    return ORDER_STATUS.PENDING;
+}
+
+function formatDataVolume(volumeInMB) {
+    const mb = Number(volumeInMB);
+    if (!Number.isFinite(mb) || mb <= 0) return 'Data bundle';
+    if (mb >= 1024) {
+        const gb = mb / 1024;
+        return `${Number.isInteger(gb) ? gb : gb.toFixed(1)}GB`;
+    }
+    return `${mb}MB`;
+}
+
+const SERVICE_LABELS = {
+    airtime: 'Airtime',
+    utility: 'Utility',
+    data: 'Instant Data'
+};
+
+function serviceLabel(type) {
+    return SERVICE_LABELS[type] || 'Other';
+}
+
 // --- COOKIE FALLBACK HELPERS ---
 function setCookie(name, value, days = 7) {
   const expires = new Date(Date.now() + days * 864e5).toUTCString();
@@ -526,19 +587,30 @@ async function processPurchase() {
 
       const newOrder = {
         id: data.orderReference,
+        shortId: data.shortCode || '',
+        type: 'data',
         network: currentOrder.network,
         phone,
         package: currentOrder.size,
         price: Number(data.amount ?? currentOrder.price).toFixed(2),
-        status: 'successful',
+        // The provider only reserves the order at this point; the real status
+        // comes from sync-agent-data-order, so never assume it is delivered.
+        status: data.status || ORDER_STATUS.PROCESSING,
+        providerRef: data.providerReference || '',
         date: new Date().toLocaleDateString()
       };
       const existingOrders = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
       existingOrders.unshift(newOrder);
       localStorage.setItem('skaitechOrders', JSON.stringify(existingOrders));
 
-      alert(`Order completed successfully!\nNetwork: ${newOrder.network}\nSize: ${newOrder.package}\nPhone: ${phone}`);
+      if (normalizeOrderStatus(newOrder.status) === ORDER_STATUS.COMPLETED) {
+        alert(`Order completed successfully!\nNetwork: ${newOrder.network}\nSize: ${newOrder.package}\nPhone: ${phone}`);
+      } else {
+        const code = newOrder.shortId ? ` (code ${newOrder.shortId})` : '';
+        alert(`Order submitted!\nNetwork: ${newOrder.network}\nSize: ${newOrder.package}\nPhone: ${phone}${code}\n\nThe bundle is being delivered. Track it under Orders.`);
+      }
       closeBuyModal();
+      if (document.getElementById('ordersTableBody')) loadStoredOrders();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to complete the data order. Your wallet was not charged if the provider failed.';
       alert(message);
@@ -562,10 +634,13 @@ function toggleAccordion(headerElement) {
 //  // REALTIME ORDER SEARCH FILTER
 let currentFilter = 'all';
 let currentServiceTab = 'all';
+let currentPage = 1;
+let ordersPerPage = 10;
 
 // SET ACTIVE FILTER PILL
 function setFilter(status, element) {
     currentFilter = status;
+    currentPage = 1;
 
     // Update pill active classes
     const buttons = document.querySelectorAll('#statusPills .pill-btn');
@@ -575,9 +650,10 @@ function setFilter(status, element) {
     filterOrders();
 }
 
-// SET ACTIVE SERVICE TYPE TAB (airtime / utility / all)
+// SET ACTIVE SERVICE TYPE TAB (airtime / data / utility / all)
 function setServiceTab(tab, element) {
     currentServiceTab = tab;
+    currentPage = 1;
 
     const buttons = document.querySelectorAll('#serviceTabs .pill-btn');
     buttons.forEach(btn => btn.classList.remove('active'));
@@ -586,53 +662,106 @@ function setServiceTab(tab, element) {
     filterOrders();
 }
 
-// FILTER ORDERS BY STATUS, SERVICE TYPE & PHONE SEARCH
-function filterOrders() {
+/**
+ * Every order the page knows about, cached so that searching and filtering
+ * re-paginate over the full list instead of only the rows that happen to be on
+ * the current page.
+ */
+let allOrders = [];
+
+function currentSearchTerm() {
   const searchInput = document.getElementById('orderSearch');
-  if (!searchInput) return;
+  return searchInput ? searchInput.value.trim().toLowerCase() : '';
+}
 
-  const searchText = searchInput.value.toLowerCase();
-  const rows = document.querySelectorAll('#ordersTableBody tr');
-  let visibleCount = 0;
+// FILTER, PAGINATE AND RENDER ORDERS BY STATUS, SERVICE TYPE & SEARCH TEXT
+function filterOrders() {
+  const tableBody = document.getElementById('ordersTableBody');
+  if (!tableBody) return;
 
-  rows.forEach(row => {
-    const statusMatch = (currentFilter === 'all') || (row.getAttribute('data-status') === currentFilter);
-    const serviceMatch = (currentServiceTab === 'all') || (row.getAttribute('data-service') === currentServiceTab);
-    const phoneMatch = row.innerText.toLowerCase().includes(searchText);
+  const searchText = currentSearchTerm();
 
-    if (statusMatch && serviceMatch && phoneMatch) {
-      row.style.display = '';
-      visibleCount++;
-    } else {
-      row.style.display = 'none';
+  const filteredOrders = allOrders.filter(order => {
+    const type = order.type || 'data';
+    if (currentServiceTab !== 'all' && type !== currentServiceTab) return false;
+    if (currentFilter !== 'all' && normalizeOrderStatus(order.status) !== normalizeOrderStatus(currentFilter)) {
+      return false;
     }
+    if (!searchText) return true;
+    // Search across the fields an agent would actually recall an order by,
+    // including both the 5-character code and the long tracking reference.
+    return [order.shortId, order.id, order.network, order.phone, order.package, order.providerRef, order.date]
+      .some(field => String(field || '').toLowerCase().includes(searchText));
   });
 
-  // Update total orders found counter text
-  const countDisplay = document.getElementById('ordersCountText');
-  if (countDisplay) {
-    countDisplay.textContent = `${visibleCount} orders found`;
-  }
+  // Summary totals always describe every order, not just the filtered page.
+  updateTransactionSummary(allOrders);
+
+  tableBody.innerHTML = '';
+
+  const startIndex = (currentPage - 1) * ordersPerPage;
+  const paginatedOrders = filteredOrders.slice(startIndex, startIndex + Number(ordersPerPage));
+
+  paginatedOrders.forEach(order => {
+    const status = normalizeOrderStatus(order.status);
+    const label = ORDER_STATUS_LABELS[status];
+    const type = order.type || 'data';
+    const row = document.createElement('tr');
+    row.setAttribute('data-status', status);
+    row.setAttribute('data-service', type);
+    // Orders show their short 5-character code; the long reference stays in the
+    // row (and in the search index) so it can still be tracked.
+    const orderId = order.shortId || order.id;
+    // The network belongs with the package details; the Service column names
+    // the product (Airtime / Instant Data / Utility) instead of a network.
+    const details = [order.network, order.package].filter(Boolean).join(' · ');
+    const providerRef = order.providerRef
+        ? `<span class="cell-ref">${order.providerRef}</span>`
+        : '<span class="cell-muted">-</span>';
+    row.innerHTML = `
+        <td class="cell-id">#${orderId}</td>
+        <td>${serviceLabel(type)}</td>
+        <td>${order.phone || '-'}</td>
+        <td>${details || '-'}</td>
+        <td><span class="status-badge badge-${status}">${label}</span></td>
+        <td>${providerRef}</td>
+        <td class="cell-date">${order.date || ''}</td>
+    `;
+    tableBody.appendChild(row);
+  });
 
   // Toggle between Empty State message and Data Table display
   const emptyState = document.getElementById('emptyState');
   const table = document.getElementById('ordersTable');
+  const emptyTitle = document.querySelector('#emptyState h3');
   const emptyText = document.querySelector('#emptyState p');
   if (emptyText) {
     emptyText.textContent = currentServiceTab === 'airtime'
       ? "You haven't placed any airtime purchases yet, or try searching with a different reference or phone number."
       : currentServiceTab === 'utility'
       ? "You haven't settled any utility bills yet, or try searching with a different reference or phone number."
+      : currentServiceTab === 'data'
+      ? "You haven't purchased any data bundles yet, or try searching with a different reference or phone number."
       : "You haven't placed any orders yet, or try searching with a different phone number.";
   }
+  if (emptyTitle) {
+    emptyTitle.textContent = searchText ? 'No matching orders' : 'No orders found';
+  }
 
-  if (visibleCount === 0) {
+  if (paginatedOrders.length === 0) {
     if (emptyState) emptyState.style.display = 'block';
     if (table) table.style.display = 'none';
   } else {
     if (emptyState) emptyState.style.display = 'none';
     if (table) table.style.display = 'table';
   }
+
+  const countDisplay = document.getElementById('ordersCountText');
+  if (countDisplay) {
+    countDisplay.textContent = `${filteredOrders.length} order${filteredOrders.length === 1 ? '' : 's'} found`;
+  }
+
+  updatePaginationUI(filteredOrders.length);
 }
 // LOAD AND DISPLAY ORDERS WITH STATUS ACTIONS
 // RENDER TABLE (AUTOMATIC DISPLAY - NO DROPDOWN)
@@ -646,21 +775,46 @@ function maskPhoneDisplay(phone) {
 function updateTransactionSummary(orders) {
     const airtimeCount = orders.filter(o => o.type === 'airtime').length;
     const utilityCount = orders.filter(o => o.type === 'utility').length;
-    const completed = orders.filter(o => o.status === 'Completed').length;
-    const failed = orders.filter(o => o.status === 'Failed' || o.status === 'Canceled').length;
-    const pending = orders.filter(o => o.status === 'Pending' || o.status === 'Processing').length;
+    const dataCount = orders.filter(o => o.type === 'data').length;
 
-    const statAirtime = document.getElementById('statAirtime');
-    const statUtility = document.getElementById('statUtility');
-    const statCompleted = document.getElementById('statCompleted');
-    const statFailed = document.getElementById('statFailed');
-    const statPending = document.getElementById('statPending');
+    // Count against the canonical state, not the raw provider wording, so a new
+    // status string can never leave an order uncounted.
+    const tally = orders.reduce((acc, order) => {
+        acc[normalizeOrderStatus(order.status)] += 1;
+        return acc;
+    }, { pending: 0, processing: 0, completed: 0, failed: 0, cancelled: 0 });
 
-    if (statAirtime) statAirtime.textContent = airtimeCount;
-    if (statUtility) statUtility.textContent = utilityCount;
-    if (statCompleted) statCompleted.textContent = completed;
-    if (statFailed) statFailed.textContent = failed;
-    if (statPending) statPending.textContent = pending;
+    const setStat = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+
+    setStat('statAirtime', airtimeCount);
+    setStat('statUtility', utilityCount);
+    setStat('statData', dataCount);
+    setStat('statCompleted', tally.completed);
+    setStat('statFailed', tally.failed + tally.cancelled);
+    setStat('statPending', tally.pending + tally.processing);
+}
+
+/**
+ * Asks the backend to check any data bundle orders that are still in flight
+ * against the provider. Data is delivered asynchronously, so this is what moves
+ * an order from Processing to Completed (or refunds it when it fails) instead of
+ * guessing. Failures are non-fatal: the page still renders from the database.
+ */
+async function syncAgentDataOrders() {
+    try {
+        const session = await getValidAgentSession();
+        if (!session) return;
+        const { error } = await supabase.functions.invoke('sync-agent-data-order', {
+            body: {},
+            headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (error) console.warn('Data order sync did not complete:', error.message || error);
+    } catch (error) {
+        console.warn('Data order sync could not run:', error);
+    }
 }
 
 async function loadStoredOrders() {
@@ -672,13 +826,17 @@ async function loadStoredOrders() {
     try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
+            // Reconcile in-flight data orders before reading them, so the table
+            // shows the provider's real outcome rather than a stale snapshot.
+            await syncAgentDataOrders();
+
             // Server-scoped transactions (airtime + utility) from the agent-transactions edge function.
             const txData = await fetchAgentTransactions();
 
             // Data bundle orders remain scoped via RLS to the authenticated agent.
             const { data: dataOrders } = await supabase
                 .from('agent_data_orders')
-                .select('*')
+                .select('id, provider_reference, short_code, provider_order_id, network_type, phone, volume_mb, amount, status, created_at')
                 .eq('agent_id', user.id)
                 .order('created_at', { ascending: false })
                 .limit(50);
@@ -688,6 +846,7 @@ async function loadStoredOrders() {
                 txData.airtime.forEach(o => {
                     remoteOrders.push({
                         id: o.reference || o.id.slice(0, 8),
+                        shortId: o.shortCode || '',
                         type: 'airtime',
                         network: o.networkLabel,
                         phone: o.phoneMasked,
@@ -702,6 +861,7 @@ async function loadStoredOrders() {
                 txData.utility.forEach(o => {
                     remoteOrders.push({
                         id: o.reference || o.id.slice(0, 8),
+                        shortId: o.shortCode || '',
                         type: 'utility',
                         network: o.billLabel,
                         phone: o.phoneMasked,
@@ -716,12 +876,13 @@ async function loadStoredOrders() {
                 dataOrders.forEach(o => {
                     remoteOrders.push({
                         id: o.provider_reference || o.id.slice(0, 8),
+                        shortId: o.short_code || '',
                         type: 'data',
                         network: (o.network_type || '').toUpperCase(),
                         phone: maskPhoneDisplay(o.phone),
-                        package: `${o.volume_mb >= 1024 ? (o.volume_mb / 1024) + 'GB' : o.volume_mb + 'MB'} (GHS ${Number(o.amount).toFixed(2)})`,
-                        status: o.status === 'successful' ? 'Completed' : (o.status === 'failed' ? 'Canceled' : 'Processing'),
-                        providerRef: o.provider_reference || '',
+                        package: `${formatDataVolume(o.volume_mb)} (GHS ${Number(o.amount).toFixed(2)})`,
+                        status: o.status,
+                        providerRef: o.provider_order_id || o.provider_reference || '',
                         date: new Date(o.created_at).toLocaleDateString()
                     });
                 });
@@ -741,15 +902,13 @@ async function loadStoredOrders() {
         const existingIds = new Set(savedOrders.map(s => String(s.id).toUpperCase()));
         localAirtime.forEach(o => {
             if (o.reference && !existingIds.has(String(o.reference).toUpperCase())) {
-                const isDelivered = o.airtimeStatus === 'delivered';
-                const isFailed = o.airtimeStatus === 'failed';
                 savedOrders.push({
                     id: o.reference,
                     type: 'airtime',
                     network: (o.network || 'AIRTIME').toUpperCase(),
                     phone: maskPhoneDisplay(o.phone),
                     package: `Airtime (GHS ${Number(o.amount).toFixed(2)})`,
-                    status: isDelivered ? 'Completed' : (isFailed ? 'Failed' : 'Processing'),
+                    status: o.airtimeStatus || 'pending',
                     providerRef: '',
                     date: o.createdAt ? new Date(o.createdAt).toLocaleDateString() : 'Recent'
                 });
@@ -759,150 +918,17 @@ async function loadStoredOrders() {
         // Ignore local cache read error
     }
 
-    // Update summary stat cards
-    updateTransactionSummary(savedOrders);
-
-    tableBody.innerHTML = '';
-
-    // 1. Filter orders based on active tab and service type
-    const filteredOrders = savedOrders.filter(order => {
-        if (currentServiceTab !== 'all' && order.type !== currentServiceTab) return false;
-        if (currentFilter === 'all') return true;
-        return (order.status || '').toLowerCase() === currentFilter.toLowerCase();
-    });
-
-    // 2. Handle empty state display
-    const emptyState = document.getElementById('emptyState');
-    const table = document.getElementById('ordersTable');
-    if (emptyState) {
-        if (filteredOrders.length === 0) {
-            emptyState.style.display = 'block';
-            if (table) table.style.display = 'none';
-        } else {
-            emptyState.style.display = 'none';
-            if (table) table.style.display = 'table';
-        }
-    }
-
-    // 3. Calculate dynamic slice for pagination
-    const startIndex = (currentPage - 1) * ordersPerPage;
-    const endIndex = startIndex + Number(ordersPerPage);
-    const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
-
-    // 4. Render rows
-    paginatedOrders.forEach(order => {
-        const row = document.createElement('tr');
-        row.setAttribute('data-status', (order.status || '').toLowerCase());
-        row.setAttribute('data-service', (order.type || 'data'));
-        const providerRefCell = order.providerRef ? `<span style="font-size: 0.75rem; font-family: monospace; color: #64748b;">${order.providerRef}</span>` : '<span style="color: #cbd5e1;">-</span>';
-        row.innerHTML = `
-            <td style="padding: 10px;"><strong>#${order.id}</strong></td>
-            <td style="padding: 10px;">${order.network || '-'}</td>
-            <td style="padding: 10px;">${order.phone || '-'}</td>
-            <td style="padding: 10px;">${order.package || '-'}</td>
-            <td style="padding: 10px;">
-                <span class="status-badge badge-${(order.status || 'pending').toLowerCase()}">${order.status || 'Pending'}</span>
-            </td>
-            <td style="padding: 10px;">${providerRefCell}</td>
-            <td style="padding: 10px;">
-                <span style="font-size: 0.8rem; color: #64748b;">${order.date || ''}</span>
-            </td>
-        `;
-        tableBody.appendChild(row);
-    });
-
-    updatePaginationUI(filteredOrders.length);
-}
-
-// SIMULATED AUTOMATIC STATUS PROGRESSION
-function triggerAutoApiFlow(orderId) {
-  // Move to Processing after 4 seconds
-  setTimeout(() => {
-    updateOrderStatusInMemory(orderId, 'processing');
-  }, 4000);
-
-  // Move to Completed after 10 seconds
-  setTimeout(() => {
-    updateOrderStatusInMemory(orderId, 'completed');
-  }, 10000);
-}
-
-function updateOrderStatusInMemory(orderId, newStatus) {
-  const savedOrders = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
-  const order = savedOrders.find(item => item.id === orderId);
-  if (order) {
-    order.status = newStatus;
-    localStorage.setItem('skaitechOrders', JSON.stringify(savedOrders));
-
-    // Auto-refresh table view if on orders.html
-    if (document.getElementById('ordersTableBody')) {
-      loadStoredOrders();
-    }
-  }
+    // Cache the full list; filterOrders() owns filtering, pagination and
+    // rendering so the search box and the filter pills behave consistently.
+    allOrders = savedOrders;
+    currentPage = 1;
+    filterOrders();
 }
 
 // RUN ON PAGE LOAD
 document.addEventListener('DOMContentLoaded', () => {
   loadStoredOrders();
 });
-
- let currentPage = 1;
-let ordersPerPage = 10;
- currentFilter = 'all';
-
-// function setFilter(filterType) {
-//     currentFilter = filterType;
-//     currentPage = 1;
-//     loadStoredOrders();
-// }
-
-// function loadStoredOrders() {
-//     const tableBody = document.getElementById('ordersTableBody');
-//     if (!tableBody) return;
-
-//     const savedOrders = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
-//     tableBody.innerHTML = '';
-
-//     // 1. Filter orders based on active tab
-//     const filteredOrders = savedOrders.filter(order => {
-//         if (currentFilter === 'all') return true;
-//         return order.status.toLowerCase() === currentFilter.toLowerCase();
-//     });
-
-//     // 2. Handle empty state display
-//     const emptyState = document.getElementById('emptyState');
-//     if (emptyState) {
-//         if (filteredOrders.length === 0) {
-//             emptyState.style.display = 'block';
-//         } else {
-//             emptyState.style.display = 'none';
-//         }
-//     }
-
-//     // 3. Calculate dynamic slice for pagination
-//     const startIndex = (currentPage - 1) * ordersPerPage;
-//     const endIndex = startIndex + Number(ordersPerPage);
-//     const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
-
-//     // 4. Render rows
-//     paginatedOrders.forEach(order => {
-//         const row = document.createElement('tr');
-//         row.setAttribute('data-status', order.status.toLowerCase());
-//         row.innerHTML = `
-//             <td style="padding: 10px;"><strong>#${order.id}</strong></td>
-//             <td style="padding: 10px;">${order.network}</td>
-//             <td style="padding: 10px;">${order.phone}</td>
-//             <td style="padding: 10px;">${order.package}</td>
-//             <td style="padding: 10px;">
-//                 <span class="status-badge badge-${order.status.toLowerCase()}">${order.status}</span>
-//             </td>
-//         `;
-//         tableBody.appendChild(row);
-//     });
-
-//     updatePaginationUI(filteredOrders.length);
-// }
-
 
 function updatePaginationUI(totalOrders) {
   const totalPages = Math.ceil(totalOrders / ordersPerPage) || 1;
@@ -917,42 +943,14 @@ function updatePaginationUI(totalOrders) {
 
 function changePage(direction) {
   currentPage += direction;
-  loadStoredOrders();
+  filterOrders();
 }
 
 function changePageSize(newSize) {
-  ordersPerPage = Number(newSize);
-  currentPage = 1;
-  loadStoredOrders();
+    ordersPerPage = Number(newSize);
+    currentPage = 1;
+    filterOrders();
 }
-
-// // SIMULATED AUTOMATIC STATUS PROGRESSION
-// function triggerAutoApiFlow(orderId) {
-//   setTimeout(() => {
-//     updateOrderStatusInMemory(orderId, 'processing');
-//   }, 4000);
-
-//   setTimeout(() => {
-//     updateOrderStatusInMemory(orderId, 'completed');
-//   }, 10000);
-// }
-
-// function updateOrderStatusInMemory(orderId, newStatus) {
-//   const savedOrders = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
-//   const order = savedOrders.find(item => item.id === orderId);
-//   if (order) {
-//     order.status = newStatus;
-//     localStorage.setItem('skaitechOrders', JSON.stringify(savedOrders));
-
-//     if (document.getElementById('ordersTableBody')) {
-//       loadStoredOrders();
-//     }
-//   }
-// }
-
-document.addEventListener('DOMContentLoaded', () => {
-  loadStoredOrders();
-});
 
 function handleReportMessage(event) {
     event.preventDefault();
@@ -998,30 +996,6 @@ if (menuToggleBtn && dropdownMenu) {
 //     const dropdown = document.getElementById('dropdownMenu');
 //     const symbol = document.getElementById('menuIconSymbol');
 
-//     // Toggles your dropdown menu visibility
-//     dropdown.classList.toggle('show');
-
-//     // Switches between the 3 lines and the 'X' close icon
-//     if (symbol.innerText === 'Ã¢â€°Â¡') {
-//         symbol.innerText = 'Ã¢Å“â€¢';
-//     } else {
-//         symbol.innerText = 'Ã¢â€°Â¡';
-//     }
-// }
-// function toggleMenu() {
-//     const dropdown = document.getElementById('dropdownMenu');
-//     const symbol = document.getElementById('menuIconSymbol');
-
-//     // Toggles your dropdown menu visibility
-//     dropdown.classList.toggle('show');
-
-//     // Switches between the 3 lines and the 'X' close icon
-//     if (symbol.innerText === 'Ã¢â€°Â¡') {
-//         symbol.innerText = 'Ã¢Å“â€¢';
-//     } else {
-//         symbol.innerText = 'Ã¢â€°Â¡';
-//     }
-// }
 
 function toggleMenu() {
     const dropdown = document.getElementById('dropdownMenu');
@@ -1081,7 +1055,7 @@ function togglePasswordVisibility() {
 function checkOrderBalanceBeforeAction(orderPrice) {
     let balance = parseFloat(localStorage.getItem('agent_wallet_balance')) || 0;
     if (balance < orderPrice) {
-        alert(`Ã¢Å¡Â Ã¯Â¸Â Warning: Your account balance (GHS ${balance.toFixed(2)}) is too low for this transaction! Please fund your wallet.`);
+        alert(`⚠️ Warning: Your account balance (GHS ${balance.toFixed(2)}) is too low for this transaction! Please fund your wallet.`);
         window.location.href = 'agentWallet.html';
         return false;
     }

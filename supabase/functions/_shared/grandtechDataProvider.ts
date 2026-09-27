@@ -46,6 +46,40 @@ export interface GrandTechBuyResult {
   failureReason?: string;
 }
 
+/**
+ * Strips everything we do not need out of a provider response before it is
+ * logged or written to the database.
+ *
+ * The GrandTechHub order endpoint echoes the reseller account itself back in an
+ * `identity` object, which includes the API key and a password hash. Persisting
+ * or logging the raw response would copy those secrets into every row of
+ * public_data_orders / agent_data_orders, so only known-safe fields are kept.
+ */
+export function sanitizeGrandTechPayload(
+  payload: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  const safe: Record<string, unknown> = {};
+
+  for (const key of ['orderId', 'totalPrice', 'status', 'createdAt', 'message', 'error']) {
+    const value = source[key];
+    if (value !== undefined && value !== null) safe[key] = value;
+  }
+
+  if (Array.isArray(source.packages)) {
+    safe.packages = (source.packages as Record<string, unknown>[]).map((pkg) => {
+      const entry: Record<string, unknown> = {};
+      for (const key of ['network', 'packageId', 'size', 'price', 'status']) {
+        const value = pkg?.[key];
+        if (value !== undefined && value !== null) entry[key] = value;
+      }
+      return entry;
+    });
+  }
+
+  return safe;
+}
+
 export function grandtechDataBaseUrl(): string {
   const explicit = Deno.env.get('GRANDTECH_DATA_URL');
   if (explicit) return explicit.replace(/\/+$/, '');
@@ -155,14 +189,16 @@ export async function resolveGrandTechPackage(
 }
 
 /** Provider order status vocabulary, mapped onto our own states. */
-export type GrandTechOrderState = 'successful' | 'failed' | 'processing';
+export type GrandTechOrderState = 'successful' | 'failed' | 'cancelled' | 'processing';
 
 const SUCCESSFUL_STATES = new Set(['SUCCESSFUL', 'SUCCESS', 'COMPLETED', 'DELIVERED', 'FULFILLED']);
-const FAILED_STATES = new Set(['FAILED', 'FAILURE', 'REJECTED', 'CANCELLED', 'CANCELED', 'EXPIRED']);
+const FAILED_STATES = new Set(['FAILED', 'FAILURE', 'REJECTED', 'EXPIRED']);
+const CANCELLED_STATES = new Set(['CANCELLED', 'CANCELED']);
 
 export function mapGrandTechOrderState(status: string): GrandTechOrderState {
   const normalized = String(status || '').trim().toUpperCase();
   if (SUCCESSFUL_STATES.has(normalized)) return 'successful';
+  if (CANCELLED_STATES.has(normalized)) return 'cancelled';
   if (FAILED_STATES.has(normalized)) return 'failed';
   return 'processing';
 }
@@ -254,7 +290,7 @@ export async function buyGrandTechPackage(
       totalPrice: Number.isFinite(Number(payload.totalPrice))
         ? Number(payload.totalPrice)
         : undefined,
-      payload,
+      payload: sanitizeGrandTechPayload(payload),
       failureReason: success
         ? undefined
         : String(payload.message || payload.error || 'The data provider declined the order.'),

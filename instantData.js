@@ -14,6 +14,26 @@ const NETWORK_META = {
   airteltigo: { label: 'AirtelTigo', logoBg: '#2563eb', logoColor: '#ffffff', text: 'AT' },
 };
 
+/**
+ * Data bundles are delivered asynchronously: the backend returns 'processing'
+ * as soon as the provider accepts the order, and the order only becomes
+ * 'successful' once delivery is confirmed. Treating anything that is not
+ * 'successful' as a failure would report a healthy, in-flight order as
+ * "Delivery Issue" to the customer, so every state is described explicitly.
+ */
+const DATA_ORDER_STATE = {
+  successful: { icon: '✅', title: 'Bundle Delivered!', label: 'Successful' },
+  failed: { icon: '⚠️', title: 'Delivery Issue', label: 'Failed' },
+  cancelled: { icon: '⚠️', title: 'Order Cancelled', label: 'Cancelled' },
+  processing: { icon: '⏳', title: 'Processing Bundle', label: 'Processing' },
+  pending: { icon: '⏳', title: 'Processing Bundle', label: 'Pending' },
+};
+
+function describeDataOrderStatus(rawStatus) {
+  const key = String(rawStatus || '').trim().toLowerCase();
+  return DATA_ORDER_STATE[key] || DATA_ORDER_STATE.processing;
+}
+
 // Bundle catalog (sizes in MB, prices in GHS) — mirrors the public-data
 // catalog enforced on the backend. Low-cost non-expiry bundles.
 const BUNDLES = {
@@ -277,7 +297,7 @@ export async function startInstantDataCheckout() {
 
     if (Number.isFinite(Number(data.walletBalance))) applyWalletBalance(data.walletBalance);
 
-    const statusIcon = data.status === 'successful' ? '✅' : '⚠️';
+    const state = describeDataOrderStatus(data.status);
     const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
     orders.unshift({
       trackingId: data.orderReference,
@@ -286,18 +306,22 @@ export async function startInstantDataCheckout() {
       price: `GHS ${bundle.price.toFixed(2)}`,
       name,
       phone,
-      status: data.status === 'successful' ? 'Successful' : 'Failed',
+      status: state.label,
       date: new Date().toLocaleString(),
     });
     localStorage.setItem('skaitech_orders', JSON.stringify(orders));
 
     openResult(
-      data.status === 'successful' ? 'Bundle Delivered!' : 'Delivery Issue',
-      data.message || (data.status === 'successful'
+      state.title,
+      data.message || (state.label === 'Successful'
         ? 'The bundle has been delivered to the recipient line. Your wallet balance was updated.'
-        : 'Delivery failed and your wallet has been refunded.'),
+        : state.label === 'Failed'
+          ? 'Delivery failed and your wallet has been refunded.'
+          : state.label === 'Cancelled'
+            ? 'The order was cancelled and your wallet has been refunded.'
+            : 'Payment received. The bundle is being delivered and will arrive shortly.'),
       data.orderReference,
-      statusIcon,
+      state.icon,
     );
   } catch (err) {
     console.warn('Instant data checkout error:', err);
@@ -325,14 +349,14 @@ async function handlePaymentCallback() {
 
     if (data?.order) {
       const order = data.order;
-      const status = order.status;
-      const icon = status === 'successful' ? '✅' : status === 'failed' ? '⚠️' : '⏳';
-      const title = status === 'successful' ? 'Bundle Delivered!' : status === 'failed' ? 'Delivery Issue' : 'Processing Bundle';
-      const desc = status === 'successful'
+      const state = describeDataOrderStatus(order.status);
+      const desc = state.label === 'Successful'
         ? 'Payment confirmed and the data bundle has been delivered to the recipient line.'
-        : status === 'failed'
+        : state.label === 'Failed'
           ? 'Payment was received but delivery failed. Our team will follow up or refund.'
-          : 'Payment received. Your bundle is still being processed and will arrive shortly.';
+          : state.label === 'Cancelled'
+            ? 'The order was cancelled and the payment refunded.'
+            : 'Payment received. Your bundle is still being processed and will arrive shortly.';
       const volumeGB = (order.volume_mb || 0) / 1024;
 
       const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
@@ -343,12 +367,12 @@ async function handlePaymentCallback() {
         price: `GHS ${Number(order.sale_amount).toFixed(2)}`,
         name: saved.name || '',
         phone: saved.phone || '',
-        status: status === 'successful' ? 'Successful' : status === 'failed' ? 'Failed' : 'Processing',
+        status: state.label,
         date: new Date(order.created_at || Date.now()).toLocaleString(),
       });
       localStorage.setItem('skaitech_orders', JSON.stringify(orders));
 
-      openResult(title, desc, reference, icon);
+      openResult(state.title, desc, reference, state.icon);
     } else {
       openResult('Order Status', 'We could not fetch the latest status right now. Check the Track Order page shortly.', reference, '⏳');
     }

@@ -81,7 +81,10 @@ export async function buyDataPackage(
       success: result.success,
       provider: 'grandtech',
       orderId: result.orderId,
-      status: result.success ? 'successful' : 'failed',
+      // GrandTechHub accepting the order only means it reserved the balance. The
+      // bundle is delivered later, so the order stays in 'processing' until a
+      // status poll (or a callback) confirms the outcome.
+      status: result.success ? 'processing' : 'failed',
       payload: result.payload,
       failureReason: result.failureReason,
     };

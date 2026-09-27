@@ -1337,16 +1337,30 @@ body {
 
 /* YELLOW THEME BACKGROUND & LAYOUT */
 .orders-body-yellow {
-  background-color: yellow; /* Vibrant light yellow theme */
+  /* Yellow theme: a warm, saturated yellow rather than pure #ffff00, which was
+     unreadable behind the cards and made the page look like it was clipping. */
+  background-color: #ffe873;
+  background-image: linear-gradient(180deg, #fff4b8 0%, #ffe873 45%, #ffd93d 100%);
+  background-attachment: fixed;
   min-height: 100vh;
   font-family: system-ui, -apple-system, sans-serif;
   margin: 0;
+  /* Nothing on this page is allowed to push the viewport sideways. */
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+.orders-body-yellow *,
+.orders-body-yellow *::before,
+.orders-body-yellow *::after {
+  box-sizing: border-box;
 }
 
 .orders-page-wrapper {
-  max-width: 600px;
+  width: 100%;
+  max-width: 900px;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding: 24px 16px 40px;
 }
 
 /* SEARCH INPUT */
@@ -1379,7 +1393,21 @@ body {
   display: flex;
   gap: 8px;
   margin-bottom: 20px;
+  /* The pill rows are the one place horizontal scrolling is intended, so keep it
+     inside the row and off the page itself. */
   overflow-x: auto;
+  max-width: 100%;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.status-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.service-tabs {
+  margin-bottom: 12px;
 }
 
 .pill-btn {
@@ -1410,7 +1438,7 @@ body {
 
 /* ORDERS CARD CONTAINER */
 .orders-content-card {
-  background:wheat;
+  background: #fffdf2;
 
   border-radius: 20px;
   padding: 40px 20px;
@@ -1419,14 +1447,33 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* The table below is wider than this card on a phone. Letting the card clip
+     it (rather than containing it) is what used to cut the columns off. */
+  overflow: hidden;
+}
+
+/*
+ * Dedicated horizontal scroll container for the orders table.
+ *
+ * min-width: 0 is the important part: as a flex child, a table will otherwise
+ * refuse to shrink below its intrinsic width and widen the whole card.
+ */
+.orders-table-scroll {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* TRANSACTION SUMMARY CARDS */
 .tx-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  /* minmax(140px, ...) rather than 150px so two cards still fit side by side
+     on a 320px phone instead of collapsing to a single column. */
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 
 .tx-stat-card {
@@ -1438,6 +1485,7 @@ body {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  min-width: 0;
 }
 
 .tx-stat-label {
@@ -1457,6 +1505,7 @@ body {
 
 .tx-stat-airtime .tx-stat-label { color: #c026d3; }
 .tx-stat-utility .tx-stat-label { color: #d97706; }
+.tx-stat-data .tx-stat-label { color: #0284c7; }
 .tx-stat-ok { color: #16a34a; }
 .tx-stat-bad { color: #dc2626; }
 .tx-stat-pending { color: #d97706; }
@@ -1490,6 +1539,9 @@ body {
 .orders-data-table {
   width: 100%;
   border-collapse: collapse;
+  /* Below this width the columns start overlapping, so the table keeps its
+     natural width and the .orders-table-scroll wrapper scrolls it sideways. */
+  min-width: 720px;
 }
 
 .orders-data-table th, .orders-data-table td {
@@ -1497,7 +1549,31 @@ body {
   text-align: left;
   border-bottom: 1px solid #f1f5f9;
   font-size: 0.85rem;
+  vertical-align: middle;
 }
+
+.orders-data-table th {
+  white-space: nowrap;
+  color: #64748b;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.orders-data-table .cell-id {
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.orders-data-table .cell-ref {
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #64748b;
+}
+
+.orders-data-table .cell-muted { color: #cbd5e1; }
+.orders-data-table .cell-date { color: #64748b; font-size: 0.8rem; white-space: nowrap; }
 
 /* STATUS BADGES */
 .status-badge {
@@ -1507,9 +1583,81 @@ body {
   font-weight: 700;
   text-transform: capitalize;
 }
-.badge-pending { background: #fef3c7; color: #d97706; }
-.badge-processing { background: #e0f2fe; color: #0284c7; }
-.badge-completed { background: #dcfce7; color: #16a34a; }
+.badge-pending { background: #fef3c7; color: #b45309; }
+.badge-processing { background: #e0f2fe; color: #0369a1; }
+.badge-completed { background: #dcfce7; color: #15803d; }
+.badge-failed { background: #fee2e2; color: #b91c1c; }
+.badge-cancelled { background: #f1f5f9; color: #64748b; }
+
+/* PAGINATION CONTROLS */
+.pagination-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.page-size-selector,
+.pagination-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #555;
+  flex-wrap: wrap;
+}
+
+.page-size-selector label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-right: 2px;
+}
+
+.page-size-selector select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+}
+
+.pagination-buttons button {
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+}
+
+.pagination-buttons button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#pageIndicator { font-weight: 700; font-size: 0.85rem; }
+
+/* ORDERS PAGE RESPONSIVE LAYOUT */
+@media (max-width: 768px) {
+  .orders-page-wrapper { padding: 18px 12px 32px; }
+  .orders-content-card { padding: 24px 12px; border-radius: 16px; }
+  .search-input-wrapper input { padding: 12px 14px 12px 40px; font-size: 0.9rem; }
+  .search-input-wrapper .search-icon { left: 14px; }
+  .pill-btn { padding: 9px 16px; font-size: 0.85rem; }
+  .tx-stats-grid { gap: 10px; }
+  .tx-stat-card { padding: 12px 13px; }
+  .tx-stat-value { font-size: 1.3rem; }
+  .tx-stat-label { font-size: 0.72rem; }
+}
+
+@media (max-width: 480px) {
+  .orders-page-wrapper { padding: 14px 10px 28px; }
+  .orders-content-card { padding: 18px 8px; }
+  .pagination-container { flex-direction: column; align-items: stretch; }
+  .pagination-buttons { justify-content: space-between; }
+  .status-pills { margin-bottom: 16px; }
+}
 
 /* Support Section Container */
 .support-section {

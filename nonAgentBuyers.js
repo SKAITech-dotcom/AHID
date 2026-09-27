@@ -192,15 +192,16 @@ async function showPaymentResult() {
         return;
     }
     const order = data.order;
-    if (order.status === 'successful') {
+    const state = String(order.status || '').toLowerCase();
+    if (state === 'successful') {
         const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
         orders.unshift({ trackingId: paymentReference, network: order.network_type.toUpperCase(), size: `${order.volume_mb / 1024}GB`, price: `GHS ${Number(order.sale_amount).toFixed(2)}`, name: saved.name, phone: saved.phone, status: 'Successful', date: new Date(order.created_at).toLocaleString() });
         localStorage.setItem('skaitech_orders', JSON.stringify(orders));
         alert(`Payment confirmed and bundle delivered.\nTracking ID: ${paymentReference}`);
-    } else if (order.status === 'failed') {
-        alert('Payment was received, but the bundle could not be delivered. Please contact support for a refund.');
+    } else if (state === 'failed' || state === 'cancelled') {
+        alert('Payment was received, but the bundle could not be delivered. The order was refunded.');
     } else {
-        alert('Payment received. Your bundle is still being processed. Please check again shortly.');
+        alert('Payment received. Your bundle is still being delivered. Please check again shortly.');
     }
 }
 
@@ -243,13 +244,28 @@ async function submitOrder(size, price, index) {
         if (Number.isFinite(Number(data.walletBalance))) applyWalletBalance(data.walletBalance);
 
         sessionStorage.setItem('skaitech_public_payment', JSON.stringify({ reference: data.orderReference, email, name, phone }));
-        if (data.status === 'successful') {
-            const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
-            orders.unshift({ trackingId: data.orderReference, network: network.toUpperCase(), size, price, name, phone, status: 'Successful', date: new Date().toLocaleString() });
-            localStorage.setItem('skaitech_orders', JSON.stringify(orders));
+        // The provider only reserves the order at this point, so a 'processing'
+        // response is a success, not a failure.
+        const state = String(data.status || '').toLowerCase();
+        const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
+        orders.unshift({
+            trackingId: data.orderReference,
+            network: network.toUpperCase(),
+            size,
+            price,
+            name,
+            phone,
+            status: state === 'successful' ? 'Successful' : state === 'cancelled' ? 'Cancelled' : state === 'failed' ? 'Failed' : 'Processing',
+            date: new Date().toLocaleString()
+        });
+        localStorage.setItem('skaitech_orders', JSON.stringify(orders));
+
+        if (state === 'failed' || state === 'cancelled') {
+            alert(data.message || 'This order could not be completed and your wallet has been refunded.');
+        } else if (state === 'successful') {
             alert(`Purchase successful. Bundle delivered to ${phone}.\nTracking ID: ${data.orderReference}`);
         } else {
-            alert(data.message || 'Purchase could not be completed. Your wallet has been refunded.');
+            alert(data.message || `Order received. The bundle is being delivered to ${phone}.\nTracking ID: ${data.orderReference}`);
         }
     } catch (error) {
         alert(error.message || 'Unable to complete the purchase.');

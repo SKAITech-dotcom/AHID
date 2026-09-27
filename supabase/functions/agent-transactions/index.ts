@@ -53,13 +53,13 @@ Deno.serve(async (request) => {
     const [airtimeRes, utilityRes] = await Promise.all([
       admin
         .from('airtime_orders')
-        .select('id, payment_reference, recipient_phone, network, amount, fee_amount, gross_amount, payment_method, payment_status, airtime_status, provider_reference, failure_reason, created_at')
+        .select('id, payment_reference, recipient_phone, network, amount, fee_amount, gross_amount, payment_method, payment_status, airtime_status, provider_reference, short_code, failure_reason, created_at')
         .eq('agent_id', agentId)
         .order('created_at', { ascending: false })
         .limit(200),
       admin
         .from('utility_orders')
-        .select('id, bill_type, bill_category, account_number, package_name, amount, fee_amount, gross_amount, customer_name, customer_phone, payment_reference, status, token_code, provider_reference, created_at')
+        .select('id, bill_type, bill_category, account_number, package_name, amount, fee_amount, gross_amount, customer_name, customer_phone, payment_reference, status, token_code, provider_reference, short_code, created_at')
         .eq('agent_id', agentId)
         .order('created_at', { ascending: false })
         .limit(200),
@@ -76,6 +76,7 @@ Deno.serve(async (request) => {
         type: 'airtime',
         id: o.id,
         reference: o.payment_reference,
+        shortCode: o.short_code,
         network: o.network,
         networkLabel: NETWORK_LABELS[o.network] || String(o.network).toUpperCase(),
         phone: o.recipient_phone,
@@ -104,6 +105,7 @@ Deno.serve(async (request) => {
         type: 'utility',
         id: o.id,
         reference: o.payment_reference,
+        shortCode: o.short_code,
         billType: o.bill_type,
         billLabel: label,
         account: o.account_number,
