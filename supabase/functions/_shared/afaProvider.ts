@@ -28,7 +28,15 @@ export interface AfaSubmitResult {
   failureReason?: string;
 }
 
-const GRANDTECH_AFA_URL = 'https://backend.grandtech.cloud/api/afa';
+const GRANDTECH_AFA_DEFAULT_URL = 'https://backend.grandtech.cloud/api/afa';
+
+/**
+ * Base AFA endpoint. Override with GRANDTECH_AFA_URL when the provider moves or
+ * when the documented host does not resolve.
+ */
+export function grandtechAfaUrl(): string {
+  return (Deno.env.get('GRANDTECH_AFA_URL') || GRANDTECH_AFA_DEFAULT_URL).replace(/\/+$/, '');
+}
 
 export function grandtechApiKey(): string {
   const key = Deno.env.get('GRANDTECH_API_KEY');
@@ -64,7 +72,7 @@ export async function submitAfaRegistration(data: AfaSubmission): Promise<AfaSub
   };
 
   try {
-    const response = await fetch(GRANDTECH_AFA_URL, {
+    const response = await fetch(grandtechAfaUrl(), {
       method: 'POST',
       headers: {
         'x-api-key': apiKey,
