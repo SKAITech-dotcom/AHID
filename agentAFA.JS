@@ -11,9 +11,33 @@ function escapeHtml(value) {
         .replaceAll("'", '&#039;');
 }
 
+let afaFee = 12.00;
+
+// Reads the live AFA price from service_pricing so the figure shown here always
+// matches what the server charges. Falls back to 12.00 if it cannot be read.
+async function loadAfaFee() {
+    try {
+        const { data } = await supabase
+            .from('service_pricing')
+            .select('price')
+            .eq('service', 'afa')
+            .maybeSingle();
+        const price = Number(data?.price);
+        if (Number.isFinite(price) && price >= 0) afaFee = Math.round(price * 100) / 100;
+    } catch (err) {
+        console.warn('Could not load AFA price:', err);
+    }
+    const shown = afaFee.toFixed(2);
+    const main = document.getElementById('afaFeeDisplay');
+    if (main) main.textContent = `GHS ${shown}`;
+    const inline = document.getElementById('afaFeeInline');
+    if (inline) inline.textContent = shown;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const authResult = await requireVerifiedAgent({ redirectOnFail: true });
     if (!authResult) return;
+    await loadAfaFee();
     await loadAfaRequests();
 });
 

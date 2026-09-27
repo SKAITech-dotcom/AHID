@@ -14,6 +14,27 @@ function submitFormError(message) {
     alert(message || 'Unable to submit registration. Please try again.');
 }
 
+// Loads the live AFA price from service_pricing so the figure shown matches
+// what the server charges. Falls back to 12.00 if it cannot be read.
+async function loadAfaFee() {
+    try {
+        const { data } = await supabase
+            .from('service_pricing')
+            .select('price')
+            .eq('service', 'afa')
+            .maybeSingle();
+        const price = Number(data?.price);
+        if (Number.isFinite(price) && price >= 0) {
+            const el = document.getElementById('afaFeeDisplay');
+            if (el) el.textContent = `GHS ${price.toFixed(2)}`;
+        }
+    } catch (err) {
+        console.warn('Could not load AFA price:', err);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadAfaFee);
+
 // Handle New Registration Submission
 async function submitRegistration() {
     const name = document.getElementById('regName').value.trim();

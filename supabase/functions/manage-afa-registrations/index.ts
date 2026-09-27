@@ -1,4 +1,5 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
+import { resolveServicePrice } from '../_shared/pricing.ts';
 import { chargeWallet, refundWallet } from '../_shared/wallet.ts';
 import { submitAfaRegistration } from '../_shared/afaProvider.ts';
 
@@ -44,7 +45,11 @@ Deno.serve(async (request) => {
         const occupation = String(body.occupation || '').trim();
         const priceId = String(body.priceId || '').trim();
         // Price is server-side only; a client-supplied `amount` is ignored.
-        const feeAmount = Math.round(Number(Deno.env.get('AFA_FEE_AMOUNT') ?? '12') * 100) / 100;
+        const feeAmount = await resolveServicePrice('afa', {
+          supabase: admin,
+          envVar: 'AFA_FEE_AMOUNT',
+          fallback: 12,
+        });
 
         if (!fullName || !phone || !town || !idNumber || !occupation) {
           return json({ error: 'All registration fields are required.' }, 400);

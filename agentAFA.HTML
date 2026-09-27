@@ -82,6 +82,12 @@
                 <label style="font-size: 13px; font-weight: 500;">Occupation *</label>
                 <input type="text" id="afaOccupation" placeholder="e.g. Farmer, Trader, Student" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
 
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin-top: 4px;">
+                    <span style="font-size: 13px; color: #475569;">Registration Fee (from your wallet)</span>
+                    <strong id="afaFeeDisplay" style="font-size: 15px; color: #0f172a;">GHS 12.00</strong>
+                </div>
+                <p style="font-size: 11px; color: #64748b; margin: 6px 0 0;">Your wallet is debited GHS <span id="afaFeeInline">12.00</span> when you submit. If the provider rejects the request, the full amount is refunded automatically.</p>
+
                 <button onclick="submitNewAfa()" style="background: #2563eb; color: white; border: none; padding: 12px; border-radius: 4px; font-weight: 500; cursor: pointer; margin-top: 10px;">Submit Request</button>
             </div>
         </div>
