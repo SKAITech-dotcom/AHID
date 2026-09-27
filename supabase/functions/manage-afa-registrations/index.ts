@@ -160,7 +160,15 @@ Deno.serve(async (request) => {
   } catch (error) {
     console.error('manage-afa-registrations error:', error);
     const message = error instanceof Error ? error.message : 'Unable to process AFA request.';
-    const status = message.includes('Authentication') ? 401 : message.toLowerCase().includes('insufficient') ? 400 : 500;
+    // An absent, expired or malformed session must surface as 401, or the
+    // client shows a generic failure instead of sending the agent to log in.
+    const status = /authentication is required|session is invalid|sign in/i.test(message)
+      ? 401
+      : /agent account required|verified/i.test(message)
+        ? 403
+        : message.toLowerCase().includes('insufficient')
+          ? 400
+          : 500;
     return json({ error: message }, status);
   }
 });

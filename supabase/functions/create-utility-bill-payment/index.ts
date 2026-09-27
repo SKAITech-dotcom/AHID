@@ -123,13 +123,16 @@ Deno.serve(async (request) => {
       }
     }
     const message = error instanceof Error ? error.message : 'Unable to process utility bill payment.';
-    const status = message.includes('Authentication is required') || message.includes('session is invalid')
+    const insufficient = message.toLowerCase().includes('insufficient');
+    // An absent, expired or malformed session must surface as 401, or the
+    // client shows a generic failure instead of sending the agent to log in.
+    const status = /authentication is required|session is invalid|sign in/i.test(message)
       ? 401
-      : message.includes('Agent account required')
-      ? 403
-      : message.toLowerCase().includes('insufficient')
-      ? 400
-      : 500;
-    return json({ error: message, insufficientFunds: message.toLowerCase().includes('insufficient') || undefined }, status);
+      : /agent account required|verified/i.test(message)
+        ? 403
+        : insufficient
+          ? 400
+          : 500;
+    return json({ error: message, insufficientFunds: insufficient || undefined }, status);
   }
 });

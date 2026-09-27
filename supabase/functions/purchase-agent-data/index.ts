@@ -141,7 +141,13 @@ Deno.serve(async (request) => {
     }
     console.error(error);
     const msg = errorMessage(error, 'Unable to complete data purchase.');
-    const status = msg.includes('Authentication') ? 401 : msg.includes('Verified agent') ? 403 : 500;
+    // An absent, expired or malformed session all have to surface as 401, or
+    // the client shows a generic failure instead of sending the agent to log in.
+    const status = /authentication is required|session is invalid|sign in/i.test(msg)
+      ? 401
+      : /agent account required|verified/i.test(msg)
+        ? 403
+        : 500;
     return json({ error: msg }, status);
   }
 });

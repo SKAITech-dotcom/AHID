@@ -52,7 +52,13 @@ Deno.serve(async (request) => {
   } catch (error) {
     console.error('manage-agent-pricing error:', error);
     const message = error instanceof Error ? error.message : 'Unable to process agent pricing request.';
-    const status = message.includes('Authentication') ? 401 : message.includes('Verified agent') ? 403 : 500;
+    // An absent, expired or malformed session must surface as 401, or the
+    // client shows a generic failure instead of sending the agent to log in.
+    const status = /authentication is required|session is invalid|sign in/i.test(message)
+      ? 401
+      : /agent account required|verified/i.test(message)
+        ? 403
+        : 500;
     return json({ error: message }, status);
   }
 });
