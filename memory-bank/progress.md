@@ -21,7 +21,10 @@
 
 **Not started / backlog**
 
-- `GRANDTECH_API_KEY` (+ `GRANDTECH_AFA_PRICE_ID`, `GRANDTECH_AFA_CALLBACK`) are still unset, so AFA provider submission fails and auto-refunds. Needs the user's GrandTechHub credentials via `supabase secrets set`.
+- **Airtime is now wallet-only (commit `9061f75`)**: `airtime.js` default `paymentMethod = 'wallet'`, gateway fee removed (fee always `0.00`, gross = net), FLOW B Paystack block deleted, `selectPaymentMethod` rejects non-wallet, balance now taken from the server's `walletBalance` via `applyWalletBalance`. `airtime.html` shows only the wallet card. `checkPaymentCallback` kept intentionally for pre-switch in-flight Paystack orders.
+- `GRANDTECH_API_KEY` is set, but **`backend.grandtech.cloud` is NXDOMAIN** (confirmed via 8.8.8.8; apex `grandtech.cloud` -> 184.168.131.241, port 443 refused). The AFA host is wrong/unreachable, so AFA cannot complete. `_shared/afaProvider.ts` now reads `GRANDTECH_AFA_URL` (env, defaults to the documented URL) so the host is fixable via `supabase secrets set` with no redeploy.
+- `GRANDTECH_AFA_PRICE_ID` and the real AFA price are still unknown; fee currently falls back to `AFA_FEE_AMOUNT` (GHS 8).
+- AFA forms (agent + public) now clear the new DOB/occupation fields and apply the server `walletBalance`; the public form checks for an agent session on submit (tracker stays public).
 - Frontend is live on Vercel, so GitHub pushes do not reach the phone until a Vercel redeploy.
 - Hubtel Airtime live integration (awaiting API creds); `_shared/airtimeProvider.ts` still returns `pending_provider`.
 - Hubtel Instant Data API integration (current delivery via remadata).
