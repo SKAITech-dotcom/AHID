@@ -353,6 +353,7 @@ const networkPackages = {
     themeClass: 'theme-mtn',
     logoUrl: 'img/mtn-logo.png',
     packages: [
+      { size: '1 GB', price: 4.30 },
       { size: '2 GB', price: 8.80 },
       { size: '3 GB', price: 13.20 },
       { size: '4 GB', price: 17.60 },
@@ -373,6 +374,7 @@ const networkPackages = {
     themeClass: 'theme-telecel',
     logoUrl: 'img/telecel-logo.png',
     packages: [
+      { size: '5 GB', price: 21.00 },
       { size: '10 GB', price: 40.00 },
       { size: '15 GB', price: 60.00 },
       { size: '20 GB', price: 78.00 },
