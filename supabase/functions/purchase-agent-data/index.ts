@@ -1,5 +1,5 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
-import { buySwiftPackage, resolveSwiftPackage } from '../_shared/swiftProvider.ts';
+import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
 
 const NETWORKS = new Set(['mtn', 'telecel', 'airteltigo']);
 const catalog: Record<string, Record<number, number>> = {
@@ -48,14 +48,14 @@ Deno.serve(async (request) => {
     if (!saleAmount) return json({ error: 'This bundle is not available at the current agent price.' }, 400);
 
     let providerCost: number;
-    let swiftPackage;
+    let dataPackage;
     try {
-      swiftPackage = await resolveSwiftPackage(networkType, volumeInMB);
+      dataPackage = await resolveDataPackage(networkType, volumeInMB);
     } catch (error) {
       return json({ error: errorMessage(error, 'Unable to confirm the current bundle price.') }, 502);
     }
-    if (!swiftPackage) return json({ error: 'Unable to confirm the current bundle price.' }, 502);
-    providerCost = Number(swiftPackage.price);
+    if (!dataPackage) return json({ error: 'Unable to confirm the current bundle price.' }, 502);
+    providerCost = dataPackage.costGhs;
     if (!Number.isFinite(providerCost) || providerCost <= 0) {
       return json({ error: 'Unable to confirm the current bundle price.' }, 502);
     }
@@ -75,7 +75,7 @@ Deno.serve(async (request) => {
     }
     orderId = reservedOrder;
 
-    const dispatch = await buySwiftPackage(swiftPackage.id, phone);
+    const dispatch = await buyDataPackage(dataPackage, networkType, phone);
     const success = dispatch.success;
     providerAccepted = success;
     const { error: completeError } = await admin.rpc('complete_agent_data_order', {

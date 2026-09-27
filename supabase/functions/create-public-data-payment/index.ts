@@ -1,5 +1,5 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
-import { buySwiftPackage, resolveSwiftPackage } from '../_shared/swiftProvider.ts';
+import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
 import { chargeWallet, refundWallet } from '../_shared/wallet.ts';
 
 const catalog: Record<string, Record<number, number>> = {
@@ -73,9 +73,9 @@ Deno.serve(async (request) => {
     const companyAgentId = Deno.env.get('PUBLIC_DATA_AGENT_ID');
     if (!companyAgentId) throw new Error('Public data provider funding is not configured.');
 
-    const swiftPackage = await resolveSwiftPackage(networkType, volumeInMB);
-    if (!swiftPackage) throw new Error('Unable to confirm the provider bundle price.');
-    const providerCost = Number(swiftPackage.price);
+    const dataPackage = await resolveDataPackage(networkType, volumeInMB);
+    if (!dataPackage) throw new Error('Unable to confirm the provider bundle price.');
+    const providerCost = dataPackage.costGhs;
     if (!Number.isFinite(providerCost) || providerCost <= 0) throw new Error('Unable to confirm the provider bundle price.');
 
     const providerReference = `PUB-DATA-${crypto.randomUUID()}`;
@@ -85,7 +85,7 @@ Deno.serve(async (request) => {
     });
     if (reserveError) throw reserveError;
 
-    const dispatch = await buySwiftPackage(swiftPackage.id, customerPhone);
+    const dispatch = await buyDataPackage(dataPackage, networkType, customerPhone);
     await admin.rpc('complete_agent_data_order', {
       p_order_id: providerOrderId, p_success: dispatch.success, p_provider_response: dispatch.payload,
     });
