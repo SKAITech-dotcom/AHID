@@ -44,10 +44,19 @@ export function grandtechApiKey(): string {
   return key;
 }
 
-export function afaCallbackUrl(reference: string): string {
-  const siteUrl = Deno.env.get('SITE_URL');
-  const base = siteUrl?.replace(/\/+$/, '') || 'https://skaitechgh.com';
-  return `${base}/AFA.html?reference=${encodeURIComponent(reference)}`;
+/**
+ * Status callback the provider POSTs to. This must be a server endpoint, so it
+ * points at the afa-webhook Edge Function - not at a page on the static site.
+ * The frontend is static hosting and cannot receive POSTs.
+ */
+export function afaCallbackUrl(): string {
+  const explicit = Deno.env.get('GRANDTECH_AFA_CALLBACK');
+  if (explicit) return explicit;
+
+  const supabaseUrl = (Deno.env.get('SUPABASE_URL') || '').replace(/\/+$/, '');
+  if (supabaseUrl) return `${supabaseUrl}/functions/v1/afa-webhook`;
+
+  return 'https://mxovqblxizvjsmudjsjf.supabase.co/functions/v1/afa-webhook';
 }
 
 /**
@@ -67,7 +76,7 @@ export async function submitAfaRegistration(data: AfaSubmission): Promise<AfaSub
     idNumber: data.idNumber,
     idType: data.idType,
     date_of_birth: data.dateOfBirth,
-    callback: afaCallbackUrl(data.reference),
+    callback: afaCallbackUrl(),
     clientReference: data.reference,
   };
 
