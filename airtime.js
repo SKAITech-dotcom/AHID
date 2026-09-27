@@ -1,8 +1,8 @@
 import { supabase } from './supabaseClient.js';
 import { checkAgentAccessServer } from './agentAccessCheck.js';
+import { applyWalletBalance } from './walletBalance.js';
 
 // Configuration & Constants
-const FEE_PERCENT = 0.015;
 const NETWORK_PREFIXES = {
   mtn: ['024', '054', '055', '059', '053', '025'],
   telecel: ['020', '050'],
@@ -11,7 +11,7 @@ const NETWORK_PREFIXES = {
 
 // Application State
 let selectedNetwork = 'mtn';
-let paymentMethod = 'paystack';
+let paymentMethod = 'wallet';
 let currentAmount = 10;
 let agentUser = null;
 let agentWalletBalance = 0;
@@ -27,11 +27,10 @@ function $(id) {
   return document.getElementById(id);
 }
 
-// Calculate Gross Amount with Paystack Gateway fee
+// Airtime is wallet-only: the agent pays the face value, so there is no
+// gateway fee to add on top.
 function calculateGross(net) {
-  if (paymentMethod === 'wallet') return net;
-  const safeRate = Number.isFinite(FEE_PERCENT) ? FEE_PERCENT : 0.015;
-  return Math.round(((net / (1 - safeRate)) + Number.EPSILON) * 100) / 100;
+  return net;
 }
 
 // Prefix to Network Detection
@@ -161,19 +160,25 @@ export function handleAmountInput() {
 
 // Payment Method Selection
 export function selectPaymentMethod(method) {
-  if (method === 'wallet' && !agentUser) {
+  // Wallet-only: Paystack is the wallet top-up rail, not an airtime payment
+  // method, so it is no longer offered here.
+  if (method !== 'wallet') {
+    showNotice('Airtime is paid from your agent wallet. Add funds from the wallet page if your balance is low.', true);
+    return;
+  }
+
+  if (!agentUser) {
     if (confirm('Agent Wallet payment is available to registered Skaitech Agents. Would you like to log in as an agent?')) {
       window.location.href = 'login.html';
     }
     return;
   }
 
-  paymentMethod = method;
+  paymentMethod = 'wallet';
 
-  $('payMethodPaystack').classList.toggle('active', method === 'paystack');
-  $('payMethodWallet').classList.toggle('active', method === 'wallet');
+  $('payMethodWallet').classList.add('active');
 
-  $('summaryPaymentMethod').textContent = method === 'wallet' ? 'Agent Wallet (0% Fee)' : 'Paystack Checkout';
+  $('summaryPaymentMethod').textContent = 'Agent Wallet (0% Fee)';
 
   updateSummary();
 }
@@ -182,7 +187,7 @@ export function selectPaymentMethod(method) {
 export function updateSummary() {
   const netAmount = Math.max(0, currentAmount);
   const grossAmount = calculateGross(netAmount);
-  const fee = paymentMethod === 'wallet' ? 0.00 : Math.max(0, Math.round((grossAmount - netAmount + Number.EPSILON) * 100) / 100);
+  const fee = 0.00;
 
   $('summaryAirtimeNet').textContent = netAmount.toFixed(2);
   $('summaryFeeAmount').textContent = fee.toFixed(2);
@@ -358,83 +363,51 @@ export async function handleAirtimeSubmit(event) {
     // Stable idempotency key for this purchase attempt (server deduplicates).
     const clientRequestId = newClientRequestId();
 
-    // FLOW A: AGENT WALLET
-    if (paymentMethod === 'wallet') {
-      if (agentWalletBalance < netAmount) {
-        throw new Error(`Insufficient wallet balance (GHS ${agentWalletBalance.toFixed(2)}). Please deposit funds or pay with Paystack.`);
-      }
-
-      showProcessing('Deducting from agent wallet & dispatching top-up...');
-
-      const { data, error } = await supabase.functions.invoke('create-airtime-payment', {
-        body: {
-          network: selectedNetwork,
-          phone,
-          amount: netAmount,
-          paymentMethod: 'wallet',
-          customerEmail: emailInput || agentUser?.email || '',
-          clientRequestId,
-        }
-      });
-
-      hideProcessing();
-
-      if (error || data?.error) {
-        throw new Error(data?.error || error?.message || 'Wallet transaction failed.');
-      }
-
-      // Decrement local wallet balance
-      agentWalletBalance = Math.max(0, agentWalletBalance - netAmount);
-      $('agentBannerBalance').textContent = agentWalletBalance.toFixed(2);
-      $('walletCardSubtitle').textContent = `Balance: GHS ${agentWalletBalance.toFixed(2)}`;
-
-      showReceipt({
-        reference: data.reference,
-        phone: data.phone || phone,
-        network: data.network || selectedNetwork,
-        amount: data.amount || netAmount,
-        grossAmount: data.amount || netAmount,
-        paymentMethod: 'wallet',
-        airtimeStatus: data.airtimeStatus,
-        createdAt: new Date().toISOString()
-      });
-
-      return;
+    if (agentWalletBalance < netAmount) {
+      throw new Error(`Insufficient wallet balance (GHS ${agentWalletBalance.toFixed(2)}). Please deposit funds from the wallet page.`);
     }
 
-    // FLOW B: PAYSTACK CHECKOUT
-    showProcessing('Redirecting to Paystack secure checkout...');
-
-    // Cache parameters for return
-    sessionStorage.setItem('skaitech_airtime_pending', JSON.stringify({
-      network: selectedNetwork,
-      phone,
-      amount: netAmount,
-      email: emailInput || `${phone}@customer.skaitechgh.com`
-    }));
+    showProcessing('Deducting from agent wallet & dispatching top-up...');
 
     const { data, error } = await supabase.functions.invoke('create-airtime-payment', {
       body: {
         network: selectedNetwork,
         phone,
         amount: netAmount,
-        paymentMethod: 'paystack',
-        customerEmail: emailInput,
+        paymentMethod: 'wallet',
+        customerEmail: emailInput || agentUser?.email || '',
         clientRequestId,
       }
     });
 
+    hideProcessing();
+
     if (error || data?.error) {
-      hideProcessing();
-      throw new Error(data?.error || error?.message || 'Could not initialize Paystack payment.');
+      throw new Error(data?.error || error?.message || 'Wallet transaction failed.');
     }
 
-    if (data?.authorizationUrl) {
-      window.location.href = data.authorizationUrl;
+    // Trust the server-returned balance (it is authoritative and accounts for
+    // any provider refund).
+    if (data.walletBalance !== undefined && data.walletBalance !== null) {
+      agentWalletBalance = Number(data.walletBalance);
+      applyWalletBalance(agentWalletBalance);
     } else {
-      hideProcessing();
-      throw new Error('Payment gateway did not return authorization link.');
+      agentWalletBalance = Math.max(0, agentWalletBalance - netAmount);
+      applyWalletBalance(agentWalletBalance);
     }
+
+    showReceipt({
+      reference: data.reference,
+      phone: data.phone || phone,
+      network: data.network || selectedNetwork,
+      amount: data.amount || netAmount,
+      grossAmount: data.amount || netAmount,
+      paymentMethod: 'wallet',
+      airtimeStatus: data.airtimeStatus,
+      createdAt: new Date().toISOString()
+    });
+
+    return;
   } catch (err) {
     hideProcessing();
     showNotice(err.message || 'Error completing request.', true);

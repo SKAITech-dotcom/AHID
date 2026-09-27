@@ -1,5 +1,6 @@
 import { requireVerifiedAgent } from './agentAuthGuard.js';
 import { supabase } from './supabaseClient.js';
+import { applyWalletBalance } from './walletBalance.js';
 
 function escapeHtml(value) {
     return String(value)
@@ -64,11 +65,17 @@ async function submitNewAfa() {
     alert("✅ AFA Registration submitted successfully!");
     closeAddAfaModal();
 
+    if (data.walletBalance !== undefined && data.walletBalance !== null) {
+        applyWalletBalance(data.walletBalance);
+    }
+
     // Clear fields
     document.getElementById('afaName').value = '';
     document.getElementById('afaPhone').value = '';
     document.getElementById('afaTown').value = '';
     document.getElementById('afaIdNumber').value = '';
+    document.getElementById('afaDob').value = '';
+    document.getElementById('afaOccupation').value = '';
 
     await loadAfaRequests();
 }

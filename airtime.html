@@ -271,23 +271,11 @@
 
         <!-- 5. PAYMENT METHOD -->
         <div class="field">
-          <label>4. Choose Payment Method</label>
+          <label>4. Payment Method</label>
           <div class="payment-methods-grid">
             
-            <!-- Paystack Card -->
-            <div class="payment-method-card active" id="payMethodPaystack" onclick="selectPaymentMethod('paystack')">
-              <div class="payment-method-icon">
-                <i class="fa-solid fa-credit-card"></i>
-              </div>
-              <div class="payment-method-details">
-                <h4>Paystack Checkout</h4>
-                <p>MTN MoMo, Telecel Cash, AT Money, Debit / Credit Cards</p>
-                <span class="payment-fee-badge">Gateway fee ~1.5%</span>
-              </div>
-            </div>
-
             <!-- Agent Wallet Card -->
-            <div class="payment-method-card" id="payMethodWallet" onclick="selectPaymentMethod('wallet')">
+            <div class="payment-method-card active" id="payMethodWallet">
               <div class="payment-method-icon" style="color: #10b981;">
                 <i class="fa-solid fa-wallet"></i>
               </div>
@@ -317,11 +305,11 @@
           </div>
           <div class="airtime-summary-row">
             <span>Payment Method:</span>
-            <span id="summaryPaymentMethod">Paystack Checkout</span>
+            <span id="summaryPaymentMethod">Agent Wallet (0% Fee)</span>
           </div>
           <div class="airtime-summary-row">
             <span>Processing Fee:</span>
-            <span>GHS <span id="summaryFeeAmount">0.15</span></span>
+            <span>GHS <span id="summaryFeeAmount">0.00</span></span>
           </div>
           <div class="airtime-summary-row total">
             <span>Total to Pay:</span>
@@ -372,7 +360,7 @@
         </div>
         <div class="row">
           <span>Payment Method</span>
-          <strong id="receiptPaymentMethod">Paystack</strong>
+                    <strong id="receiptPaymentMethod">Agent Wallet</strong>
         </div>
         <div class="row">
           <span>Delivery Status</span>

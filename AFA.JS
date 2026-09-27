@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient.js';
+import { applyWalletBalance } from './walletBalance.js';
 
 function escapeHtml(value) {
     return String(value)
@@ -28,6 +29,14 @@ async function submitRegistration() {
         return;
     }
 
+    // AFA is paid from the agent wallet, so a signed-in agent is required.
+    // The status tracker below stays public.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+        alert('AFA registration is available to Skaitech Agents only. Please sign in or register as an agent to continue using your wallet balance.');
+        return;
+    }
+
     const { data, error } = await supabase.functions.invoke('create-afa-registration', {
         body: { fullName: name, phone, town, idType, idNumber, dateOfBirth, occupation }
     });
@@ -35,6 +44,10 @@ async function submitRegistration() {
     if (error || data?.error) {
         submitFormError(data?.error || error?.message);
         return;
+    }
+
+    if (data.walletBalance !== undefined && data.walletBalance !== null) {
+        applyWalletBalance(data.walletBalance);
     }
 
     alert(data.message || 'AFA Registration submitted successfully! You can now track your status below.');
@@ -45,6 +58,8 @@ async function submitRegistration() {
     document.getElementById('regTown').value = '';
     document.getElementById('regIdType').value = '';
     document.getElementById('regIdNumber').value = '';
+    document.getElementById('regDateOfBirth').value = '';
+    document.getElementById('regOccupation').value = '';
 }
 
 // Handle Status Tracking Lookup
