@@ -1,0 +1,21 @@
+# Skaitech - https://skaitechgh.wasmer.app/
+# Everything here is a static marketing or self-service page, so crawling is
+# welcome. The agent portal still requires a session; only its pages are
+# disallowed, because indexing a login wall helps nobody.
+
+User-agent: *
+Allow: /
+
+# Agent-only pages: no public content to index, and they sit behind auth.
+Disallow: /dashboard.html
+Disallow: /orders.html
+Disallow: /airtime.html
+Disallow: /agentWallet.html
+Disallow: /deposit.html
+Disallow: /settings.html
+Disallow: /agentAFA.HTML
+Disallow: /STORE.HTML
+Disallow: /adminCashoutDeposits.html
+Disallow: /adminResultPins.html
+
+Sitemap: https://skaitechgh.wasmer.app/sitemap.xml

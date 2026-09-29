@@ -11,10 +11,10 @@ function escapeHtml(value) {
         .replaceAll("'", '&#039;');
 }
 
-let afaFee = 12.00;
+let afaFee = 11.00;
 
 // Reads the live AFA price from service_pricing so the figure shown here always
-// matches what the server charges. Falls back to 12.00 if it cannot be read.
+// matches what the server charges. Falls back to 11.00 if it cannot be read.
 async function loadAfaFee() {
     try {
         const { data } = await supabase

@@ -2,11 +2,11 @@
 
 **Current focus** (one short paragraph):
 
-Order centre overhaul for Skaitech: real provider-driven bundle statuses, 5-character order codes, a database-wide activity/audit trail, and a responsive yellow orders page. Migrations `20260930000000`-`20260930060000` are applied to `mxovqblxizvjsmudjsjf`, and `purchase-agent-data`, `sync-agent-data-order`, `agent-transactions` and `track-order` are deployed. The remaining step is to commit and push `main` so Wasmer rebuilds.
+Two changes pushed on top of the order-centre work: the AFA registration fee moved to GHS 11.00, and the site was made crawlable and indexable so a search for "skaitechgh" can find it. Migrations `20260930000000`-`20260930070000` are applied to `mxovqblxizvjsmudjsjf`; the four AFA/backend functions and the agent functions are deployed.
 
 **In progress**:
 
-- [ ] Commit and push `main`, then verify `https://skaitechgh.wasmer.app/` (orders page render, yellow background, 5-char codes, mobile table scroll).
+- [ ] Submit `https://skaitechgh.wasmer.app/` in Google Search Console and Bing Webmaster Tools. The technical side is done (robots.txt, sitemap, canonicals, OG/JSON-LD), but a `wasmer.app` subdomain will not appear in search results until it is actually submitted and crawled; expect days, not minutes.
 - [ ] Rotate the GrandTech API key (`supabase secrets set GRANDTECH_API_KEY=...`).
 - [ ] Ask the provider to raise the package caps: MTN 1GB `sales=1/limit=0`, Telecel 5GB `sales=20/limit=20`.
 
@@ -17,7 +17,8 @@ Order centre overhaul for Skaitech: real provider-driven bundle statuses, 5-char
 - Canonical order states are `pending`, `processing`, `completed`, `failed`, `cancelled`. `pending` is reserved for the public Paystack window; it is not a normal data-order state.
 - The activity log is written by a database trigger rather than application calls, so it captures writes from any client. Two deliberate safety properties: the trigger swallows its own errors (auditing must never block a business write), and `redact_audit_row()` strips provider credentials before the before/after rows are stored, so scrubbing a secret cannot copy it into the log.
 - `provider_response` is no longer persisted wholesale; the GrandTech adapter whitelists safe fields. Migration `20260930060000` scrubbed the rows that predated that fix.
-- Editing files with PowerShell `Set-Content`/`Get-Content` round-trips in this repo corrupts non-ASCII text (it added a BOM and mangled `•` into `â€¢`, and interprets markdown backticks as escape sequences such as `` `r `` = carriage return). Use the editor tools, or single-quoted PowerShell strings plus explicit UTF-8 reads/writes.
+- Editing files with PowerShell `Set-Content`/`Get-Content` round-trips in this repo corrupts non-ASCII text: it adds a BOM, mangles the bullet character U+2022 into the three characters `a-circumflex, euro, quote`, and treats markdown backticks as escape sequences (so `` `r `` becomes a carriage return and silently swallows the following letter). Use the editor tools, or single-quoted PowerShell strings plus explicit UTF-8 reads/writes.
+- The PowerShell console also renders correct UTF-8 as mojibake, so verify suspicious characters by codepoint (U+2304 = the down-arrowhead) before "fixing" them.
 - Orders page: one status normaliser plus a cached full list, so search/filter/pagination never re-query. The Instant Data metric, service tab and table rows come from the same source as the other services.
 
 **Open questions**:

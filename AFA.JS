@@ -15,7 +15,7 @@ function submitFormError(message) {
 }
 
 // Loads the live AFA price from service_pricing so the figure shown matches
-// what the server charges. Falls back to 12.00 if it cannot be read.
+// what the server charges. Falls back to 11.00 if it cannot be read.
 async function loadAfaFee() {
     try {
         const { data } = await supabase

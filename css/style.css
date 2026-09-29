@@ -1337,10 +1337,11 @@ body {
 
 /* YELLOW THEME BACKGROUND & LAYOUT */
 .orders-body-yellow {
-  /* Yellow theme: a warm, saturated yellow rather than pure #ffff00, which was
-     unreadable behind the cards and made the page look like it was clipping. */
-  background-color: #ffe873;
-  background-image: linear-gradient(180deg, #fff4b8 0%, #ffe873 45%, #ffd93d 100%);
+  /* Deep yellow. Rich gold rather than pastel, so the white cards on top of it
+     read as clearly raised. Pure #ffff00 was unreadable and looked like the page
+     was clipping at the edges. */
+  background-color: #ffc400;
+  background-image: linear-gradient(180deg, #ffd633 0%, #ffc400 45%, #e8a200 100%);
   background-attachment: fixed;
   min-height: 100vh;
   font-family: system-ui, -apple-system, sans-serif;
@@ -1442,7 +1443,9 @@ body {
 
   border-radius: 20px;
   padding: 40px 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  /* Deeper gold behind the card needs a slightly stronger shadow to keep the
+     card reading as raised rather than flat. */
+  box-shadow: 0 6px 20px rgba(120, 83, 0, 0.18);
   min-height: 260px;
   display: flex;
   align-items: center;
@@ -1484,7 +1487,7 @@ body {
   border-radius: 14px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 2px 6px rgba(120, 83, 0, 0.14);
   min-width: 0;
 }
 
