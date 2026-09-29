@@ -2,14 +2,24 @@
 
 **Current focus** (one short paragraph):
 
-Two changes pushed on top of the order-centre work: the AFA registration fee moved to GHS 11.00, and the site was made crawlable and indexable so a search for "skaitechgh" can find it. Migrations `20260930000000`-`20260930070000` are applied to `mxovqblxizvjsmudjsjf`; the four AFA/backend functions and the agent functions are deployed.
+A verification pass over the search work found and fixed a real contradiction, and turned up three open issues that need a decision from the user. Pushed: the AFA fee at GHS 11.00, the crawlability work, a correction to the crawler directives, and a database constraint on the short-code format. Migrations `20260930000000`-`20260930080000` are applied to `mxovqblxizvjsmudjsjf`.
 
 **In progress**:
 
+- [ ] **Decide what to do about the duplicate site at `https://skaitechgh.wasmer.app/SKAITechgh/`.** A stale nested copy of 38 site files is tracked in git and served publicly. It has the old title "Skaitech - Fast & Reliable Mobile Data in Ghana", no canonical and no robots meta, so it is a live duplicate-content competitor for the pages we just asked Google to index. Nothing in robots.txt disallows it. Deleting it is the clean fix, but that is 38 files and needs confirming nothing references them.
+- [ ] **`sitemap.xml` is served as `application/octet-stream`**, not `application/xml`. Wasmer's static server has no MIME mapping for `.xml` and there is no deploy config in the repo to change it. `robots.txt` (`text/plain`), `.html` and `.css` are all served correctly, so it is only the sitemap. Google usually still parses it, but it is a known cause of "Sitemap could not be read" on stricter crawlers. Needs either a Wasmer MIME/header mapping or a different way to serve the file.
+- [ ] **The 5MB-200MB bundles are offered but cannot be delivered.** `instantData.js` and `create-public-data-payment` both list 5, 10, 20, 30, 50, 100, 150 and 200 MB per network, but GrandTechHub's smallest package is 1GB and `resolveGrandTechPackage` requires an exact `volumeInMB / 1024` match, so an MB request can never resolve. The Swift provider matches on a "N gb" label and cannot serve them either. The order is refused and refunded, so no money is lost, but a customer can pick a bundle that is guaranteed to fail. No MB order has ever been paid. Either drop them from the storefront or ask GrandTechHub for MB packages.
+- [ ] **Four orders are stuck in `processing` with no provider acceptance** (MTN 1GB, 2026-09-09 to 2026-09-14, `provider_reference` NULL, `provider_amount` NULL, sale 4.20 and 15.00). They predate the status-tracking work. No `public_data_orders` row has ever reached `successful` or `failed`; the other 22 are `pending_payment`. Worth deciding whether to settle the four as failed and refund.
 - [ ] Ask GrandTechHub to raise the cap on MTN 1GB (`196c301f-...`, `sales=1 limit=0`) and Telecel 5GB (`3bb260b3-...`, `sales=20 limit=20`). Confirm with them what `limit=0` means, since `sales=1` against it is self-contradictory. These two are the only capped packages out of 43.
-- [ ] Submit `https://skaitechgh.wasmer.app/` in Google Search Console and Bing Webmaster Tools. The technical side is done (robots.txt, sitemap, canonicals, OG/JSON-LD), but a `wasmer.app` subdomain will not appear in search results until it is actually submitted and crawled; expect days, not minutes.
+- [ ] Submit `https://skaitechgh.wasmer.app/` in Google Search Console and Bing Webmaster Tools. The technical side is done, but a `wasmer.app` subdomain will not appear in search results until it is actually submitted and crawled; expect days, not minutes.
 
 **Decisions (recent)**:
+
+- Never trust a "done" report about a list of files without re-deriving the rule from the code. The crawler directives looked correct but two pages were simultaneously disallowed, indexable and in the sitemap; the truth came from reading the auth guards, not from the earlier summary.
+- Checked the three SEO layers against each other programmatically (robots.txt vs sitemap.xml vs each page's meta) rather than by eye, and wrote the check to fail loudly on any disagreement. Two of my own test harnesses were wrong before they were right (a column that did not exist, and comparing a byte array against a regex), so a passing check is only worth something once it has been seen to fail.
+- The short-code constraint was proved by generating 300 codes and by forcing a real violation, and the probe raises an exception so the transaction rolls itself back rather than relying on a cleanup step.
+- The frontend hardcoded retail catalogs and the backend catalogs were compared programmatically and agree on all 31 whole-GB bundles. `agent_pricing` currently has 0 override rows, so the "displayed price vs charged price" gap is latent rather than costing money today.
+- `instantData.html` and `airtime.html` are agent pages: they are not in `isPublicPage` or `isProtectedAgentPage` in `script.js`, but `agentNav.js` and each page's own script redirect anonymous users to login, so the page-level guard is what actually protects them.
 
 - Verified a replacement provider key by SHA-256 before deploying it, rather than trusting that a pasted key was new. Also proved the endpoint actually enforces the key by checking that a bogus one gets 401. Both worth repeating for any future credential rotation.
 - The provider reports an uncapped package as `limit = null` and a blocked one as a real number, so `0` is treated as zero allowed rather than "unset".
@@ -25,6 +35,8 @@ Two changes pushed on top of the order-centre work: the AFA registration fee mov
 
 **Open questions**:
 
+- Whether to delete the duplicate `SKAITechgh/` directory, disallow it, or add a redirect to the canonical pages.
+- Whether the MB bundles are a product decision (drop them) or a provider request (ask GrandTechHub for MB packages).
 - Whether the activity log should also cover authentication events (sign-in, sign-out, failed logins). The current trigger only sees row writes, so those would need explicit calls.
 - Whether historic activity should be backfilled; only changes made after migration `20260930010000` are recorded.
 
