@@ -2,7 +2,7 @@
 
 **Current focus** (one short paragraph):
 
-A verification pass over the search work found and fixed a real contradiction, and turned up three open issues that need a decision from the user. Pushed: the AFA fee at GHS 11.00, the crawlability work, a correction to the crawler directives, and a database constraint on the short-code format. Migrations `20260930000000`-`20260930080000` are applied to `mxovqblxizvjsmudjsjf`.
+The agent header now carries a notification bell and a dark-mode toggle ahead of the "Agent Portal" tag, backed by a real Supabase notifications table rather than mock data, and the dashboard's whole-GB bundles are named "Data Bundle" so they stop being confused with the separate Instant Data product. Migrations `20260930000000`-`20260930090000` are applied to `mxovqblxizvjsmudjsjf`. Still open from the previous pass: the duplicate site at `/SKAITechgh/`, the octet-stream sitemap, the undeliverable MB bundles, and four orders stuck in `processing`.
 
 **In progress**:
 
@@ -12,6 +12,12 @@ A verification pass over the search work found and fixed a real contradiction, a
 - [ ] **Four orders are stuck in `processing` with no provider acceptance** (MTN 1GB, 2026-09-09 to 2026-09-14, `provider_reference` NULL, `provider_amount` NULL, sale 4.20 and 15.00). They predate the status-tracking work. No `public_data_orders` row has ever reached `successful` or `failed`; the other 22 are `pending_payment`. Worth deciding whether to settle the four as failed and refund.
 - [ ] Ask GrandTechHub to raise the cap on MTN 1GB (`196c301f-...`, `sales=1 limit=0`) and Telecel 5GB (`3bb260b3-...`, `sales=20 limit=20`). Confirm with them what `limit=0` means, since `sales=1` against it is self-contradictory. These two are the only capped packages out of 43.
 - [ ] Submit `https://skaitechgh.wasmer.app/` in Google Search Console and Bing Webmaster Tools. The technical side is done, but a `wasmer.app` subdomain will not appear in search results until it is actually submitted and crawled; expect days, not minutes.
+
+- The two agent order tables do not agree on column names: `agent_data_orders` uses `status` and `agent_id`, `airtime_orders` uses `airtime_status` and `user_id`. Anything that spans both has to branch on the column that is actually present rather than assuming a schema. The notification trigger reads the row through `to_jsonb()` for this reason.
+- `escapeHtml` only exists on the AFA and admin pages, and `agentNav.js` loads before every other script on every agent page, so shared shell code cannot rely on it. `agentNav.js` has its own `escapeNotifText`.
+- The project uses hand-written CSS and Font Awesome only - no Tailwind, no Lucide, no build step, no `package.json`. `css/style.css` has no custom properties, so dark mode is an override layer, not a variable flip.
+- `.agent-portal-tag` had no CSS rule at all until commit `3daff82` and was rendering as bare text.
+- Notifications are RLS-only on purpose: an edge function would need the service role and could read and dismiss other agents' notices, which the browser client cannot do. Notices are written by a trigger and never deleted by the client.
 
 **Decisions (recent)**:
 
