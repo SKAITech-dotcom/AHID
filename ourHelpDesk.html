@@ -81,22 +81,9 @@
 <body style="background-color: #f3f4f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px;">
 
 <!-- Support & Send Message Section -->
- <a href="#" id="back-btn" class="back-btn" style="display: inline-flex; align-items: center; gap: 8px; background: #ffffff; color: #1e293b; padding: 10px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; border: 1px solid #cbd5e1; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px; transition: background 0.2s;">
-    <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+  <a href="dashboard.html#dataBundle" id="back-btn" class="back-btn" style="display: inline-flex; align-items: center; gap: 8px; background: #ffffff; color: #1e293b; padding: 10px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; border: 1px solid #cbd5e1; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px; transition: background 0.2s;">
+    <i class="fa-solid fa-arrow-left"></i> Back to Data Bundle
 </a>
-<SCRipt>
-   document.getElementById('back-btn').addEventListener('click', function(e) {
-    e.preventDefault();
-    
-    const previousPage = document.referrer;
-    
-    if (previousPage.includes('dashboard') || previousPage.includes('agent')) {
-        window.location.href = 'dashboard.html'; 
-    } else {
-        window.location.href = 'index.html'; 
-    }
-});
-</SCRipt>
 <div class="support-section" style="margin-top: 40px; padding: 20px; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
     <h3 style="margin-bottom: 8px; font-size: 1.5rem; color: #111827;">Send Us a Message</h3>
     <p style="color: #6b7280; margin-bottom: 24px;">Fill out the form below and we'll get back to you as soon as possible.</p>

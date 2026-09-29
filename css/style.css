@@ -2695,3 +2695,153 @@ html.dark td {
   border-color: #334155;
   color: #cbd5e1;
 }
+
+/* The help desk sends the agent back to dashboard.html#dataBundle. The header is
+   sticky, so without this the heading lands underneath it. */
+#dataBundle {
+  scroll-margin-top: 90px;
+}
+
+/* ---- Inline styles ------------------------------------------------
+   Nearly every page hard-codes its colours in a style="" attribute, and an
+   inline style outranks any selector, so these have to be !important and they
+   have to match the value that is actually in the markup.
+
+   The selectors below were generated from the colours that are actually
+   present in the repo rather than written by hand, and each keeps the exact
+   spelling of the declaration it matches, including the 10 declarations in
+   the repo that omit the space after the colon (style="color:#1f2937").
+
+   Every hex in the repo is ";"-terminated, so the semicolon inside the match
+   is what stops "color: #fff;" from also catching "color: #fff3cd;".
+
+   Background groups come first and set a light default text colour; the text
+   groups after them are later in source order and so take precedence for any
+   element that named a colour of its own. Saturated brand buttons (the blue
+   #2563eb, green #10b981, gold #ffcc00) are deliberately not touched. */
+
+[style*="background: #f3f4f6;"],
+[style*="background:#f3f4f6;"],
+[style*="background: #fff;"],
+[style*="background:#fff;"],
+[style*="background: #f8fafc;"],
+[style*="background:#f8fafc;"],
+[style*="background: #ffffff;"],
+[style*="background: white;"],
+[style*="background: #f1f5f9;"],
+[style*="background: #f8f9fa;"],
+[style*="background: #f9fafb;"] {
+  background-color: #16203a !important;
+  color: #e2e8f0 !important;
+}
+
+[style*="background: #1e293b;"],
+[style*="background:#1e293b;"] {
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
+}
+
+[style*="background: #eff6ff;"],
+[style*="background:#eff6ff;"],
+[style*="background: #eef6ff;"],
+[style*="background: #f0f4ff;"] {
+  background-color: #14264a !important;
+  color: #e2e8f0 !important;
+}
+
+[style*="background: #fef3c7;"],
+[style*="background: #fff3cd;"],
+[style*="background: #fefce8;"] {
+  background-color: #3a2d10 !important;
+  color: #e2e8f0 !important;
+}
+
+[style*="background: #fee2e2;"],
+[style*="background: #fef2f2;"] {
+  background-color: #3b1a1a !important;
+  color: #e2e8f0 !important;
+}
+
+[style*="background: #dcfce7;"],
+[style*="background: #ecfdf5;"],
+[style*="background: #f0fdf4;"] {
+  background-color: #12291f !important;
+  color: #e2e8f0 !important;
+}
+
+[style*="color: #1f2937;"],
+[style*="color:#1f2937;"],
+[style*="color: #1e293b;"],
+[style*="color:#1e293b;"],
+[style*="color: #111827;"],
+[style*="color: #0f172a;"],
+[style*="color: #212529;"] {
+  color: #f1f5f9 !important;
+}
+
+[style*="color: #1d4ed8;"],
+[style*="color:#1d4ed8;"],
+[style*="color: #3b82f6;"],
+[style*="color: #2563eb;"],
+[style*="color: #1e40af;"],
+[style*="color: #1e3a8a;"],
+[style*="color: #1a365d;"] {
+  color: #93c5fd !important;
+}
+
+[style*="color: #d97706;"],
+[style*="color: #78350f;"],
+[style*="color: #f59e0b;"],
+[style*="color: #b45309;"],
+[style*="color: #856404;"] {
+  color: #fcd34d !important;
+}
+
+[style*="color: #6b7280;"],
+[style*="color: #4b5563;"],
+[style*="color: #64748b;"],
+[style*="color: #374151;"],
+[style*="color: #334151;"],
+[style*="color: #475569;"],
+[style*="color: #666;"],
+[style*="color: #555;"],
+[style*="color: #777;"],
+[style*="color: #495057;"],
+[style*="color: #6c757d;"],
+[style*="color: #9ca3af;"] {
+  color: #cbd5e1 !important;
+}
+
+[style*="color: #cbd5e1;"],
+[style*="color: #94a3b8;"],
+[style*="color: #121212;"] {
+  color: #e2e8f0 !important;
+}
+
+[style*="color: #10b981;"],
+[style*="color: #15803d;"],
+[style*="color: #166534;"],
+[style*="color: #065f46;"] {
+  color: #6ee7b7 !important;
+}
+
+[style*="color: #a855f7;"],
+[style*="color: #8b5cf6;"] {
+  color: #c4b5fd !important;
+}
+
+[style*="color: #ef4444;"],
+[style*="color: #dc2626;"],
+[style*="color: #991b1b;"],
+[style*="color: #b91c1c;"] {
+  color: #fca5a5 !important;
+}
+
+[style*="color: #0ea5e9;"],
+[style*="color: #06b6d4;"] {
+  color: #7dd3fc !important;
+}
+
+[style*="color: #000;"] {
+  color: #f8fafc !important;
+}
