@@ -11,6 +11,15 @@
   
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script>
+  // Apply the saved theme before first paint, otherwise a dark-mode agent sees
+  // a white flash while the shell boots. Kept inline and tiny on purpose.
+  try {
+    if (localStorage.getItem('skaitech_theme') === 'dark') {
+      document.documentElement.classList.add('dark');
+    }
+  } catch (e) {}
+</script>
 </head>
 <body>
   <main class="dashboard-content-wrapper" style="padding: 20px;">
@@ -98,7 +107,7 @@
 
     <!-- TOPUP FORM & PACKAGES CARD -->
     <div class="topup-card">
-      <h3>Data Topup</h3>
+      <h3>Data Bundle</h3>
       <p class="topup-subtitle">Select a network, then choose a bundle</p>
 
       <span class="field-label">Select Network Provider</span>

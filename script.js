@@ -58,7 +58,10 @@ function formatDataVolume(volumeInMB) {
 const SERVICE_LABELS = {
     airtime: 'Airtime',
     utility: 'Utility',
-    data: 'Instant Data'
+    // The dashboard sells whole-GB bundles against the agent wallet. That is a
+    // different product from the small MB top-ups on instantData.html, so the
+    // two must not share a name in the orders table.
+    data: 'Data Bundle'
 };
 
 function serviceLabel(type) {

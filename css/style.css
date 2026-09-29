@@ -2419,3 +2419,279 @@ button.drawer-item.drawer-action.danger:hover i {
 body.agent-shell-flush {
   padding-top: 0 !important;
 }
+/* ===========================================================================
+   HEADER CONTROLS - notification bell + theme toggle
+   =========================================================================== */
+/* Sits before the "Agent Portal" tag. position:relative anchors the dropdown
+   to this wrapper rather than the whole header, so it cannot drift. */
+.header-utility {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.header-icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  background-color: #ffffff;
+  color: #334155;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.header-icon-btn:hover,
+.header-icon-btn:focus-visible {
+  background-color: #f1f5f9;
+  color: #0f172a;
+  outline: none;
+  border-color: #cbd5e1;
+}
+
+.notif-badge {
+  position: absolute;
+  top: -0.3rem;
+  right: -0.3rem;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: 9999px;
+  background-color: #dc2626;
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1.1rem;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.notif-badge[hidden] {
+  display: none;
+}
+
+.notif-dropdown {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  width: 21rem;
+  max-width: calc(100vw - 2rem);
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+  z-index: 300;
+}
+
+.notif-dropdown[hidden] {
+  display: none;
+}
+
+.notif-dropdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.notif-markall {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.notif-markall:hover {
+  text-decoration: underline;
+}
+
+.notif-list {
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.notif-item {
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.notif-item:last-child {
+  border-bottom: none;
+}
+
+.notif-item.is-unread {
+  background-color: #f8fafc;
+}
+
+.notif-item-icon {
+  margin-top: 0.15rem;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.notif-kind-success { color: #16a34a; }
+.notif-kind-error   { color: #dc2626; }
+.notif-kind-warning { color: #d97706; }
+.notif-kind-info    { color: #2563eb; }
+
+.notif-item-body {
+  min-width: 0;
+}
+
+.notif-item-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.notif-item-text {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: #475569;
+  overflow-wrap: anywhere;
+}
+
+.notif-item-time {
+  margin: 0.2rem 0 0;
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+.notif-empty {
+  margin: 0;
+  padding: 1.1rem 0.9rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+/* The "Agent Portal" tag had no rule at all, so it rendered as bare text. */
+.agent-portal-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 9999px;
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* On a phone the tag and the two controls are the first things to go. */
+@media (max-width: 560px) {
+  .agent-portal-tag { display: none; }
+  .notif-dropdown { width: calc(100vw - 2rem); right: -3.2rem; }
+}
+
+/* ===========================================================================
+   DARK MODE
+   =========================================================================== */
+/* style.css has no custom properties, so this is a deliberate override layer
+   over the surfaces the agent portal actually uses rather than a variable
+   flip. Anything not listed here keeps its light colours. */
+html.dark body {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+html.dark .gt-header {
+  background-color: #1e293b;
+  border-bottom-color: #334155;
+}
+
+html.dark .header-icon-btn {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+html.dark .header-icon-btn:hover,
+html.dark .header-icon-btn:focus-visible {
+  background-color: #334155;
+  color: #f8fafc;
+}
+
+html.dark .notif-dropdown,
+html.dark .notif-dropdown-head {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+html.dark .notif-item {
+  border-bottom-color: #334155;
+}
+
+html.dark .notif-item.is-unread {
+  background-color: #172033;
+}
+
+html.dark .notif-item-title { color: #f1f5f9; }
+html.dark .notif-item-text  { color: #cbd5e1; }
+html.dark .notif-item-time  { color: #94a3b8; }
+html.dark .notif-empty       { color: #94a3b8; }
+
+html.dark .agent-portal-tag {
+  background-color: #1e3a8a;
+  color: #dbeafe;
+}
+
+html.dark .user-avatar {
+  background-color: #334155;
+  color: #e2e8f0;
+}
+
+html.dark .side-drawer,
+html.dark .drawer-header {
+  background-color: #1e293b;
+  color: #e2e8f0;
+}
+
+html.dark .topup-card,
+html.dark .tx-stat-card,
+html.dark .modal-card,
+html.dark .card {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+html.dark .net-stack-btn {
+  background-color: #172033;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #172033;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+html.dark table,
+html.dark th,
+html.dark td {
+  border-color: #334155;
+  color: #cbd5e1;
+}

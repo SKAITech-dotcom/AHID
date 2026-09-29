@@ -121,7 +121,26 @@ function headerHtml(isAgent) {
     </div>
     <div class="gt-header-right">
       ${isAgent
-        ? `<span class="agent-portal-tag"><i class="fa-solid fa-user-check"></i> Agent Portal</span>
+        ? `<span class="header-utility">
+             <button type="button" class="header-icon-btn" id="notifBellBtn"
+                     aria-label="Notifications" aria-expanded="false" aria-haspopup="true">
+               <i class="fa-solid fa-bell"></i>
+               <span class="notif-badge" id="notifBadge" hidden>0</span>
+             </button>
+             <div class="notif-dropdown" id="notifDropdown" role="menu" aria-labelledby="notifBellBtn" hidden>
+               <div class="notif-dropdown-head">
+                 <span>Notifications</span>
+                 <button type="button" class="notif-markall" id="notifMarkAll">Mark all as read</button>
+               </div>
+               <div class="notif-list" id="notifList">
+                 <p class="notif-empty">Loading notifications&hellip;</p>
+               </div>
+             </div>
+           </span>
+           <button type="button" class="header-icon-btn" id="themeToggleBtn" aria-label="Toggle dark mode">
+             <i class="fa-solid fa-moon" id="themeToggleIcon"></i>
+           </button>
+           <span class="agent-portal-tag"><i class="fa-solid fa-user-check"></i> Agent Portal</span>
            <div class="user-avatar" id="agentShellAvatar">${initials}</div>`
         : `<a href="login.html" class="agent-login-link"><i class="fa-solid fa-right-to-bracket"></i> Agent Login</a>`}
     </div>
@@ -136,6 +155,9 @@ async function loadShell(isAgent) {
   const drawer = document.getElementById('agentShellDrawer');
   if (drawer) {
     drawer.innerHTML = drawerHtml(isAgent);
+  }
+  if (isAgent) {
+    initHeaderControls();
   }
 }
 
@@ -222,6 +244,165 @@ if (typeof window.toggleDrawer !== 'function') {
   window.toggleDrawer = toggleAgentDrawer;
 }
 window.agentShellLogout = agentShellLogout;
+
+// ---------------------------------------------------------------------------
+// Header controls: notifications + dark mode
+// ---------------------------------------------------------------------------
+// Both are agent-only and are wired up after the shell renders, because the
+// header is built from JS and the elements do not exist until then.
+
+const NOTIF_ICONS = {
+  success: 'fa-circle-check',
+  error: 'fa-circle-exclamation',
+  warning: 'fa-triangle-exclamation',
+  info: 'fa-circle-info'
+};
+
+// escapeHtml only exists on the AFA and admin pages, and agentNav.js loads
+// before those on every page, so this cannot rely on a shared global.
+function escapeNotifText(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function closeNotifDropdown() {
+  const dd = document.getElementById('notifDropdown');
+  const btn = document.getElementById('notifBellBtn');
+  if (dd) dd.hidden = true;
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function renderNotifications(rows) {
+  const list = document.getElementById('notifList');
+  const badge = document.getElementById('notifBadge');
+  if (!list) return;
+
+  if (!rows.length) {
+    list.innerHTML = '<p class="notif-empty">No notifications yet.</p>';
+  } else {
+    list.innerHTML = rows.map((n) => {
+      const icon = NOTIF_ICONS[n.kind] || NOTIF_ICONS.info;
+      const unread = !n.read_at;
+      // The title comes from our own trigger, not user input, and body is
+      // rendered as text through the escaper rather than interpolated raw.
+      const when = new Date(n.created_at);
+      const stamp = Number.isNaN(when.getTime()) ? '' : when.toLocaleString();
+      return `
+        <div class="notif-item${unread ? ' is-unread' : ''}">
+          <i class="fa-solid ${icon} notif-item-icon notif-kind-${n.kind || 'info'}"></i>
+          <div class="notif-item-body">
+            <p class="notif-item-title">${escapeNotifText(n.title || '')}</p>
+            ${n.body ? `<p class="notif-item-text">${escapeNotifText(n.body)}</p>` : ''}
+            <p class="notif-item-time">${escapeNotifText(stamp)}</p>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  if (badge) {
+    const unread = rows.filter((n) => !n.read_at).length;
+    // 99+ because a three digit badge breaks the pill shape.
+    badge.textContent = unread > 99 ? '99+' : String(unread);
+    badge.hidden = unread === 0;
+  }
+}
+
+async function loadNotifications() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id, title, body, kind, read_at, created_at, order_table, order_id')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    renderNotifications(data || []);
+  } catch (err) {
+    console.warn('Could not load notifications:', err);
+    const list = document.getElementById('notifList');
+    if (list) list.innerHTML = '<p class="notif-empty">Notifications unavailable.</p>';
+  }
+}
+
+async function markAllNotificationsRead() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .is('read_at', null);
+    if (error) throw error;
+    await loadNotifications();
+  } catch (err) {
+    console.warn('Could not mark notifications read:', err);
+  }
+}
+
+function applyTheme(theme) {
+  const dark = theme === 'dark';
+  document.documentElement.classList.toggle('dark', dark);
+  const icon = document.getElementById('themeToggleIcon');
+  if (icon) {
+    icon.classList.toggle('fa-moon', !dark);
+    icon.classList.toggle('fa-sun', dark);
+  }
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+}
+
+function toggleTheme() {
+  const next = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
+  try { localStorage.setItem('skaitech_theme', next); } catch (err) { /* ignore */ }
+  applyTheme(next);
+}
+
+function initHeaderControls() {
+  const bell = document.getElementById('notifBellBtn');
+  const dd = document.getElementById('notifDropdown');
+  const markAll = document.getElementById('notifMarkAll');
+  const themeBtn = document.getElementById('themeToggleBtn');
+
+  // Restore the saved theme first so the button state matches the page.
+  let saved = 'light';
+  try { saved = localStorage.getItem('skaitech_theme') || 'light'; } catch (err) { /* ignore */ }
+  applyTheme(saved);
+
+  if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
+
+  if (bell && dd) {
+    bell.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const open = dd.hidden;
+      dd.hidden = !open;
+      bell.setAttribute('aria-expanded', String(open));
+      if (open) loadNotifications();
+    });
+    // Clicks inside the dropdown must not close it via the document handler.
+    dd.addEventListener('click', (event) => event.stopPropagation());
+  }
+
+  if (markAll) markAll.addEventListener('click', markAllNotificationsRead);
+
+  if (!window.__notifOutsideBound) {
+    window.__notifOutsideBound = true;
+    document.addEventListener('click', closeNotifDropdown);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeNotifDropdown();
+    });
+  }
+
+  loadNotifications();
+}
+
+window.toggleTheme = toggleTheme;
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initAgentShell);

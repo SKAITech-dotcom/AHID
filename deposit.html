@@ -8,6 +8,15 @@
     <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
     <link rel="stylesheet" href="css/style.css"> <!-- Update path if your CSS is elsewhere -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script>
+  // Apply the saved theme before first paint, otherwise a dark-mode agent sees
+  // a white flash while the shell boots. Kept inline and tiny on purpose.
+  try {
+    if (localStorage.getItem('skaitech_theme') === 'dark') {
+      document.documentElement.classList.add('dark');
+    }
+  } catch (e) {}
+</script>
 </head>
 <body class="dashboard-body">
 

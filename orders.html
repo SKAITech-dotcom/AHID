@@ -8,6 +8,15 @@
   <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script>
+  // Apply the saved theme before first paint, otherwise a dark-mode agent sees
+  // a white flash while the shell boots. Kept inline and tiny on purpose.
+  try {
+    if (localStorage.getItem('skaitech_theme') === 'dark') {
+      document.documentElement.classList.add('dark');
+    }
+  } catch (e) {}
+</script>
 </head>
 <body class="orders-body-yellow">
 
@@ -25,7 +34,7 @@
         <strong class="tx-stat-value" id="statUtility">0</strong>
       </div>
       <div class="tx-stat-card tx-stat-data">
-        <span class="tx-stat-label"><i class="fa-solid fa-wifi"></i> Instant Data</span>
+        <span class="tx-stat-label"><i class="fa-solid fa-wifi"></i> Data Bundle</span>
         <strong class="tx-stat-value" id="statData">0</strong>
       </div>
       <div class="tx-stat-card tx-stat-ok">
@@ -52,7 +61,7 @@
     <div class="status-pills service-tabs" id="serviceTabs" style="margin-top: 8px;">
       <button class="pill-btn active" onclick="setServiceTab('all', this)">All Services</button>
       <button class="pill-btn" onclick="setServiceTab('airtime', this)"><i class="fa-solid fa-mobile-screen-button"></i> Airtime</button>
-      <button class="pill-btn" onclick="setServiceTab('data', this)"><i class="fa-solid fa-wifi"></i> Instant Data</button>
+      <button class="pill-btn" onclick="setServiceTab('data', this)"><i class="fa-solid fa-wifi"></i> Data Bundle</button>
       <button class="pill-btn" onclick="setServiceTab('utility', this)"><i class="fa-solid fa-bolt"></i> Utility</button>
     </div>
 

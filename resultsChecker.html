@@ -116,6 +116,15 @@
       color: #2563eb;
     }
   </style>
+<script>
+  // Apply the saved theme before first paint, otherwise a dark-mode agent sees
+  // a white flash while the shell boots. Kept inline and tiny on purpose.
+  try {
+    if (localStorage.getItem('skaitech_theme') === 'dark') {
+      document.documentElement.classList.add('dark');
+    }
+  } catch (e) {}
+</script>
 </head>
 <body>
   <main class="results-wrap">
