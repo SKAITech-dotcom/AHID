@@ -34,6 +34,8 @@
     .results-brand { display:flex; align-items:center; gap:14px; min-width:0; }
     .results-brand-logo { width:64px; height:64px; flex:0 0 64px; display:grid; place-items:center; overflow:hidden; border:1px solid #e2e8f0; border-radius:20px; background:#fff; }
     .results-brand-logo img { display:block; width:100%; height:100%; object-fit:contain; padding:7px; box-sizing:border-box; }
+    .results-logo-fallback { display:none; color:#4338ca; font-size:.68rem; font-weight:900; letter-spacing:.04em; }
+    .results-logo-fallback:not([hidden]) { display:grid; place-items:center; }
     .results-product-name { margin:0; font-size:1.12rem; font-weight:800; line-height:1.3; }
     .results-product-subtitle { margin:4px 0 0; color:#64748b; font-size:.86rem; }
     .availability-badge { display:inline-flex; align-items:center; gap:6px; flex:0 0 auto; padding:6px 10px; border-radius:999px; background:#dcfce7; color:#15803d; font-size:.74rem; font-weight:700; }
@@ -170,7 +172,7 @@
       <article class="results-product-card">
         <div class="results-product-top">
           <div class="results-brand">
-            <span class="results-brand-logo"><img src="img/waec%20logo.jpg" alt="WAEC logo"></span>
+            <span class="results-brand-logo"><img src="img/waec-logo.jpg" alt="WAEC logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="results-logo-fallback" hidden>WAEC</span></span>
             <div><h2 class="results-product-name">BECE</h2><p class="results-product-subtitle">BECE Result Checker</p></div>
           </div>
           <span class="availability-badge"><span class="availability-dot"></span>Available</span>
@@ -189,7 +191,7 @@
       <article class="results-product-card">
         <div class="results-product-top">
           <div class="results-brand">
-            <span class="results-brand-logo"><img src="img/waec%20logo.jpg" alt="WAEC logo"></span>
+            <span class="results-brand-logo"><img src="img/waec-logo.jpg" alt="WAEC logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="results-logo-fallback" hidden>WAEC</span></span>
             <div><h2 class="results-product-name">WASSCE / NOVDEC</h2><p class="results-product-subtitle">WASSCE &amp; November / December</p></div>
           </div>
           <span class="availability-badge"><span class="availability-dot"></span>Available</span>
