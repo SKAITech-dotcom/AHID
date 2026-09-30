@@ -32,7 +32,7 @@
     .bill-wrapper {
       max-width: 620px;
       margin: 30px auto;
-      padding: 0 16px 60px;
+      padding: 0 16px 96px;
     }
 
     .back-nav {
@@ -76,6 +76,12 @@
       margin: 0;
     }
 
+    .utility-wallet-pill { display:inline-flex; align-items:center; gap:8px; margin-top:12px; padding:7px 12px; border-radius:999px; background:#ecfdf5; color:#047857; font-size:.85rem; }
+    .utility-bottom-nav { position:fixed; z-index:90; bottom:0; left:0; right:0; display:flex; justify-content:space-around; gap:4px; padding:8px max(8px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background:rgba(255,255,255,.96); border-top:1px solid #e2e8f0; box-shadow:0 -6px 20px rgba(15,23,42,.08); backdrop-filter:blur(12px); }
+    .utility-bottom-nav a { min-width:56px; display:flex; flex-direction:column; align-items:center; gap:3px; color:#64748b; text-decoration:none; font-size:.68rem; font-weight:600; }
+    .utility-bottom-nav a i { font-size:1.05rem; }
+    .utility-bottom-nav a.active { color:#2563eb; }
+
     /* Tabs */
     .bill-tabs {
       display: flex;
@@ -84,6 +90,18 @@
       border-radius: 12px;
       gap: 4px;
       margin-bottom: 24px;
+    }
+
+    #utilityServicePicker {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    #utilityServicePicker .tab-btn {
+      min-height: 60px;
+      text-align: center;
+      padding: 10px 8px;
+      flex-wrap: wrap;
     }
 
     .tab-btn {
@@ -386,6 +404,22 @@
     if (localStorage.getItem('skaitech_theme') === 'dark') {
       document.documentElement.classList.add('dark');
     }
+
+    .notice.success {
+      background: #ecfdf5;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    @media (max-width: 520px) {
+      .bill-wrapper { margin: 16px auto; padding: 0 12px 40px; }
+      .bill-wrapper { padding-bottom: 92px; }
+      .bill-card { padding: 18px; }
+      #utilityServicePicker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #utilityServicePicker .tab-btn { font-size: .8rem; gap: 6px; }
+      .input-with-btn { flex-wrap: wrap; }
+      .input-with-btn .verify-btn { min-height: 42px; }
+    }
   } catch (e) {}
 </script>
 </head>
@@ -435,22 +469,43 @@
       <div class="bill-header">
         <h1>Utility Bills & Subscriptions</h1>
         <p>Instant online payment for Electricity, Water, and TV in Ghana</p>
+        <div class="utility-wallet-pill"><i class="fa-solid fa-wallet"></i> Wallet · GH₵ <strong class="wallet-balance">0.00</strong></div>
       </div>
 
       <!-- Main Category Tabs -->
-      <div class="bill-tabs">
-        <button type="button" class="tab-btn active" id="tabBtnEcg" onclick="switchBillCategory('ecg')">
-          <i class="fa-solid fa-bolt"></i> ECG Prepaid
+      <div class="bill-tabs" id="utilityServicePicker" aria-label="Choose a service">
+        <button type="button" class="tab-btn active" id="serviceEcgPrepaid" onclick="switchBillCategory('ecg_prepaid')">
+          <i class="fa-solid fa-bolt"></i> ECG Prepaid <span aria-hidden="true">→</span>
         </button>
-        <button type="button" class="tab-btn" id="tabBtnWater" onclick="switchBillCategory('ghana_water')">
-          <i class="fa-solid fa-droplet"></i> Ghana Water
+        <button type="button" class="tab-btn" id="serviceEcgPostpaid" onclick="switchBillCategory('ecg_postpaid')">
+          <i class="fa-solid fa-plug-circle-bolt"></i> ECG Postpaid <span aria-hidden="true">→</span>
         </button>
-        <button type="button" class="tab-btn" id="tabBtnTv" onclick="switchBillCategory('tv')">
-          <i class="fa-solid fa-tv"></i> TV Subscription
+        <button type="button" class="tab-btn" id="serviceWater" onclick="switchBillCategory('ghana_water')">
+          <i class="fa-solid fa-droplet"></i> Ghana Water <span aria-hidden="true">→</span>
+        </button>
+        <button type="button" class="tab-btn" id="serviceDstv" onclick="switchBillCategory('dstv')">
+          <i class="fa-solid fa-satellite-dish"></i> DStv <span aria-hidden="true">→</span>
+        </button>
+        <button type="button" class="tab-btn" id="serviceGotv" onclick="switchBillCategory('gotv')">
+          <i class="fa-solid fa-tv"></i> GOtv <span aria-hidden="true">→</span>
+        </button>
+        <button type="button" class="tab-btn" id="serviceStartimes" onclick="switchBillCategory('startimes')">
+          <i class="fa-solid fa-broadcast-tower"></i> StarTimes <span aria-hidden="true">→</span>
         </button>
       </div>
 
+      <div class="selected-service-brand" id="selectedServiceBrand" style="display:flex;align-items:center;gap:12px;padding:14px;margin:-8px 0 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
+        <div id="serviceBrandIcon" aria-hidden="true" style="width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:#eff6ff;color:#2563eb;font-size:1.2rem;"><i class="fa-solid fa-bolt"></i></div>
+        <div><strong id="serviceBrandTitle">ECG Prepaid</strong><div id="serviceBrandSubtitle" style="font-size:.82rem;color:#64748b;margin-top:2px;">Prepaid electricity meter top-up</div></div>
+      </div>
+
       <form id="utilityBillForm">
+        <div class="utility-progress" style="display:flex;align-items:center;gap:10px;margin:0 0 20px;">
+          <span id="utilityStepLabel" style="font-size:.85rem;font-weight:700;color:#2563eb;">Step 1 of 2 · Enter details</span>
+          <div style="height:6px;flex:1;background:#e2e8f0;border-radius:99px;overflow:hidden"><div id="utilityProgressBar" style="height:100%;width:50%;background:#34d399;border-radius:99px;transition:width .2s"></div></div>
+          <button type="button" onclick="closeUtilityFlow()" aria-label="Close payment form" style="border:0;background:transparent;font-size:1.4rem;cursor:pointer;color:#64748b">&times;</button>
+        </div>
+        <div id="utilityStepOne">
         <!-- Sub-selector for TV providers -->
         <div id="tvProviderRow" class="sub-tabs" style="display: none;">
           <button type="button" class="sub-tab-btn active" id="tvBtnDstv" onclick="selectTvProvider('dstv')">
@@ -517,15 +572,15 @@
 
         <!-- Amount Field -->
         <div class="field">
-          <label for="billAmount">Amount (GHS)</label>
+          <label for="billAmount">Amount (GH₵) <span style="color:#dc2626">*</span></label>
           <input type="number" id="billAmount" min="5" max="10000" step="1" value="50" required oninput="updateSummary()">
           
           <div class="chip-group" id="amountChips">
-            <button type="button" class="chip-btn" onclick="setAmount(20)">20 GHS</button>
-            <button type="button" class="chip-btn active" onclick="setAmount(50)">50 GHS</button>
-            <button type="button" class="chip-btn" onclick="setAmount(100)">100 GHS</button>
-            <button type="button" class="chip-btn" onclick="setAmount(200)">200 GHS</button>
-            <button type="button" class="chip-btn" onclick="setAmount(500)">500 GHS</button>
+            <button type="button" class="chip-btn" data-amount="20" onclick="setAmount(20)">GH₵ 20</button>
+            <button type="button" class="chip-btn active" data-amount="50" onclick="setAmount(50)">GH₵ 50</button>
+            <button type="button" class="chip-btn" data-amount="100" onclick="setAmount(100)">GH₵ 100</button>
+            <button type="button" class="chip-btn" data-amount="200" onclick="setAmount(200)">GH₵ 200</button>
+            <button type="button" class="chip-btn" data-amount="500" onclick="setAmount(500)">GH₵ 500</button>
           </div>
         </div>
 
@@ -536,7 +591,7 @@
             <span>GHS <span id="summaryNet">50.00</span></span>
           </div>
           <div class="summary-row">
-            <span>Processing / Gateway Fee (~1.5%):</span>
+          <span>Processing Fee (~1.5%):</span>
             <span>GHS <span id="summaryFee">0.76</span></span>
           </div>
           <div class="summary-row total">
@@ -545,9 +600,26 @@
           </div>
         </div>
 
-        <button type="submit" class="pay-btn" id="submitPayBtn">
-          <i class="fa-solid fa-lock"></i> Pay with Paystack
+        <button type="button" class="pay-btn" id="utilityNextBtn" onclick="nextUtilityStep()">
+          Next <span aria-hidden="true">→</span>
         </button>
+        </div>
+
+        <section id="utilityStepTwo" style="display:none" aria-label="Review payment">
+          <h2 style="font-size:1.15rem;margin:0 0 14px;color:#0f172a">Review your payment</h2>
+          <div class="order-summary">
+            <div class="summary-row"><span>Service</span><strong id="reviewService">-</strong></div>
+            <div class="summary-row"><span>Account holder</span><strong id="reviewName">-</strong></div>
+            <div class="summary-row"><span>Account / meter</span><strong id="reviewAccount">-</strong></div>
+            <div class="summary-row"><span>Bill amount</span><strong>GH₵ <span id="reviewNet">0.00</span></strong></div>
+            <div class="summary-row"><span>Processing fee</span><strong>GH₵ <span id="reviewFee">0.00</span></strong></div>
+            <div class="summary-row total"><span>Total from wallet</span><strong>GH₵ <span id="reviewTotal">0.00</span></strong></div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <button type="button" class="verify-btn" onclick="backUtilityStep()" style="min-height:48px">Back</button>
+            <button type="submit" class="pay-btn" id="submitPayBtn" style="flex:1;margin-top:0"><i class="fa-solid fa-lock"></i> Pay Now</button>
+          </div>
+        </section>
       </form>
 
       <div id="formNotice" class="notice"></div>
@@ -575,8 +647,16 @@
   </div>
 
   <footer style="text-align: center; padding: 20px; color: #94a3b8; font-size: 0.85rem;">
-    &copy; 2026 Skaitech Ghana. All rights reserved. Powered by Paystack.
+    &copy; 2026 Skaitech Ghana. All rights reserved. Powered by Skaitech.
   </footer>
+
+  <nav class="utility-bottom-nav" aria-label="Main navigation">
+    <a href="dashboard.html"><i class="fa-solid fa-house"></i><span>Home</span></a>
+    <a href="instantData.html"><i class="fa-solid fa-wifi"></i><span>Buy Data</span></a>
+    <a href="orders.html"><i class="fa-solid fa-receipt"></i><span>Orders</span></a>
+    <a href="agentWallet.html"><i class="fa-solid fa-wallet"></i><span>Wallet</span></a>
+    <a href="settings.html"><i class="fa-solid fa-gear"></i><span>Settings</span></a>
+  </nav>
 
   <script type="module" src="agentNav.js"></script>
   <script type="module" src="utilityBills.js"></script>

@@ -37,7 +37,18 @@ const TV_PACKAGES = {
 // State
 let currentCategory = 'ecg';
 let currentTvProvider = 'dstv';
+let currentService = 'ecg_prepaid';
+let verifiedAccountKey = '';
 const FEE_PERCENT = 0.015;
+
+const SERVICE_INFO = {
+  ecg_prepaid: { title: 'ECG Prepaid', subtitle: 'Prepaid electricity meter top-up', icon: 'fa-bolt', color: '#2563eb' },
+  ecg_postpaid: { title: 'ECG Postpaid', subtitle: 'Settle your electricity bill', icon: 'fa-plug-circle-bolt', color: '#2563eb' },
+  ghana_water: { title: 'Ghana Water', subtitle: 'Ghana Water Company bill payment', icon: 'fa-droplet', color: '#0891b2' },
+  dstv: { title: 'DStv', subtitle: 'MultiChoice television subscription', icon: 'fa-satellite-dish', color: '#1d4ed8' },
+  gotv: { title: 'GOtv', subtitle: 'MultiChoice television subscription', icon: 'fa-tv', color: '#ea580c' },
+  startimes: { title: 'StarTimes', subtitle: 'StarTimes television subscription', icon: 'fa-broadcast-tower', color: '#dc2626' },
+};
 
 function $(id) {
   return document.getElementById(id);
@@ -57,6 +68,9 @@ export function updateSummary() {
   $('summaryNet').textContent = netAmount.toFixed(2);
   $('summaryFee').textContent = fee.toFixed(2);
   $('summaryTotal').textContent = grossAmount.toFixed(2);
+  document.querySelectorAll('#amountChips .chip-btn').forEach(chip => {
+    chip.classList.toggle('active', Number(chip.dataset.amount) === netAmount);
+  });
 }
 
 export function setAmount(val) {
@@ -64,7 +78,7 @@ export function setAmount(val) {
   // Update active chip
   const chips = document.querySelectorAll('#amountChips .chip-btn');
   chips.forEach(c => {
-    if (parseFloat(c.textContent) === val) {
+    if (Number(c.dataset.amount) === val) {
       c.classList.add('active');
     } else {
       c.classList.remove('active');
@@ -74,12 +88,24 @@ export function setAmount(val) {
 }
 
 export function switchBillCategory(category) {
-  currentCategory = category;
+  const service = ['dstv', 'gotv', 'startimes'].includes(category) ? category : category;
+  currentService = service;
+  currentCategory = service === 'ghana_water' ? 'ghana_water' : ['dstv', 'gotv', 'startimes'].includes(service) ? 'tv' : 'ecg';
+  if (currentCategory === 'tv') currentTvProvider = service;
+  ['ecg_prepaid', 'ecg_postpaid', 'ghana_water', 'dstv', 'gotv', 'startimes'].forEach(key => {
+    const buttonIds = { ecg_prepaid: 'serviceEcgPrepaid', ecg_postpaid: 'serviceEcgPostpaid', ghana_water: 'serviceWater', dstv: 'serviceDstv', gotv: 'serviceGotv', startimes: 'serviceStartimes' };
+    const button = $(buttonIds[key]);
+    if (button) button.classList.toggle('active', key === service);
+  });
 
-  // Update tabs
-  $('tabBtnEcg').classList.toggle('active', category === 'ecg');
-  $('tabBtnWater').classList.toggle('active', category === 'ghana_water');
-  $('tabBtnTv').classList.toggle('active', category === 'tv');
+  const brand = SERVICE_INFO[service];
+  if (brand) {
+    $('serviceBrandTitle').textContent = brand.title;
+    $('serviceBrandSubtitle').textContent = brand.subtitle;
+    $('serviceBrandIcon').innerHTML = `<i class="fa-solid ${brand.icon}"></i>`;
+    $('serviceBrandIcon').style.color = brand.color;
+    $('serviceBrandIcon').style.background = `${brand.color}14`;
+  }
 
   // Reset verification message
   clearVerification();
@@ -91,33 +117,35 @@ export function switchBillCategory(category) {
   const accountLabel = $('accountLabel');
   const accountInput = $('accountNumber');
 
-  if (category === 'ecg') {
-    meterTypeField.style.display = 'block';
+  if (currentCategory === 'ecg') {
+    meterTypeField.style.display = service === 'ecg_prepaid' ? 'block' : 'none';
     tvProviderRow.style.display = 'none';
     tvPackageField.style.display = 'none';
-    accountLabel.textContent = 'Meter Number';
-    accountInput.placeholder = 'e.g., 01420582910';
-  } else if (category === 'ghana_water') {
+    accountLabel.textContent = service === 'ecg_postpaid' ? 'ECG Account Number' : 'Prepaid Meter Number';
+    accountInput.placeholder = service === 'ecg_postpaid' ? 'Enter ECG account number' : 'Enter prepaid meter number';
+  } else if (currentCategory === 'ghana_water') {
     meterTypeField.style.display = 'none';
     tvProviderRow.style.display = 'none';
     tvPackageField.style.display = 'none';
     accountLabel.textContent = 'GWCL Customer Account Number';
     accountInput.placeholder = 'e.g., GW-84920492';
-  } else if (category === 'tv') {
+  } else if (currentCategory === 'tv') {
     meterTypeField.style.display = 'none';
-    tvProviderRow.style.display = 'flex';
+    tvProviderRow.style.display = 'none';
     tvPackageField.style.display = 'block';
-    selectTvProvider(currentTvProvider);
+    selectTvProvider(service);
   }
 
   updateSummary();
 }
 
 export function selectTvProvider(provider) {
+  currentService = provider;
   currentTvProvider = provider;
-  $('tvBtnDstv').classList.toggle('active', provider === 'dstv');
-  $('tvBtnGotv').classList.toggle('active', provider === 'gotv');
-  $('tvBtnStartimes').classList.toggle('active', provider === 'startimes');
+  ['dstv', 'gotv', 'startimes'].forEach(key => {
+    const button = $(`service${key[0].toUpperCase()}${key.slice(1)}`);
+    if (button) button.classList.toggle('active', provider === key);
+  });
 
   const accountLabel = $('accountLabel');
   const accountInput = $('accountNumber');
@@ -155,6 +183,7 @@ export function onPackageSelect() {
 }
 
 function clearVerification() {
+  verifiedAccountKey = '';
   const el = $('verificationMsg');
   if (el) {
     el.textContent = '';
@@ -176,29 +205,64 @@ export async function verifyAccount() {
   statusEl.textContent = 'Verifying with utility provider...';
   statusEl.className = 'verification-status';
   statusEl.style.display = 'block';
-
-  // Simulate remote verification response with realistic delay
-  await new Promise(r => setTimeout(r, 600));
-
-  let verifiedName = '';
-  if (currentCategory === 'ecg') {
-    const meterType = $('meterType').value;
-    verifiedName = 'KWAME BOADI (RESIDENTIAL - ' + meterType + ')';
-    statusEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Verified Meter: <strong>${verifiedName}</strong>`;
-  } else if (currentCategory === 'ghana_water') {
-    verifiedName = 'AMA MENSAH (GWCL ACCRA EAST)';
-    statusEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Verified Account: <strong>${verifiedName}</strong>`;
-  } else {
-    const provName = currentTvProvider.toUpperCase();
-    verifiedName = 'KOFI ADDO (' + provName + ' ACTIVE)';
-    statusEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> Verified Smartcard: <strong>${verifiedName}</strong>`;
+  const billType = currentService === 'ecg_prepaid' ? 'ecg' : currentService;
+  const meterType = currentService === 'ecg_prepaid' ? $('meterType').value : null;
+  try {
+    const { data, error } = await supabase.functions.invoke('verify-utility-account', {
+      body: { billType, accountNumber: accountVal, meterType },
+    });
+    if (error || data?.verified !== true) throw new Error(data?.error || error?.message || 'Account verification failed.');
+    const verifiedName = data.customerName || '';
+    statusEl.textContent = verifiedName ? `Account verified: ${verifiedName}` : 'Account verified by provider.';
+    statusEl.className = 'verification-status success';
+    verifiedAccountKey = `${currentService}:${accountVal}:${meterType || ''}`;
+    if (verifiedName && !$('customerName').value.trim()) $('customerName').value = verifiedName;
+  } catch (err) {
+    verifiedAccountKey = '';
+    statusEl.textContent = err.message || 'Unable to verify this account.';
+    statusEl.className = 'verification-status error';
   }
+}
 
-  statusEl.className = 'verification-status success';
-  const nameInput = $('customerName');
-  if (nameInput && !nameInput.value.trim()) {
-    nameInput.value = verifiedName.split(' (')[0];
+export function nextUtilityStep() {
+  const form = $('utilityBillForm');
+  const accountNumber = $('accountNumber').value.trim();
+  const meterType = currentService === 'ecg_prepaid' ? $('meterType').value : '';
+  if (!form.reportValidity()) return;
+  if (verifiedAccountKey !== `${currentService}:${accountNumber}:${meterType}`) {
+    showNotice('Verify this account with the provider before continuing.', true);
+    $('verificationMsg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
   }
+  const brand = SERVICE_INFO[currentService];
+  const net = Math.max(0, Number($('billAmount').value) || 0);
+  const total = calculateGross(net);
+  $('reviewService').textContent = `${brand.title}${currentCategory === 'tv' ? ` · ${$('tvPackage').value}` : ''}`;
+  $('reviewName').textContent = $('customerName').value.trim();
+  $('reviewAccount').textContent = accountNumber;
+  $('reviewNet').textContent = net.toFixed(2);
+  $('reviewFee').textContent = Math.max(0, total - net).toFixed(2);
+  $('reviewTotal').textContent = total.toFixed(2);
+  $('utilityStepOne').style.display = 'none';
+  $('utilityStepTwo').style.display = 'block';
+  $('utilityStepLabel').textContent = 'Step 2 of 2 · Review and pay';
+  $('utilityProgressBar').style.width = '100%';
+  showNotice('Review your account and total before confirming payment.');
+}
+
+export function backUtilityStep() {
+  $('utilityStepTwo').style.display = 'none';
+  $('utilityStepOne').style.display = 'block';
+  $('utilityStepLabel').textContent = 'Step 1 of 2 · Enter details';
+  $('utilityProgressBar').style.width = '50%';
+}
+
+export function closeUtilityFlow() {
+  $('utilityBillForm').reset();
+  backUtilityStep();
+  clearVerification();
+  setAmount(50);
+  $('utilityServicePicker').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function showNotice(message, isError = false) {
@@ -246,6 +310,14 @@ export async function checkAgentAccess() {
 $('utilityBillForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = $('submitPayBtn');
+  const accountNumber = $('accountNumber').value.trim();
+  const meterType = currentService === 'ecg_prepaid' ? $('meterType').value : '';
+  const expectedVerification = `${currentService}:${accountNumber}:${meterType}`;
+  if (!verifiedAccountKey || verifiedAccountKey !== expectedVerification) {
+    showNotice('Verify this account with the provider before continuing.', true);
+    $('verificationMsg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Checking agent account...';
   showNotice('Verifying agent authorization...');
@@ -259,12 +331,11 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
     return;
   }
 
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Charging wallet...';
-  showNotice('Charging your agent wallet and generating your receipt...');
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing payment...';
+  showNotice('Charging your wallet and confirming the payment with the utility provider...');
 
-  const billType = currentCategory === 'tv' ? currentTvProvider : currentCategory;
-  const accountNumber = $('accountNumber').value.trim();
-  const meterType = currentCategory === 'ecg' ? $('meterType').value : null;
+  const billType = currentService === 'ecg_prepaid' ? 'ecg' : currentService;
+  const meterTypeForPayment = currentService === 'ecg_prepaid' ? $('meterType').value : null;
   const packageName = currentCategory === 'tv' ? $('tvPackage').value : null;
   const customerName = $('customerName').value.trim();
   const customerPhone = $('customerPhone').value.trim();
@@ -276,7 +347,7 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
       body: {
         billType,
         accountNumber,
-        meterType,
+        meterType: meterTypeForPayment,
         packageName,
         customerName,
         customerPhone,
@@ -302,10 +373,12 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
       amount,
     }));
 
-    // Show the receipt + token immediately (wallet payment is synchronous).
+    // Show the provider receipt; delivery can remain pending if its response
+    // was accepted but the final order update needs reconciliation.
     const noticeEl = $('paymentResultNotice');
+    const isProcessing = data.status === 'processing';
     if (noticeEl) {
-      noticeEl.className = 'notice show info';
+      noticeEl.className = `notice show ${isProcessing ? 'info' : 'success'}`;
       noticeEl.textContent = data.message || 'Payment successful.';
     }
     const receipt = $('receiptCard');
@@ -316,8 +389,11 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
       $('receiptAccount').textContent = accountNumber;
       $('receiptName').textContent = customerName || 'Customer';
       $('receiptPhone').textContent = customerPhone;
-      $('receiptAmount').textContent = `GHS ${Number(data.amount || amount).toFixed(2)}`;
+      $('receiptAmount').textContent = `GHS ${Number(data.grossAmount || data.amount || amount).toFixed(2)}`;
       $('receiptDate').textContent = new Date().toLocaleString();
+      $('receiptTitle').textContent = isProcessing ? 'Payment Processing' : 'Utility Payment Receipt';
+      $('receiptStatus').textContent = isProcessing ? 'Processing' : 'Completed';
+      $('receiptStatus').style.color = isProcessing ? '#b45309' : '#15803d';
       if (data.token) {
         const tokenContainer = $('tokenContainer');
         if (tokenContainer) tokenContainer.style.display = 'block';
@@ -329,16 +405,19 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
           trackingId: data.reference,
           network: (data.billType || billType).toUpperCase(),
           size: packageName || 'BILL PAYMENT',
-          price: `GHS ${Number(data.amount || amount).toFixed(2)}`,
+          price: `GHS ${Number(data.grossAmount || data.amount || amount).toFixed(2)}`,
           name: customerName || 'Customer',
           phone: customerPhone,
-          status: 'Successful',
+          status: isProcessing ? 'Processing' : 'Successful',
           date: new Date().toLocaleString(),
         });
         localStorage.setItem('skaitech_orders', JSON.stringify(orders));
       }
     }
     if ($('utilityBillForm')) $('utilityBillForm').reset();
+    clearVerification();
+    backUtilityStep();
+    setAmount(50);
   } catch (err) {
     showNotice(err.message || 'Error processing request.', true);
     btn.disabled = false;
@@ -421,27 +500,24 @@ function checkUrlServiceParam() {
   const service = urlParams.get('service');
   if (service === 'water' || service === 'ghana_water') {
     switchBillCategory('ghana_water');
-  } else if (service === 'tv') {
-    switchBillCategory('tv');
-  } else if (service === 'dstv') {
-    switchBillCategory('tv');
-    selectTvProvider('dstv');
-  } else if (service === 'gotv') {
-    switchBillCategory('tv');
-    selectTvProvider('gotv');
-  } else if (service === 'startimes') {
-    switchBillCategory('tv');
-    selectTvProvider('startimes');
+  } else if (['dstv', 'gotv', 'startimes', 'ecg_postpaid', 'ecg_prepaid'].includes(service)) {
+    switchBillCategory(service);
   } else {
-    switchBillCategory('ecg');
+    switchBillCategory('ecg_prepaid');
   }
 }
+
+$('accountNumber').addEventListener('input', clearVerification);
+$('meterType').addEventListener('change', clearVerification);
 
 // Global binds
 window.switchBillCategory = switchBillCategory;
 window.selectTvProvider = selectTvProvider;
 window.setAmount = setAmount;
 window.updateSummary = updateSummary;
+window.nextUtilityStep = nextUtilityStep;
+window.backUtilityStep = backUtilityStep;
+window.closeUtilityFlow = closeUtilityFlow;
 window.verifyAccount = verifyAccount;
 window.onPackageSelect = onPackageSelect;
 window.copyToken = copyToken;

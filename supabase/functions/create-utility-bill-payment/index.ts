@@ -1,8 +1,10 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { chargeWallet, refundWallet } from '../_shared/wallet.ts';
+import { callUtilityProvider } from '../_shared/utilityProvider.ts';
 
 const VALID_BILL_TYPES: Record<string, 'electricity' | 'water' | 'tv'> = {
   ecg: 'electricity',
+  ecg_postpaid: 'electricity',
   ghana_water: 'water',
   dstv: 'tv',
   gotv: 'tv',
@@ -16,6 +18,14 @@ Deno.serve(async (request) => {
   let reference = '';
   let orderId: string | null = null;
   let agentId = '';
+  let chargedAmount = 0;
+  let chargedAgentId = '';
+  let chargedReference = '';
+  let providerAccepted = false;
+  let providerAttempted = false;
+  let providerRejected = false;
+  let providerReply: unknown = null;
+  let updatedWalletBalance: number | null = null;
 
   try {
     const body = await request.json();
@@ -51,16 +61,27 @@ Deno.serve(async (request) => {
 
     // WALLET-FIRST: utilities are paid from the verified agent's wallet.
     const { admin, user } = await requireAgent(request);
-    const agentId = user.id;
+    agentId = user.id;
     const netAmount = Math.round(amountVal * 100) / 100;
+    const feeRate = 0.015;
+    const grossAmount = Math.round((netAmount / (1 - feeRate) + Number.EPSILON) * 100) / 100;
+    const feeAmount = Math.round((grossAmount - netAmount + Number.EPSILON) * 100) / 100;
+
+    const accountCheck = await callUtilityProvider('verify', { service: billType, accountNumber, meterType });
+    if (!accountCheck.success || !accountCheck.verified) {
+      return json({ error: accountCheck.message || 'The utility provider could not verify this account.' }, 422);
+    }
 
     reference = `UTIL-${crypto.randomUUID()}`;
 
-    const walletBalance = await chargeWallet(agentId, reference, netAmount, 'Utility bill payment', {
+    updatedWalletBalance = await chargeWallet(agentId, reference, grossAmount, 'Utility bill payment', {
       service: 'utility_bill',
       bill_type: billType,
       account_number: accountNumber,
     });
+    chargedAmount = grossAmount;
+    chargedAgentId = agentId;
+    chargedReference = reference;
 
     const { data: order, error: orderError } = await admin.from('utility_orders').insert({
       bill_type: billType,
@@ -69,8 +90,8 @@ Deno.serve(async (request) => {
       meter_type: meterType,
       package_name: packageName,
       amount: netAmount,
-      fee_amount: 0,
-      gross_amount: netAmount,
+      fee_amount: feeAmount,
+      gross_amount: grossAmount,
       customer_name: customerName,
       customer_phone: customerPhone,
       customer_email: customerEmail,
@@ -82,36 +103,70 @@ Deno.serve(async (request) => {
     if (orderError) throw orderError;
     orderId = order.id;
 
-    const { data: fulfilled, error: fulfilError } = await admin.rpc('fulfil_utility_order', {
-      p_order_id: order.id,
+    providerAttempted = true;
+    const providerResult = await callUtilityProvider('purchase', {
+      service: billType,
+      accountNumber,
+      meterType,
+      packageName,
+      amount: netAmount,
+      customerName: customerName || accountCheck.customerName || null,
+      customerPhone,
+      customerEmail,
+      reference,
     });
-    if (fulfilError) throw fulfilError;
+    if (!providerResult.success) {
+      providerRejected = true;
+      throw new Error(providerResult.message || 'The utility provider declined this payment.');
+    }
+    providerAccepted = true;
+    providerReply = providerResult.raw;
+    if (billType === 'ecg' && !providerResult.token) {
+      throw new Error('The provider accepted the payment but did not return an electricity token. Contact support.');
+    }
+    const completedAt = new Date().toISOString();
+    const { error: completionError } = await admin.from('utility_orders').update({
+      status: 'completed', token_code: providerResult.token ?? null,
+      provider_reference: providerResult.providerReference ?? null,
+      provider_response: providerResult.raw,
+      paid_at: completedAt, completed_at: completedAt,
+      customer_name: customerName || accountCheck.customerName || null,
+    }).eq('id', order.id);
+    if (completionError) throw completionError;
 
     return json({
       success: true,
-      walletBalance,
+      walletBalance: updatedWalletBalance,
       reference,
       amount: netAmount,
+      grossAmount,
+      feeAmount,
       billType,
-      status: fulfilled.status,
-      token: fulfilled.token_code,
+      status: 'completed',
+      token: providerResult.token ?? null,
       customerPhone,
-      message: fulfilled.bill_category === 'electricity'
+      message: billType === 'ecg'
         ? 'Your electricity token has been generated successfully.'
         : 'Your utility bill payment has been completed successfully.',
     });
   } catch (error) {
     console.error('Utility bill payment error:', error);
-    if (orderId && reference) {
+    if (chargedAmount > 0 && chargedAgentId && chargedReference) {
       try {
         const admin = adminClient();
-        const { data: order } = await admin.from('utility_orders')
+        const { data: order } = orderId ? await admin.from('utility_orders')
           .select('amount, status')
           .eq('id', orderId)
-          .maybeSingle();
-        if (order && !['paid', 'completed'].includes(order.status)) {
-          const amount = Number(order.amount);
-          await refundWallet(agentId, reference, amount, 'Utility bill fulfilment failed');
+          .maybeSingle() : { data: null };
+        if (providerAccepted || (providerAttempted && !providerRejected)) {
+          if (order) await admin.from('utility_orders').update({
+            status: 'processing', provider_response: providerReply ?? { message: error instanceof Error ? error.message : 'Provider response is pending.' },
+            provider_reference: (providerReply as Record<string, unknown> | null)?.providerReference ?? null,
+          }).eq('id', orderId);
+        } else if (!order || !['paid', 'completed'].includes(order.status)) {
+          await refundWallet(chargedAgentId, chargedReference, chargedAmount, 'Utility bill fulfilment failed');
+        }
+        if (!providerAccepted && order && !['paid', 'completed'].includes(order.status)) {
           await admin.from('utility_orders').update({
             status: 'failed',
             provider_response: { error: error instanceof Error ? error.message : 'Fulfilment failed' },
@@ -123,6 +178,9 @@ Deno.serve(async (request) => {
       }
     }
     const message = error instanceof Error ? error.message : 'Unable to process utility bill payment.';
+    if (providerAccepted || (providerAttempted && !providerRejected)) {
+      return json({ success: true, status: 'processing', reference, walletBalance: updatedWalletBalance, message: 'The provider response is pending. Your payment is recorded; check Orders or contact support if the status does not update.' }, 202);
+    }
     const insufficient = message.toLowerCase().includes('insufficient');
     // An absent, expired or malformed session must surface as 401, or the
     // client shows a generic failure instead of sending the agent to log in.
