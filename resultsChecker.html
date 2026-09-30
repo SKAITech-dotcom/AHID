@@ -21,27 +21,37 @@
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body {
-      background: #f8fafc;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-    .results-wrap {
-      max-width: 540px;
-      margin: 48px auto;
-      padding: 0 18px;
-    }
-    .results-card {
-      background: #fff;
-      border-radius: 16px;
-      padding: 28px;
-      box-shadow: 0 8px 24px #0f172a16;
-    }
-    .results-card h1 {
-      margin: 0 0 8px;
-    }
-    .results-card p {
-      color: #64748b;
-    }
+    body { background:#f8fafc; color:#0f172a; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; margin:0; }
+    .results-wrap { max-width:980px; margin:26px auto 0; padding:0 18px 112px; }
+    .results-heading { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px; margin:0 0 22px; }
+    .results-heading h1 { margin:0 0 6px; font-size:clamp(1.55rem,4vw,2rem); letter-spacing:-.03em; }
+    .results-heading p { margin:0; color:#64748b; }
+    .results-wallet { display:inline-flex; align-items:center; gap:9px; padding:10px 15px; border:1px solid #d1fae5; border-radius:999px; background:#ecfdf5; color:#047857; font-size:.9rem; white-space:nowrap; }
+    .results-wallet strong { color:#065f46; }
+    .results-product-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+    .results-product-card { min-width:0; padding:22px; border:1px solid #e2e8f0; border-radius:26px; background:#fff; box-shadow:0 8px 24px rgba(15,23,42,.06); }
+    .results-product-top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .results-brand { display:flex; align-items:center; gap:14px; min-width:0; }
+    .results-brand-logo { width:64px; height:64px; flex:0 0 64px; display:grid; place-items:center; overflow:hidden; border:1px solid #e2e8f0; border-radius:20px; background:#fff; }
+    .results-brand-logo img { display:block; width:100%; height:100%; object-fit:contain; padding:7px; box-sizing:border-box; }
+    .results-product-name { margin:0; font-size:1.12rem; font-weight:800; line-height:1.3; }
+    .results-product-subtitle { margin:4px 0 0; color:#64748b; font-size:.86rem; }
+    .availability-badge { display:inline-flex; align-items:center; gap:6px; flex:0 0 auto; padding:6px 10px; border-radius:999px; background:#dcfce7; color:#15803d; font-size:.74rem; font-weight:700; }
+    .availability-dot { width:7px; height:7px; border-radius:50%; background:#22c55e; }
+    .results-features { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px 10px; margin:22px 0; padding:0; list-style:none; }
+    .results-features li { display:flex; align-items:center; gap:8px; min-width:0; color:#475569; font-size:.82rem; line-height:1.35; }
+    .results-features i { flex:0 0 auto; color:#10b981; font-size:.85rem; }
+    .results-card-purchase { display:flex; align-items:center; gap:14px; padding-top:17px; border-top:1px solid #f1f5f9; }
+    .results-fixed-price { flex:0 0 auto; color:#0f172a; font-size:1.24rem; font-weight:850; letter-spacing:-.02em; }
+    .results-buy-btn { display:flex; flex:1 1 auto; align-items:center; justify-content:center; gap:10px; min-height:48px; padding:11px 16px; border:0; border-radius:14px; background:#f97316; color:#fff; font:inherit; font-weight:800; cursor:pointer; box-shadow:0 6px 14px rgba(249,115,22,.2); transition:background .18s ease,transform .18s ease; }
+    .results-buy-btn:hover { background:#ea580c; transform:translateY(-1px); }
+    .results-card { border:1px solid #e2e8f0; border-radius:24px; padding:24px; background:#fff; box-shadow:0 8px 24px rgba(15,23,42,.06); }
+    .results-card p { color:#64748b; }
+    .purchase-card { margin-top:22px; }
+    .purchase-card[hidden] { display:none; }
+    .purchase-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .purchase-heading h2 { margin:0; font-size:1.25rem; }
+    .change-product-btn { border:0; background:transparent; color:#64748b; font:inherit; font-weight:700; cursor:pointer; }
     .field {
       margin: 16px 0;
     }
@@ -115,6 +125,26 @@
     .nav-links-bar a:hover {
       color: #2563eb;
     }
+    .results-bottom-nav { position:fixed; z-index:90; right:0; bottom:0; left:0; display:flex; justify-content:space-around; gap:4px; padding:8px max(8px,env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left)); border-top:1px solid #e2e8f0; background:rgba(255,255,255,.96); box-shadow:0 -6px 20px rgba(15,23,42,.08); backdrop-filter:blur(12px); }
+    .results-bottom-nav a { min-width:56px; display:flex; flex-direction:column; align-items:center; gap:3px; color:#64748b; text-decoration:none; font-size:.68rem; font-weight:600; }
+    .results-bottom-nav a i { font-size:1.05rem; }
+    .results-bottom-nav a.active { color:#f97316; }
+    @media(max-width:680px) {
+      .results-wrap { margin-top:20px; padding-right:14px; padding-left:14px; }
+      .results-product-grid { grid-template-columns:1fr; gap:14px; }
+      .results-product-card { padding:18px; border-radius:24px; }
+      .results-heading { align-items:flex-start; flex-direction:column; }
+    }
+    @media(max-width:360px) {
+      .results-product-top { gap:8px; }
+      .results-brand { gap:10px; }
+      .results-brand-logo { width:54px; height:54px; flex-basis:54px; border-radius:17px; }
+      .availability-badge { padding:5px 8px; }
+      .results-features { column-gap:6px; }
+      .results-features li { font-size:.75rem; gap:6px; }
+      .results-fixed-price { font-size:1.08rem; }
+      .results-card-purchase { gap:9px; }
+    }
   </style>
 <script>
   // Apply the saved theme before first paint, otherwise a dark-mode agent sees
@@ -128,9 +158,63 @@
 </head>
 <body>
   <main class="results-wrap">
-    <section class="results-card">
-      <h1>Buy Results Checker PINs</h1>
-      <p>Pay with your agent wallet balance. PINs are shown instantly after your wallet payment is confirmed.</p>
+    <div class="results-heading">
+      <div>
+        <h1>Results Checkers</h1>
+        <p>Choose your exam checker PIN. It will be delivered instantly after payment.</p>
+      </div>
+      <div class="results-wallet" aria-live="polite"><i class="fa-solid fa-wallet" aria-hidden="true"></i> Wallet · GH₵ <strong class="wallet-balance">0.00</strong></div>
+    </div>
+
+    <section class="results-product-grid" aria-label="Available result checker PINs">
+      <article class="results-product-card">
+        <div class="results-product-top">
+          <div class="results-brand">
+            <span class="results-brand-logo"><img src="img/waec%20logo.jpg" alt="WAEC logo"></span>
+            <div><h2 class="results-product-name">BECE</h2><p class="results-product-subtitle">BECE Result Checker</p></div>
+          </div>
+          <span class="availability-badge"><span class="availability-dot"></span>Available</span>
+        </div>
+        <ul class="results-features">
+          <li><i class="fa-solid fa-circle-check"></i>Instant delivery</li>
+          <li><i class="fa-solid fa-circle-check"></i>Secure &amp; verified</li>
+          <li><i class="fa-solid fa-circle-check"></i>Valid for exams</li>
+          <li><i class="fa-solid fa-circle-check"></i>One-time use</li>
+        </ul>
+        <div class="results-card-purchase">
+          <span class="results-fixed-price">GH₵19.00</span>
+          <button type="button" class="results-buy-btn" onclick="selectResultsExam('BECE')">Buy Now <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+        </div>
+      </article>
+      <article class="results-product-card">
+        <div class="results-product-top">
+          <div class="results-brand">
+            <span class="results-brand-logo"><img src="img/waec%20logo.jpg" alt="WAEC logo"></span>
+            <div><h2 class="results-product-name">WASSCE / NOVDEC</h2><p class="results-product-subtitle">WASSCE &amp; November / December</p></div>
+          </div>
+          <span class="availability-badge"><span class="availability-dot"></span>Available</span>
+        </div>
+        <ul class="results-features">
+          <li><i class="fa-solid fa-circle-check"></i>Instant delivery</li>
+          <li><i class="fa-solid fa-circle-check"></i>Secure &amp; verified</li>
+          <li><i class="fa-solid fa-circle-check"></i>Valid for exams</li>
+          <li><i class="fa-solid fa-circle-check"></i>One-time use</li>
+        </ul>
+        <div class="results-card-purchase">
+          <span class="results-fixed-price">GH₵22.00</span>
+          <button type="button" class="results-buy-btn" onclick="selectResultsExam('WASSCE')">Buy Now <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+        </div>
+      </article>
+    </section>
+
+    <section class="results-card purchase-card" id="purchasePanel" hidden>
+      <div class="purchase-heading">
+        <div>
+          <h2>Complete your purchase</h2>
+          <p>Pay with your agent wallet balance. Your PINs are shown after wallet payment is confirmed.</p>
+        </div>
+        <button type="button" class="change-product-btn" onclick="closeResultsPurchase()">Change</button>
+      </div>
       <form id="resultsCheckerForm">
         <div class="field">
           <label for="examType">Exam type</label>
@@ -152,16 +236,19 @@
           <label for="phoneNumber">Phone number</label>
           <input id="phoneNumber" type="tel" maxlength="10" placeholder="0XXXXXXXXX" required>
         </div>
-        <div class="field">
-          <label for="email">Email</label>
-          <input id="email" type="email" placeholder="you@example.com" required>
-        </div>
         <button class="pay-btn" type="submit">Pay with Wallet Balance</button>
       </form>
       <div id="notice" class="notice" role="status"></div>
       <div id="pins" class="pins" hidden></div>
     </section>
   </main>
+  <nav class="results-bottom-nav" aria-label="Main navigation">
+    <a href="dashboard.html"><i class="fa-solid fa-house"></i><span>Home</span></a>
+    <a href="instantData.html"><i class="fa-solid fa-wifi"></i><span>Buy Data</span></a>
+    <a href="orders.html"><i class="fa-solid fa-receipt"></i><span>Orders</span></a>
+    <a href="agentWallet.html"><i class="fa-solid fa-wallet"></i><span>Wallet</span></a>
+    <a href="settings.html"><i class="fa-solid fa-gear"></i><span>Settings</span></a>
+  </nav>
   <script type="module" src="agentNav.js"></script>
   <script type="module" src="resultsChecker.js"></script>
 </body>

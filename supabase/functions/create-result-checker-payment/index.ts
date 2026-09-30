@@ -9,18 +9,23 @@ Deno.serve(async (request) => {
 
   let reference = '';
   let orderId: string | null = null;
+  let walletCharged = false;
 
   try {
-    const { examType, quantity, email, phone } = await request.json();
+    const { examType, quantity, phone } = await request.json();
     const price = prices[examType];
     const count = Number(quantity);
-    if (!price || !Number.isInteger(count) || count < 1 || count > 10 || !/^\S+@\S+\.\S+$/.test(email || '') || !String(phone || '').trim()) {
-      return json({ error: 'Enter a valid exam type, quantity, email, and phone number.' }, 400);
+    if (!price || !Number.isInteger(count) || count < 1 || count > 10 || !/^0\d{9}$/.test(String(phone || '').trim())) {
+      return json({ error: 'Enter a valid exam type, quantity, and 10-digit Ghana phone number.' }, 400);
     }
 
     // WALLET-FIRST: results checker is paid from the verified agent's wallet.
     const { admin, user } = await requireAgent(request);
     const agentId = user.id;
+    const email = String(user.email || '').trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      return json({ error: 'Add a valid email address to your agent account before purchasing a checker PIN.' }, 400);
+    }
 
     const { count: stock, error: stockError } = await admin.from('result_checker_pins')
       .select('*', { count: 'exact', head: true }).eq('exam_type', examType).eq('status', 'available');
@@ -30,12 +35,6 @@ Deno.serve(async (request) => {
     const amount = price * count;
     reference = `RC-${crypto.randomUUID()}`;
 
-    const walletBalance = await chargeWallet(agentId, reference, amount, 'Results checker purchase', {
-      service: 'result_checker',
-      exam_type: examType,
-      quantity: count,
-    });
-
     const { data: order, error: orderError } = await admin.from('results_orders').insert({
       exam_type: examType, quantity: count, amount, recipient_phone: phone.trim(),
       email: email.trim().toLowerCase(), payment_reference: reference, status: 'pending_payment',
@@ -43,6 +42,13 @@ Deno.serve(async (request) => {
     }).select('id').single();
     if (orderError) throw orderError;
     orderId = order.id;
+
+    const walletBalance = await chargeWallet(agentId, reference, amount, 'Results checker purchase', {
+      service: 'result_checker',
+      exam_type: examType,
+      quantity: count,
+    });
+    walletCharged = true;
 
     const { data: pins, error: fulfilError } = await admin.rpc('fulfil_result_checker_order', { p_order_id: order.id });
     if (fulfilError) throw fulfilError;
@@ -62,16 +68,18 @@ Deno.serve(async (request) => {
       try {
         const admin = adminClient();
         const { data: order } = await admin.from('results_orders')
-          .select('amount, status')
+          .select('amount, status, agent_id')
           .eq('id', orderId)
           .maybeSingle();
         if (order && order.status !== 'paid') {
-          await refundWallet(
-            String(order.agent_id ?? ''),
-            reference,
-            Number(order.amount),
-            'Results checker fulfilment failed',
-          ).catch(() => {});
+          if (walletCharged) {
+            await refundWallet(
+              String(order.agent_id ?? ''),
+              reference,
+              Number(order.amount),
+              'Results checker fulfilment failed',
+            );
+          }
           await admin.from('results_orders').update({ status: 'failed' }).eq('id', orderId);
         }
       } catch (innerError) {

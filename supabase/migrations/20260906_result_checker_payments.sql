@@ -97,3 +97,4 @@ end;
 $$;
 
 revoke all on function public.fulfil_result_checker_order(uuid) from public, anon, authenticated;
+grant execute on function public.fulfil_result_checker_order(uuid) to service_role;
