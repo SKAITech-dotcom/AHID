@@ -39,15 +39,16 @@ let currentCategory = 'ecg';
 let currentTvProvider = 'dstv';
 let currentService = 'ecg_prepaid';
 let verifiedAccountKey = '';
+let accountVerifyTimer = 0;
 const FEE_PERCENT = 0.015;
 
 const SERVICE_INFO = {
-  ecg_prepaid: { title: 'ECG Prepaid', subtitle: 'Prepaid electricity meter top-up', icon: 'fa-bolt', color: '#2563eb' },
-  ecg_postpaid: { title: 'ECG Postpaid', subtitle: 'Settle your electricity bill', icon: 'fa-plug-circle-bolt', color: '#2563eb' },
-  ghana_water: { title: 'Ghana Water', subtitle: 'Ghana Water Company bill payment', icon: 'fa-droplet', color: '#0891b2' },
-  dstv: { title: 'DStv', subtitle: 'MultiChoice television subscription', icon: 'fa-satellite-dish', color: '#1d4ed8' },
-  gotv: { title: 'GOtv', subtitle: 'MultiChoice television subscription', icon: 'fa-tv', color: '#ea580c' },
-  startimes: { title: 'StarTimes', subtitle: 'StarTimes television subscription', icon: 'fa-broadcast-tower', color: '#dc2626' },
+  ecg_prepaid: { title: 'ECG Prepaid', subtitle: 'ECG · Prepaid electricity', logo: 'img/ecg%20logo.jpg' },
+  ecg_postpaid: { title: 'ECG Postpaid', subtitle: 'ECG · Electricity bill payment', logo: 'img/ecg%20logo.jpg' },
+  ghana_water: { title: 'Ghana Water', subtitle: 'GWCL · Water bill payment', logo: 'img/ghana%20water%20logo.png' },
+  dstv: { title: 'DStv', subtitle: 'MultiChoice · TV subscription', logo: 'img/dstv.jpg' },
+  gotv: { title: 'GOtv', subtitle: 'MultiChoice · TV subscription', logo: 'img/go%20tv%20logo.png' },
+  startimes: { title: 'StarTimes', subtitle: 'StarTimes · TV subscription', logo: 'img/star%20time%20logo.jpg' },
 };
 
 function $(id) {
@@ -87,8 +88,8 @@ export function setAmount(val) {
   updateSummary();
 }
 
-export function switchBillCategory(category) {
-  const service = ['dstv', 'gotv', 'startimes'].includes(category) ? category : category;
+export function switchBillCategory(category, openModal = true) {
+  const service = category;
   currentService = service;
   currentCategory = service === 'ghana_water' ? 'ghana_water' : ['dstv', 'gotv', 'startimes'].includes(service) ? 'tv' : 'ecg';
   if (currentCategory === 'tv') currentTvProvider = service;
@@ -102,9 +103,8 @@ export function switchBillCategory(category) {
   if (brand) {
     $('serviceBrandTitle').textContent = brand.title;
     $('serviceBrandSubtitle').textContent = brand.subtitle;
-    $('serviceBrandIcon').innerHTML = `<i class="fa-solid ${brand.icon}"></i>`;
-    $('serviceBrandIcon').style.color = brand.color;
-    $('serviceBrandIcon').style.background = `${brand.color}14`;
+    $('serviceBrandLogo').src = brand.logo;
+    $('serviceBrandLogo').alt = `${brand.title} logo`;
   }
 
   // Reset verification message
@@ -137,6 +137,11 @@ export function switchBillCategory(category) {
   }
 
   updateSummary();
+  if (openModal) {
+    $('utilityModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+    window.setTimeout(() => $('accountNumber').focus(), 80);
+  }
 }
 
 export function selectTvProvider(provider) {
@@ -188,6 +193,7 @@ function clearVerification() {
   if (el) {
     el.textContent = '';
     el.className = 'verification-status';
+    el.style.display = '';
   }
 }
 
@@ -246,7 +252,9 @@ export function nextUtilityStep() {
   $('utilityStepOne').style.display = 'none';
   $('utilityStepTwo').style.display = 'block';
   $('utilityStepLabel').textContent = 'Step 2 of 2 · Review and pay';
-  $('utilityProgressBar').style.width = '100%';
+  $('utilityStepOneIndicator').classList.remove('active');
+  $('utilityStepOneIndicator').classList.add('done');
+  $('utilityStepTwoIndicator').classList.add('active');
   showNotice('Review your account and total before confirming payment.');
 }
 
@@ -254,7 +262,9 @@ export function backUtilityStep() {
   $('utilityStepTwo').style.display = 'none';
   $('utilityStepOne').style.display = 'block';
   $('utilityStepLabel').textContent = 'Step 1 of 2 · Enter details';
-  $('utilityProgressBar').style.width = '50%';
+  $('utilityStepOneIndicator').classList.add('active');
+  $('utilityStepOneIndicator').classList.remove('done');
+  $('utilityStepTwoIndicator').classList.remove('active');
 }
 
 export function closeUtilityFlow() {
@@ -262,7 +272,8 @@ export function closeUtilityFlow() {
   backUtilityStep();
   clearVerification();
   setAmount(50);
-  $('utilityServicePicker').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('utilityModal').classList.remove('active');
+  document.body.style.overflow = '';
 }
 
 function showNotice(message, isError = false) {
@@ -384,6 +395,8 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
     const receipt = $('receiptCard');
     if (receipt) {
       receipt.style.display = 'block';
+      $('tokenContainer').style.display = data.token ? 'block' : 'none';
+      $('receiptToken').textContent = data.token || '---- ---- ---- ---- ----';
       $('receiptRef').textContent = data.reference;
       $('receiptService').textContent = (data.billType || billType).toUpperCase() + (packageName ? ` - ${packageName}` : '');
       $('receiptAccount').textContent = accountNumber;
@@ -395,8 +408,6 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
       $('receiptStatus').textContent = isProcessing ? 'Processing' : 'Completed';
       $('receiptStatus').style.color = isProcessing ? '#b45309' : '#15803d';
       if (data.token) {
-        const tokenContainer = $('tokenContainer');
-        if (tokenContainer) tokenContainer.style.display = 'block';
         $('receiptToken').textContent = data.token;
       }
       const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
@@ -499,16 +510,28 @@ function checkUrlServiceParam() {
   const urlParams = new URLSearchParams(window.location.search);
   const service = urlParams.get('service');
   if (service === 'water' || service === 'ghana_water') {
-    switchBillCategory('ghana_water');
+    switchBillCategory('ghana_water', false);
   } else if (['dstv', 'gotv', 'startimes', 'ecg_postpaid', 'ecg_prepaid'].includes(service)) {
-    switchBillCategory(service);
+    switchBillCategory(service, false);
   } else {
-    switchBillCategory('ecg_prepaid');
+    switchBillCategory('ecg_prepaid', false);
   }
 }
 
-$('accountNumber').addEventListener('input', clearVerification);
+$('accountNumber').addEventListener('input', () => {
+  clearVerification();
+  window.clearTimeout(accountVerifyTimer);
+  if ($('accountNumber').value.trim().length >= 5) {
+    $('verificationMsg').textContent = 'Checking account details…';
+    $('verificationMsg').className = 'verification-status';
+    $('verificationMsg').style.display = 'block';
+    accountVerifyTimer = window.setTimeout(() => verifyAccount(), 700);
+  }
+});
 $('meterType').addEventListener('change', clearVerification);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && $('utilityModal').classList.contains('active')) closeUtilityFlow();
+});
 
 // Global binds
 window.switchBillCategory = switchBillCategory;
