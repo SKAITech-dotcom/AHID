@@ -77,13 +77,16 @@
     }
 
     .utility-service-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; }
-    .utility-service-card { width:100%; min-height:158px; padding:22px 18px; display:flex; align-items:center; gap:16px; text-align:left; color:#0f172a; background:#fff; border:1px solid #e8edf3; border-radius:18px; box-shadow:0 8px 22px rgba(15,23,42,.06); cursor:pointer; transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease; }
+    .utility-service-card { width:100%; min-width:0; min-height:132px; padding:20px 18px; display:flex; align-items:center; gap:14px; text-align:left; color:#0f172a; background:#fff; border:1px solid #e8edf3; border-radius:18px; box-shadow:0 8px 22px rgba(15,23,42,.06); cursor:pointer; transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease; }
     .utility-service-card:hover,.utility-service-card:focus-visible { transform:translateY(-3px); border-color:#a7f3d0; box-shadow:0 14px 28px rgba(15,23,42,.1); outline:none; }
-    .utility-service-card img { width:64px; height:64px; flex:0 0 64px; object-fit:contain; }
-    .utility-service-card .service-copy { flex:1; min-width:0; }
-    .utility-service-card strong { display:block; font-size:1rem; font-weight:800; }
-    .utility-service-card small { display:block; margin-top:5px; color:#64748b; font-size:.84rem; }
-    .utility-service-card .service-arrow { color:#94a3b8; font-size:1.25rem; }
+    .utility-logo-wrap { position:relative; width:58px; height:58px; flex:0 0 58px; display:grid; place-items:center; overflow:hidden; border-radius:14px; background:#f1f5f9; color:#64748b; }
+    .utility-logo-wrap img { width:100%; height:100%; object-fit:contain; padding:5px; box-sizing:border-box; }
+    .utility-logo-fallback { display:none; font-size:1.2rem; }
+    .utility-logo-fallback:not([hidden]) { display:block; }
+    .utility-service-card .service-copy { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; }
+    .utility-service-card strong { display:block; font-size:1rem; font-weight:800; line-height:1.25; }
+    .utility-service-card small { display:block; margin-top:5px; color:#64748b; font-size:.84rem; line-height:1.35; }
+    .utility-service-card .service-arrow { flex:0 0 auto; color:#94a3b8; font-size:1.25rem; }
     .utility-modal-overlay { position:fixed; inset:0; z-index:1200; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(15,23,42,.58); backdrop-filter:blur(4px); overflow-y:auto; }
     .utility-modal-overlay.active { display:flex; }
     .utility-modal-card { width:min(100%,560px); max-height:min(92vh,900px); overflow:auto; position:relative; }
@@ -423,6 +426,25 @@
       padding: 6px 0;
       border-bottom: 1px solid #f1f5f9;
     }
+
+    #accountLabel::after { content:" *"; color:#dc2626; }
+    .notice.success { background:#ecfdf5; color:#166534; border:1px solid #bbf7d0; }
+
+    @media (max-width: 760px) {
+      .bill-wrapper { max-width: 620px; }
+      .bill-card { padding:18px; }
+      .utility-service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .utility-service-card { min-height: 104px; padding: 14px 12px; gap: 10px; }
+      .utility-logo-wrap { width: 48px; height: 48px; flex-basis: 48px; }
+      .utility-service-card strong { font-size: .94rem; }
+      .utility-service-card small { font-size: .78rem; }
+      .utility-modal-overlay { padding:10px; align-items:flex-end; }
+      .utility-modal-card { max-height:94vh; border-radius:20px 20px 12px 12px; }
+    }
+    @media (max-width: 420px) {
+      .utility-service-grid { grid-template-columns: 1fr; }
+      .utility-service-card { min-height: 88px; padding: 12px 14px; }
+    }
   </style>
 <script>
   // Apply the saved theme before first paint, otherwise a dark-mode agent sees
@@ -430,27 +452,6 @@
   try {
     if (localStorage.getItem('skaitech_theme') === 'dark') {
       document.documentElement.classList.add('dark');
-    }
-    #accountLabel::after { content:" *"; color:#dc2626; }
-
-    .notice.success {
-      background: #ecfdf5;
-      color: #166534;
-      border: 1px solid #bbf7d0;
-    }
-
-    @media (max-width: 520px) {
-      .bill-wrapper { max-width:920px; margin:16px auto; padding:0 12px 92px; }
-      .bill-wrapper { padding-bottom: 92px; }
-      .bill-card { padding: 18px; }
-      #utilityServicePicker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      #utilityServicePicker .tab-btn { font-size: .8rem; gap: 6px; }
-      .input-with-btn { flex-wrap: wrap; }
-      .input-with-btn .verify-btn { min-height: 42px; }
-      .utility-service-grid { grid-template-columns:1fr; gap:12px; }
-      .utility-service-card { min-height:112px; padding:16px; }
-      .utility-modal-overlay { padding:10px; align-items:flex-end; }
-      .utility-modal-card { max-height:94vh; border-radius:20px 20px 12px 12px; }
     }
   } catch (e) {}
 </script>
@@ -504,22 +505,22 @@
       </div>
       <div class="utility-service-grid" id="utilityServiceGrid" aria-label="Utility services">
         <button type="button" class="utility-service-card" onclick="switchBillCategory('ecg_prepaid')">
-          <img src="img/ecg%20logo.jpg" alt="ECG logo"><span class="service-copy"><strong>ECG Prepaid</strong><small>ECG · Prepaid electricity</small></span><span class="service-arrow" aria-hidden="true">→</span>
+          <span class="utility-logo-wrap"><img src="img/ecg%20logo.jpg" alt="ECG logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><i class="utility-logo-fallback fa-solid fa-bolt" aria-hidden="true" hidden></i></span><span class="service-copy"><strong>ECG Prepaid</strong><small>ECG · Prepaid electricity</small></span><span class="service-arrow" aria-hidden="true">→</span>
         </button>
         <button type="button" class="utility-service-card" onclick="switchBillCategory('ecg_postpaid')">
-          <img src="img/ecg%20logo.jpg" alt="ECG logo"><span class="service-copy"><strong>ECG Postpaid</strong><small>ECG · Electricity bill payment</small></span><span class="service-arrow" aria-hidden="true">→</span>
+          <span class="utility-logo-wrap"><img src="img/ecg%20logo.jpg" alt="ECG logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><i class="utility-logo-fallback fa-solid fa-bolt" aria-hidden="true" hidden></i></span><span class="service-copy"><strong>ECG Postpaid</strong><small>ECG · Electricity bill payment</small></span><span class="service-arrow" aria-hidden="true">→</span>
         </button>
         <button type="button" class="utility-service-card" onclick="switchBillCategory('ghana_water')">
-          <img src="img/ghana%20water%20logo.png" alt="Ghana Water Company logo"><span class="service-copy"><strong>Ghana Water</strong><small>GWCL · Water bill payment</small></span><span class="service-arrow" aria-hidden="true">→</span>
+          <span class="utility-logo-wrap"><img src="img/ghana%20water%20logo.png" alt="Ghana Water Company logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><i class="utility-logo-fallback fa-solid fa-droplet" aria-hidden="true" hidden></i></span><span class="service-copy"><strong>Ghana Water</strong><small>GWCL · Water bill payment</small></span><span class="service-arrow" aria-hidden="true">→</span>
         </button>
         <button type="button" class="utility-service-card" onclick="switchBillCategory('dstv')">
-          <img src="img/dstv.jpg" alt="DStv logo"><span class="service-copy"><strong>DStv</strong><small>MultiChoice · TV subscription</small></span><span class="service-arrow" aria-hidden="true">→</span>
+          <span class="utility-logo-wrap"><img src="img/dstv.jpg" alt="DStv logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><i class="utility-logo-fallback fa-solid fa-tv" aria-hidden="true" hidden></i></span><span class="service-copy"><strong>DStv</strong><small>MultiChoice · TV subscription</small></span><span class="service-arrow" aria-hidden="true">→</span>
         </button>
         <button type="button" class="utility-service-card" onclick="switchBillCategory('gotv')">
-          <img src="img/go%20tv%20logo.png" alt="GOtv logo"><span class="service-copy"><strong>GOtv</strong><small>MultiChoice · TV subscription</small></span><span class="service-arrow" aria-hidden="true">→</span>
+          <span class="utility-logo-wrap"><img src="img/go%20tv%20logo.png" alt="GOtv logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><i class="utility-logo-fallback fa-solid fa-tv" aria-hidden="true" hidden></i></span><span class="service-copy"><strong>GOtv</strong><small>MultiChoice · TV subscription</small></span><span class="service-arrow" aria-hidden="true">→</span>
         </button>
         <button type="button" class="utility-service-card" onclick="switchBillCategory('startimes')">
-          <img src="img/star%20time%20logo.jpg" alt="StarTimes logo"><span class="service-copy"><strong>StarTimes</strong><small>StarTimes · TV subscription</small></span><span class="service-arrow" aria-hidden="true">→</span>
+          <span class="utility-logo-wrap"><img src="img/star%20time%20logo.jpg" alt="StarTimes logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><i class="utility-logo-fallback fa-solid fa-tv" aria-hidden="true" hidden></i></span><span class="service-copy"><strong>StarTimes</strong><small>StarTimes · TV subscription</small></span><span class="service-arrow" aria-hidden="true">→</span>
         </button>
       </div>
     </section>
