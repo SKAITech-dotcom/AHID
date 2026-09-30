@@ -32,12 +32,23 @@ const SERVICE_ITEMS = [
   { page: 'nonAgentTrachOrder.html', icon: 'fa-magnifying-glass', label: 'Track Order' },
 ];
 
+const AGENT_COMING_SOON_ITEMS = [
+  { icon: 'fa-graduation-cap', label: 'SHS Placement', disabled: true },
+  { icon: 'fa-wifi', label: 'MTN Fibre Data', disabled: true },
+];
+
 function currentFile() {
   const file = window.location.pathname.split('/').pop();
   return (file || 'index.html').toLowerCase();
 }
 
 function drawerItem(item, isAgent) {
+  if (item.disabled) {
+    return `
+    <span class="drawer-item" aria-disabled="true" title="Coming soon" style="opacity: .58; cursor: not-allowed;">
+      <i class="fa-solid ${item.icon}"></i> ${item.label} <small style="margin-left: auto;">Soon</small>
+    </span>`;
+  }
   const ext = item.external ? ' target="_blank" rel="noopener"' : '';
   const href = item.href || item.page;
   const active = item.page && currentFile() === item.page.toLowerCase() ? ' active' : '';
@@ -48,6 +59,10 @@ function drawerItem(item, isAgent) {
 }
 
 function drawerHtml(isAgent) {
+  const isHomePage = ['index.html', 'nonagentdashboard.html'].includes(currentFile());
+  const serviceItems = SERVICE_ITEMS.filter((item) =>
+    item.page !== 'nonAgentTrachOrder.html' || !isAgent || isHomePage
+  );
   const portal = isAgent
     ? AGENT_PORTAL_ITEMS.map((i) => drawerItem(i, true)).join('')
     : `
@@ -88,7 +103,7 @@ function drawerHtml(isAgent) {
 
     <span class="drawer-section-label">SERVICES</span>
     <nav class="drawer-nav">
-      ${SERVICE_ITEMS.map((i) => drawerItem(i, isAgent)).join('')}
+      ${[...serviceItems, ...(isAgent ? AGENT_COMING_SOON_ITEMS : [])].map((i) => drawerItem(i, isAgent)).join('')}
     </nav>
 
     <div class="drawer-divider"></div>
