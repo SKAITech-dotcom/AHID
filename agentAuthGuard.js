@@ -12,14 +12,18 @@ import { supabase } from './supabaseClient.js';
  */
 export async function requireVerifiedAgent(options = {}) {
   const redirectOnFail = options.redirectOnFail !== false;
-  const currentPath = window.location.pathname;
+  const currentUrl = new URL(window.location.href);
+  const currentPage = currentUrl.pathname.split('/').filter(Boolean).pop() || 'index.html';
+  const currentPath = `${currentPage}${currentUrl.search}${currentUrl.hash}`;
 
   try {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
 
     if (userError || !user) {
       if (redirectOnFail) {
-        sessionStorage.setItem('skaitech_return_url', currentPath);
+        if (currentPage.toLowerCase() !== 'login.html') {
+          try { sessionStorage.setItem('skaitech_return_url', currentPath); } catch (_) { /* still send the visitor to sign in */ }
+        }
         window.location.href = 'login.html';
       }
       return null;
@@ -104,6 +108,9 @@ export async function requireVerifiedAgent(options = {}) {
   } catch (err) {
     console.error('Agent verification failed:', err);
     if (redirectOnFail) {
+      if (currentPage.toLowerCase() !== 'login.html') {
+        try { sessionStorage.setItem('skaitech_return_url', currentPath); } catch (_) { /* preserve navigation if storage is unavailable */ }
+      }
       window.location.href = 'login.html';
     }
     return null;

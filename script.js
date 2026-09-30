@@ -156,14 +156,39 @@ async function getValidAgentSession() {
 }
 
 // --- AUTHENTICATION & REGISTRATION LOGIC ---
-// After sign-in/registration, return the user to the service they were
-// trying to reach (only same-site .html targets are allowed).
-function postAuthRedirect() {
-  const redirect = new URLSearchParams(window.location.search).get('redirect');
-  if (redirect && /^[a-zA-Z0-9_\-]+\.html([?#].*)?$/.test(redirect)) {
-    return redirect;
+// Only accept same-site HTML targets. Protected-page guards save this value
+// before sending an unauthenticated agent to login, including query strings.
+function safeAuthReturnTarget(value) {
+  if (!value) return '';
+  try {
+    const target = new URL(value, window.location.origin);
+    if (target.origin !== window.location.origin) return '';
+    const page = target.pathname.split('/').filter(Boolean).pop() || '';
+    if (!/^[a-zA-Z0-9_-]+\.html$/i.test(page) || page.toLowerCase() === 'login.html') return '';
+    return `${page}${target.search}${target.hash}`;
+  } catch (_) {
+    return '';
   }
-  return 'dashboard.html';
+}
+
+function rememberAuthReturnTarget() {
+  const current = new URL(window.location.href);
+  const page = current.pathname.split('/').filter(Boolean).pop() || 'index.html';
+  const target = safeAuthReturnTarget(`${page}${current.search}${current.hash}`);
+  if (target) {
+    try { sessionStorage.setItem('skaitech_return_url', target); } catch (_) { /* continue to login even if storage is unavailable */ }
+  }
+}
+
+function postAuthRedirect() {
+  const queryRedirect = safeAuthReturnTarget(new URLSearchParams(window.location.search).get('redirect'));
+  let savedValue = '';
+  try {
+    savedValue = sessionStorage.getItem('skaitech_return_url') || '';
+    sessionStorage.removeItem('skaitech_return_url');
+  } catch (_) { /* use the safe default when session storage is unavailable */ }
+  const storedRedirect = safeAuthReturnTarget(savedValue);
+  return queryRedirect || storedRedirect || 'dashboard.html';
 }
 
 async function handleLogin(event) {
@@ -1254,7 +1279,22 @@ async function loadUserData() {
     currentPath.endsWith('store.html') ||
     currentPath.endsWith('agentafa.html');
 
-  // Never redirect on login.html or public pages
+  // An existing authenticated user should not see the sign-in form again.
+  // Return them to the requested page, or to the agent home dashboard.
+  if (isLoginPage) {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (!error && user) {
+        window.location.replace(postAuthRedirect());
+        return;
+      }
+    } catch (authErr) {
+      console.warn('Could not restore the saved login session:', authErr);
+    }
+    return;
+  }
+
+  // Public pages remain accessible while the agent session stays active.
   if (isPublicPage && !isProtectedAgentPage) {
     return;
   }
@@ -1348,12 +1388,14 @@ async function loadUserData() {
           walletBalance = parseFloat(walletData.balance);
         }
       } else if (isProtectedAgentPage) {
+        rememberAuthReturnTarget();
         window.location.href = 'login.html';
         return;
       }
     } catch (authErr) {
       console.error('Supabase auth check failed:', authErr);
       if (isProtectedAgentPage) {
+        rememberAuthReturnTarget();
         window.location.href = 'login.html';
         return;
       }
