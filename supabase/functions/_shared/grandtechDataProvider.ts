@@ -107,6 +107,25 @@ export function normalizeDataNetwork(networkType: string): string {
 }
 
 /**
+ * Catalog responses have appeared with both numeric sizes and display strings
+ * such as "1GB" / "1 GB". Normalize those representations without guessing a
+ * different unit: bundles expressed in MB must be explicitly marked as MB.
+ */
+function parsePackageSizeGb(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? value : null;
+  if (typeof value !== 'string') return null;
+
+  const normalized = value.trim().replace(/,/g, '');
+  const match = normalized.match(/^(\d+(?:\.\d+)?)\s*(gb|g|mb)?$/i);
+  if (!match) return null;
+
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const unit = (match[2] || 'gb').toLowerCase();
+  return unit === 'mb' ? amount / 1024 : amount;
+}
+
+/**
  * Optional endpoint the provider POSTs order status updates to.
  *
  * Left unset by default: the provider's order-status callback payload is not
@@ -139,10 +158,10 @@ export async function fetchGrandTechPackages(): Promise<GrandTechPackage[]> {
 
   return (payload.payload as Record<string, unknown>[])
     .map((pkg) => {
-      const providerNetwork = String(pkg.network || '').toUpperCase();
+      const providerNetwork = String(pkg.network || '').trim().toUpperCase();
       const priceGhs = Number(pkg.price) / 100;
-      const sizeGb = Number(pkg.size);
-      if (!pkg.id || !providerNetwork || !Number.isFinite(priceGhs) || !Number.isFinite(sizeGb)) {
+      const sizeGb = parsePackageSizeGb(pkg.size);
+      if (!pkg.id || !providerNetwork || !Number.isFinite(priceGhs) || sizeGb === null) {
         return null;
       }
       // Number(null) is 0, so null has to be ruled out before coercing or every
@@ -182,7 +201,7 @@ export async function resolveGrandTechPackage(
   const sizeGb = volumeInMB / 1024;
 
   const matches = packages
-    .filter((pkg) => pkg.providerNetwork === providerNetwork && pkg.sizeGb === sizeGb && !pkg.soldOut)
+    .filter((pkg) => pkg.providerNetwork === providerNetwork && Math.abs(pkg.sizeGb - sizeGb) < 0.000001 && !pkg.soldOut)
     .sort((a, b) => a.priceGhs - b.priceGhs);
 
   return matches[0] ?? null;
