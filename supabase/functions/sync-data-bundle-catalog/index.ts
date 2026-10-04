@@ -45,6 +45,7 @@ Deno.serve(async (request) => {
       const network = String(pkg.network || '').toLowerCase() as DataNetwork;
       if (!DATA_NETWORKS.includes(network)) continue;
       const volumeInMB = Math.round(pkg.sizeGb * 1024);
+      if (volumeInMB < 1024) continue;
       if (providerForBundle(network, volumeInMB) !== 'grandtech') continue;
       if (!Number.isFinite(volumeInMB) || volumeInMB <= 0) continue;
       // Only sizes that map to a whole number of MB can be sold, because that
@@ -67,7 +68,7 @@ Deno.serve(async (request) => {
       const size = String(pkg.name || '').match(/(\d+(?:\.\d+)?)\s*(gb|g|mb)\b/i);
       if (!size) continue;
       const volumeInMB = Math.round(Number(size[1]) * (size[2].toLowerCase() === 'mb' ? 1 : 1024));
-      if (!Number.isFinite(volumeInMB) || volumeInMB <= 0 || providerForBundle(network, volumeInMB) !== 'swift') continue;
+      if (!Number.isFinite(volumeInMB) || volumeInMB < 1024 || providerForBundle(network, volumeInMB) !== 'swift') continue;
       if (catalogPrice(network, volumeInMB) === null) continue;
       const cost = Number(pkg.price);
       if (!Number.isFinite(cost) || cost <= 0) continue;
@@ -87,6 +88,7 @@ Deno.serve(async (request) => {
         .sort((a, b) => a - b);
 
       for (const volumeInMB of volumes) {
+        if (volumeInMB < 1024) continue;
         const match = chosen.get(`${network}:${volumeInMB}`);
         const bundleId = bundleIdFor(network, volumeInMB);
         const price = catalogPrice(network, volumeInMB);

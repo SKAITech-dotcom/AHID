@@ -25,21 +25,23 @@ export const DATA_NETWORKS: DataNetwork[] = ['mtn', 'telecel', 'airteltigo'];
 /**
  * network -> volume in MB -> sale price in GHS.
  *
- * Whole-GB tiers only. The 5MB-200MB rows that used to sit at the top of this
- * catalog were never deliverable: the provider's smallest package is 1GB and
- * package resolution requires an exact volume match, so every MB order was
- * refused and refunded. They are excluded here rather than shown and failed.
+ * Whole-GB tiers are for the Data Bundle storefront. Small MB tiers are kept
+ * for the separate Instant Data page; its catalog sync deliberately excludes
+ * them from the regular Data Bundle storefront.
  */
 export const SALE_CATALOG: Record<DataNetwork, Record<number, number>> = {
   mtn: {
+    5: 0.5, 10: 1, 20: 2, 30: 3, 50: 5, 100: 10, 150: 15, 200: 20,
     1024: 4.3, 2048: 8.8, 3072: 13.2, 4096: 17.6, 5120: 22, 6144: 26.1,
     8192: 34.8, 10240: 42, 15360: 63, 20480: 84, 25600: 103.75,
     30720: 121.5, 40960: 160, 51200: 200,
   },
   telecel: {
+    5: 0.5, 10: 1, 20: 2, 30: 3, 50: 5, 100: 10, 150: 15, 200: 20,
     5120: 21, 10240: 40, 15360: 60, 20480: 78, 30720: 114, 40960: 151, 51200: 185,
   },
   airteltigo: {
+    5: 0.5, 10: 1, 20: 2, 30: 3, 50: 5, 100: 10, 150: 15, 200: 20,
     1024: 4.2, 2048: 8.39, 3072: 12.58, 4096: 16.78, 5120: 20.97,
     6144: 25.17, 7168: 29.36, 8192: 33.56, 10240: 40.84, 15360: 60.71,
   },

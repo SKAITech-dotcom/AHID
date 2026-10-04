@@ -72,11 +72,6 @@ export async function fetchSwiftPackages(): Promise<SwiftPackage[]> {
     String((pkg as Record<string, unknown>).category || 'data').toLowerCase() === 'data');
 }
 
-function volumeToGbLabel(volumeInMB: number): string {
-  const gb = volumeInMB / 1024;
-  return Number.isInteger(gb) ? gb.toFixed(0) : gb.toFixed(2);
-}
-
 /**
  * Resolve the cheapest Swift package whose name matches the requested
  * network + volume. Package names look like "1GB MTN", "5GB AT", etc.
@@ -84,8 +79,10 @@ function volumeToGbLabel(volumeInMB: number): string {
 export async function resolveSwiftPackage(networkType: string, volumeInMB: number): Promise<SwiftPackage | null> {
   const packages = await fetchSwiftPackages();
   const network = normalizeNetwork(networkType);
-  const gbLabel = volumeToGbLabel(volumeInMB);
-  const probe = new RegExp(`\\b${gbLabel}\\s*gb\\b`, 'i');
+  const packageSize = volumeInMB < 1024
+    ? `${volumeInMB}\\s*mb`
+    : `${(volumeInMB / 1024).toFixed(0)}\\s*gb`;
+  const probe = new RegExp(`\\b${packageSize}\\b`, 'i');
 
   const matches = packages
     .filter((pkg) => {

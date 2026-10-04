@@ -33,7 +33,7 @@ Deno.serve(async (request) => {
 
     if (!/^0\d{9}$/.test(phone)) return json({ error: 'Enter a valid 10-digit Ghanaian phone number.' }, 400);
     if (!NETWORKS.has(networkType)) return json({ error: 'Unsupported network.' }, 400);
-    if (!Number.isInteger(volumeInMB) || volumeInMB <= 0 || volumeInMB > 204800) return json({ error: 'Invalid bundle volume.' }, 400);
+    if (!Number.isInteger(volumeInMB) || volumeInMB < 1024 || volumeInMB > 204800) return json({ error: 'Invalid bundle volume.' }, 400);
     const listPrice = catalogPrice(networkType, volumeInMB);
     if (!listPrice) return json({ error: 'This bundle is not available at the current agent price.' }, 400);
     // See create-public-data-payment: the real client's generics are too deep

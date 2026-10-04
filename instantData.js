@@ -46,20 +46,6 @@ const BUNDLES = {
     { size: '100 MB', mB: 100, price: 10 },
     { size: '150 MB', mB: 150, price: 15 },
     { size: '200 MB', mB: 200, price: 20 },
-    { size: '1GB', mB: 1024, price: 4.3 },
-    { size: '2GB', mB: 2048, price: 8.8 },
-    { size: '3GB', mB: 3072, price: 13.2 },
-    { size: '4GB', mB: 4096, price: 17.6 },
-    { size: '5GB', mB: 5120, price: 22 },
-    { size: '6GB', mB: 6144, price: 26.1 },
-    { size: '8GB', mB: 8192, price: 34.8 },
-    { size: '10GB', mB: 10240, price: 42 },
-    { size: '15GB', mB: 15360, price: 63 },
-    { size: '20GB', mB: 20480, price: 84 },
-    { size: '25GB', mB: 25600, price: 103.75 },
-    { size: '30GB', mB: 30720, price: 121.5 },
-    { size: '40GB', mB: 40960, price: 160 },
-    { size: '50GB', mB: 51200, price: 200 },
   ],
   telecel: [
     { size: '5 MB', mB: 5, price: 0.5 },
@@ -70,13 +56,6 @@ const BUNDLES = {
     { size: '100 MB', mB: 100, price: 10 },
     { size: '150 MB', mB: 150, price: 15 },
     { size: '200 MB', mB: 200, price: 20 },
-    { size: '5GB', mB: 5120, price: 21 },
-    { size: '10GB', mB: 10240, price: 40 },
-    { size: '15GB', mB: 15360, price: 60 },
-    { size: '20GB', mB: 20480, price: 78 },
-    { size: '30GB', mB: 30720, price: 114 },
-    { size: '40GB', mB: 40960, price: 151 },
-    { size: '50GB', mB: 51200, price: 185 },
   ],
   airteltigo: [
     { size: '5 MB', mB: 5, price: 0.5 },
@@ -87,16 +66,6 @@ const BUNDLES = {
     { size: '100 MB', mB: 100, price: 10 },
     { size: '150 MB', mB: 150, price: 15 },
     { size: '200 MB', mB: 200, price: 20 },
-    { size: '1GB', mB: 1024, price: 4.2 },
-    { size: '2GB', mB: 2048, price: 8.39 },
-    { size: '3GB', mB: 3072, price: 12.58 },
-    { size: '4GB', mB: 4096, price: 16.78 },
-    { size: '5GB', mB: 5120, price: 20.97 },
-    { size: '6GB', mB: 6144, price: 25.17 },
-    { size: '7GB', mB: 7168, price: 29.36 },
-    { size: '8GB', mB: 8192, price: 33.56 },
-    { size: '10GB', mB: 10240, price: 40.84 },
-    { size: '15GB', mB: 15360, price: 60.71 },
   ],
 };
 
@@ -357,13 +326,16 @@ async function handlePaymentCallback() {
           : state.label === 'Cancelled'
             ? 'The order was cancelled and the payment refunded.'
             : 'Payment received. Your bundle is still being processed and will arrive shortly.';
-      const volumeGB = (order.volume_mb || 0) / 1024;
+      const volumeMb = Number(order.volume_mb || 0);
+      const volumeLabel = volumeMb >= 1024
+        ? `${volumeMb / 1024}GB`
+        : `${volumeMb} MB`;
 
       const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
       orders.unshift({
         trackingId: reference,
         network: (order.network_type || '').toUpperCase(),
-        size: `${volumeGB}GB`,
+        size: volumeLabel,
         price: `GHS ${Number(order.sale_amount).toFixed(2)}`,
         name: saved.name || '',
         phone: saved.phone || '',
