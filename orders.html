@@ -37,6 +37,10 @@
         <span class="tx-stat-label"><i class="fa-solid fa-wifi"></i> Data Bundle</span>
         <strong class="tx-stat-value" id="statData">0</strong>
       </div>
+      <div class="tx-stat-card tx-stat-instant-data">
+        <span class="tx-stat-label"><i class="fa-solid fa-gauge-high"></i> Instant Data</span>
+        <strong class="tx-stat-value" id="statInstantData">0</strong>
+      </div>
       <div class="tx-stat-card tx-stat-ok">
         <span class="tx-stat-label"><i class="fa-solid fa-circle-check"></i> Successful</span>
         <strong class="tx-stat-value tx-stat-ok" id="statCompleted">0</strong>
@@ -54,14 +58,15 @@
     <!-- SEARCH INPUT -->
     <div class="search-input-wrapper">
       <i class="fa-solid fa-magnifying-glass search-icon"></i>
-      <input type="text" id="orderSearch" onkeyup="filterOrders()" placeholder="Search by phone number...">
+      <input type="text" id="orderSearch" onkeyup="filterOrders()" placeholder="Search by name, phone, code or reference...">
     </div>
 
-    <!-- SERVICE TYPE TABS (Airtime / Utility / Data / All) -->
+    <!-- SERVICE TYPE TABS (Airtime / Utility / Data / Instant Data / All) -->
     <div class="status-pills service-tabs" id="serviceTabs" style="margin-top: 8px;">
       <button class="pill-btn active" onclick="setServiceTab('all', this)">All Services</button>
       <button class="pill-btn" onclick="setServiceTab('airtime', this)"><i class="fa-solid fa-mobile-screen-button"></i> Airtime</button>
       <button class="pill-btn" onclick="setServiceTab('data', this)"><i class="fa-solid fa-wifi"></i> Data Bundle</button>
+      <button class="pill-btn" onclick="setServiceTab('instant_data', this)"><i class="fa-solid fa-gauge-high"></i> Instant Data</button>
       <button class="pill-btn" onclick="setServiceTab('utility', this)"><i class="fa-solid fa-bolt"></i> Utility</button>
     </div>
 
@@ -77,6 +82,8 @@
 
     <!-- COUNTER DISPLAY -->
     <div class="orders-count-text" id="ordersCountText">0 orders found</div>
+    <p id="instantDataOrdersNotice" role="status" hidden
+       style="margin: 6px 0; color: #b91c1c; font-size: .85rem;"></p>
 
     <!-- ORDERS DISPLAY CARD -->
    
