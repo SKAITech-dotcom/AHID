@@ -1509,6 +1509,7 @@ body {
 .tx-stat-airtime .tx-stat-label { color: #c026d3; }
 .tx-stat-utility .tx-stat-label { color: #d97706; }
 .tx-stat-data .tx-stat-label { color: #0284c7; }
+.tx-stat-instant-data .tx-stat-label { color: #7c3aed; }
 .tx-stat-ok { color: #16a34a; }
 .tx-stat-bad { color: #dc2626; }
 .tx-stat-pending { color: #d97706; }
@@ -2844,4 +2845,477 @@ html.dark td {
 
 [style*="color: #000;"] {
   color: #f8fafc !important;
+}
+
+/* Keep page content readable in dark mode, including components with their own
+   light-theme class colors that are not covered by the inline color overrides. */
+html.dark :where(h1, h2, h3, h4, h5, h6, p, label, legend, dt, dd, th, td) {
+  color: #e2e8f0;
+}
+
+html.dark :where(a:not([class*="btn"]), .text-muted, .text-secondary) {
+  color: #93c5fd;
+}
+
+html.dark :where(.bg-white, .bg-light, .accordion-item, .accordion-header, .accordion-body, .dropdown-menu, .list-group-item, .form-control, .form-select) {
+  background-color: #16203a;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+html.dark :where(input, select, textarea)::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+/* Ash charcoal palette and clearer control feedback for dark mode. */
+html.dark body {
+  background-color: #24272b;
+  color: #edf0f2;
+}
+
+html.dark .gt-header,
+html.dark .side-drawer,
+html.dark .drawer-header,
+html.dark .notif-dropdown,
+html.dark .notif-dropdown-head,
+html.dark .topup-card,
+html.dark .tx-stat-card,
+html.dark .modal-card,
+html.dark .card {
+  background-color: #30343a;
+  border-color: #4b5159;
+}
+
+html.dark .net-stack-btn,
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #292d32;
+  border-color: #4b5159;
+}
+
+html.dark .notif-item.is-unread { background-color: #383d43; }
+html.dark .header-icon-btn { background-color: #383d43; border-color: #555c65; }
+html.dark .header-icon-btn:hover,
+html.dark .header-icon-btn:focus-visible { background-color: #4a5058; }
+
+html.dark [style*="background: #f3f4f6;"],
+html.dark [style*="background:#f3f4f6;"],
+html.dark [style*="background: #fff;"],
+html.dark [style*="background:#fff;"],
+html.dark [style*="background: #ffffff;"],
+html.dark [style*="background: white;"],
+html.dark [style*="background: #f1f5f9;"],
+html.dark [style*="background: #f8fafc;"],
+html.dark [style*="background:#f8fafc;"],
+html.dark [style*="background: #f8f9fa;"],
+html.dark [style*="background: #f9fafb;"] {
+  background-color: #30343a !important;
+}
+
+html.dark [style*="background: #1e293b;"],
+html.dark [style*="background:#1e293b;"],
+html.dark [style*="background: #eff6ff;"],
+html.dark [style*="background:#eff6ff;"],
+html.dark [style*="background: #eef6ff;"],
+html.dark [style*="background: #f0f4ff;"] {
+  background-color: #383d43 !important;
+}
+
+html.dark :where(button, .btn, a, input, select, textarea, .header-icon-btn,
+  .package-card, .network-card, .card, .topup-card, .tx-stat-card,
+  .payment-method-card, .net-stack-btn, .list-group-item) {
+  transition: background-color 160ms ease, color 160ms ease,
+    border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+html.dark :where(button:not(:disabled), .btn, .package-card, .network-card,
+  .payment-method-card, .net-stack-btn):hover {
+  filter: brightness(1.12);
+  transform: translateY(-2px);
+}
+
+html.dark :where(button, a, input, select, textarea, .btn):focus-visible {
+  outline: 2px solid #aeb6c0;
+  outline-offset: 2px;
+}
+
+html.dark :where(button:active, .btn:active) {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.dark :where(button, .btn, a, input, select, textarea, .package-card,
+    .network-card, .card, .topup-card, .tx-stat-card, .payment-method-card,
+    .net-stack-btn, .list-group-item) {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* Match the ash palette on utility panels used by wallet, support, and AFA. */
+html.dark :where(.bg-white, .bg-light, .accordion-item, .accordion-header,
+  .accordion-body, .dropdown-menu, .list-group-item, .form-control, .form-select) {
+  background-color: #30343a;
+  border-color: #4b5159;
+  color: #edf0f2;
+}
+
+html.dark [style*="background: #0f172a;"],
+html.dark [style*="background-color: #0f172a;"],
+html.dark [style*="background: #16203a;"],
+html.dark [style*="background-color: #16203a;"],
+html.dark [style*="background: #172033;"],
+html.dark [style*="background-color: #172033;"],
+html.dark [style*="background: #14264a;"],
+html.dark [style*="background-color: #14264a;"] {
+  background-color: #383d43 !important;
+  border-color: #4b5159 !important;
+}
+
+html.dark .support-section,
+html.dark .faq-item,
+html.dark .faq-item .faq-content,
+html.dark .agent-afa-card,
+html.dark .wallet-stat-card,
+html.dark .transaction-card {
+  background-color: #30343a;
+  border-color: #4b5159;
+  color: #edf0f2;
+}
+
+/* ==========================================================================
+   INSTANT DATA MODAL
+   Dark purchase sheet. The active network drives the accent through custom
+   properties, so switching tabs re-themes the card without touching any other
+   rule. --idm-accent is the network brand colour and --idm-accent-ink is the
+   readable text colour on top of it (MTN's yellow needs dark text, the red and
+   blue need white).
+   ========================================================================== */
+
+.idm-banner {
+  background: linear-gradient(135deg, #111827, #1f2937);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.idm-banner-title { margin: 0 0 4px; font-size: 1rem; font-weight: 800; color: #f8fafc; }
+.idm-banner-sub { margin: 0; font-size: 0.82rem; color: #94a3b8; }
+
+.idm-banner-btn {
+  background: #f8fafc;
+  color: #111827;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.idm-banner-btn:hover { background: #e2e8f0; }
+
+.idm-overlay {
+  --idm-accent: #FFCC00;
+  --idm-accent-ink: #1a1400;
+  --idm-accent-soft: rgba(255, 204, 0, 0.14);
+  --idm-surface: #0b1220;
+  --idm-surface-2: #131c2e;
+  --idm-line: rgba(255, 255, 255, 0.09);
+  --idm-text: #f1f5f9;
+  --idm-muted: #94a3b8;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(2, 6, 17, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.22s ease, visibility 0.22s ease;
+}
+
+.idm-overlay.is-open { opacity: 1; visibility: visible; }
+
+.idm-theme-mtn { --idm-accent: #FFCC00; --idm-accent-ink: #1a1400; --idm-accent-soft: rgba(255, 204, 0, 0.14); }
+.idm-theme-telecel { --idm-accent: #DA291C; --idm-accent-ink: #ffffff; --idm-accent-soft: rgba(218, 41, 28, 0.16); }
+.idm-theme-airteltigo { --idm-accent: #0072BC; --idm-accent-ink: #ffffff; --idm-accent-soft: rgba(0, 114, 188, 0.18); }
+
+body.idm-open { overflow: hidden; }
+
+.idm-card {
+  width: 100%;
+  max-width: 460px;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, var(--idm-surface-2), var(--idm-surface));
+  border: 1px solid var(--idm-line);
+  border-radius: 18px;
+  color: var(--idm-text);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  transform: translateY(14px) scale(0.98);
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.idm-overlay.is-open .idm-card { transform: none; }
+
+.idm-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--idm-line);
+  background: linear-gradient(180deg, var(--idm-accent-soft), transparent);
+}
+
+.idm-eyebrow {
+  margin: 0 0 2px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--idm-accent);
+}
+
+.idm-brand-lockup { display: flex; align-items: center; gap: 11px; }
+.idm-network-logo { width: 42px; height: 42px; object-fit: contain; border-radius: 50%; background: #fff; padding: 3px; flex: none; }
+.idm-pricing-header { margin: 4px 0 0; color: var(--idm-muted); font-size: 0.67rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.idm-title { margin: 0; font-size: 1.15rem; font-weight: 800; }
+
+.idm-close {
+  background: transparent;
+  border: 1px solid var(--idm-line);
+  color: var(--idm-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+.idm-close:hover { color: var(--idm-text); border-color: var(--idm-accent); }
+
+.idm-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 14px 18px 4px;
+}
+
+.idm-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 6px;
+  border-radius: 11px;
+  border: 1px solid var(--idm-line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--idm-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.idm-tab:hover { color: var(--idm-text); }
+.idm-tab.is-active {
+  background: var(--idm-accent);
+  border-color: var(--idm-accent);
+  color: var(--idm-accent-ink);
+}
+
+.idm-phone { padding: 12px 18px 4px; }
+
+.idm-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--idm-muted);
+}
+
+.idm-phone-field { position: relative; }
+
+.idm-phone-icon {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--idm-muted);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+#idmPhone {
+  width: 100%;
+  padding: 12px 14px 12px 38px;
+  border-radius: 11px;
+  border: 1px solid var(--idm-line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--idm-text);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+#idmPhone::placeholder { color: #64748b; }
+#idmPhone:focus {
+  outline: none;
+  border-color: var(--idm-accent);
+  box-shadow: 0 0 0 3px var(--idm-accent-soft);
+}
+
+.idm-hint { margin: 6px 0 0; font-size: 0.72rem; color: #64748b; }
+
+.idm-error {
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: rgba(220, 38, 38, 0.14);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  color: #fecaca;
+  font-size: 0.78rem;
+}
+
+.idm-bundles {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  padding: 12px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--idm-accent) transparent;
+}
+.idm-bundles::-webkit-scrollbar { width: 6px; }
+.idm-bundles::-webkit-scrollbar-thumb { background: var(--idm-accent); border-radius: 3px; }
+
+.idm-bundle {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--idm-line);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+.idm-bundle:hover { border-color: rgba(255, 255, 255, 0.22); transform: translateY(-1px); }
+.idm-bundle.is-selected {
+  border-color: var(--idm-accent);
+  background: var(--idm-accent-soft);
+}
+.idm-bundle.is-low { opacity: 1; cursor: pointer; }
+.idm-bundle.is-low:hover { transform: translateY(-1px); border-color: rgba(255, 255, 255, 0.22); }
+
+.idm-bundle input[type="radio"] {
+  accent-color: var(--idm-accent);
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.idm-bundle-info { flex: 1; min-width: 0; }
+.idm-bundle-title { display: block; font-size: 0.92rem; font-weight: 700; }
+.idm-bundle-validity { display: block; margin-top: 2px; font-size: 0.72rem; color: var(--idm-muted); }
+
+.idm-bundle-side { text-align: right; flex: none; }
+.idm-bundle-price { display: block; font-size: 0.92rem; font-weight: 800; color: var(--idm-accent); }
+
+.idm-bundle.is-low .idm-flag {
+  background: rgba(220, 38, 38, 0.14);
+  border-color: rgba(248, 113, 113, 0.38);
+  color: #fca5a5;
+}
+
+.idm-flag {
+  display: inline-block;
+  margin-bottom: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fcd34d;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.idm-loading, .idm-empty {
+  margin: 0;
+  padding: 18px 0;
+  text-align: center;
+  color: var(--idm-muted);
+  font-size: 0.85rem;
+}
+
+.idm-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--idm-line);
+  background: rgba(2, 6, 17, 0.6);
+}
+
+.idm-balance-label { display: block; font-size: 0.68rem; color: var(--idm-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.idm-balance-value { display: block; margin-top: 2px; font-size: 1rem; font-weight: 800; }
+
+.idm-cta {
+  flex: 1;
+  max-width: 62%;
+  padding: 13px 16px;
+  border: none;
+  border-radius: 12px;
+  background: var(--idm-accent);
+  color: var(--idm-accent-ink);
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: filter 0.16s ease, opacity 0.16s ease;
+}
+.idm-cta:hover:not(:disabled) { filter: brightness(1.08); }
+.idm-cta:disabled { opacity: 0.42; cursor: not-allowed; }
+
+.idm-cta.is-topup {
+  background: transparent;
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+@media (max-width: 520px) {
+  .idm-overlay { padding: 0; align-items: flex-end; }
+  .idm-card {
+    max-width: none;
+    max-height: 92vh;
+    border-radius: 18px 18px 0 0;
+    transform: translateY(100%);
+  }
+  .idm-banner { flex-direction: column; align-items: stretch; }
+  .idm-banner-btn { width: 100%; padding: 11px; }
+  .idm-footer { flex-direction: column; align-items: stretch; }
+  .idm-cta { max-width: none; width: 100%; }
+  .idm-balance { text-align: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idm-overlay, .idm-card, .idm-bundle, .idm-tab, .idm-cta { transition: none; }
 }

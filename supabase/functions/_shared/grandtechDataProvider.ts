@@ -172,6 +172,9 @@ export async function fetchGrandTechPackages(): Promise<GrandTechPackage[]> {
       const limit = pkg.limit === null || pkg.limit === undefined
         ? null
         : (Number.isFinite(Number(pkg.limit)) ? Number(pkg.limit) : null);
+      const limitNum = limit === null ? null : Number(limit);
+      const salesNum = sales === null ? null : Number(sales);
+      const soldOut = limitNum !== null && salesNum !== null && limitNum > 0 && salesNum >= limitNum;
       return {
         id: String(pkg.id),
         sizeGb,
@@ -180,7 +183,7 @@ export async function fetchGrandTechPackages(): Promise<GrandTechPackage[]> {
         network: providerNetwork.toLowerCase(),
         sales,
         limit,
-        soldOut: limit !== null && sales !== null && sales >= limit,
+        soldOut,
       } satisfies GrandTechPackage;
     })
     .filter((pkg): pkg is GrandTechPackage => pkg !== null);

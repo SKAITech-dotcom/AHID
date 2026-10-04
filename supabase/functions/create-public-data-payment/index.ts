@@ -1,26 +1,15 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
 import { chargeWallet, refundWallet } from '../_shared/wallet.ts';
-import { resolveAgentBundlePrice } from '../_shared/pricing.ts';
-
-const catalog: Record<string, Record<number, number>> = {
-  mtn: {
-    5: 0.5, 10: 1, 20: 2, 30: 3, 50: 5, 100: 10, 150: 15, 200: 20,
-    1024: 4.3, 2048: 8.8, 3072: 13.2, 4096: 17.6, 5120: 22, 6144: 26.1,
-    8192: 34.8, 10240: 42, 15360: 63, 20480: 84, 25600: 103.75,
-    30720: 121.5, 40960: 160, 51200: 200,
-  },
-  telecel: {
-    5: 0.5, 10: 1, 20: 2, 30: 3, 50: 5, 100: 10, 150: 15, 200: 20,
-    5120: 21, 10240: 40, 15360: 60, 20480: 78, 30720: 114, 40960: 151, 51200: 185,
-  },
-  airteltigo: {
-    5: 0.5, 10: 1, 20: 2, 30: 3, 50: 5, 100: 10, 150: 15, 200: 20,
-    1024: 4.2, 2048: 8.39, 3072: 12.58, 4096: 16.78, 5120: 20.97,
-    6144: 25.17, 7168: 29.36, 8192: 33.56, 10240: 40.84,
-    15360: 60.71,
-  },
-};
+import {
+  resolveAgentBundlePrice,
+  type AgentPricingLike,
+} from '../_shared/pricing.ts';
+import {
+  DATA_NETWORKS,
+  catalogPrice,
+  type DataNetwork,
+} from '../_shared/dataCatalog.ts';
 
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
@@ -40,15 +29,13 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json();
-    const networkType = String(body.networkType || '').trim().toLowerCase();
-    const volumeInMB = Number(body.volumeInMB);
     const customerName = String(body.name || '').trim();
     const customerEmail = String(body.email || '').trim().toLowerCase();
     const customerPhone = String(body.phone || '').trim();
-    const catalogPrice = catalog[networkType]?.[volumeInMB];
+    const requestedBundleId = String(body.bundleId || '').trim().toLowerCase();
 
     if (!customerName || customerName.length > 120 ||
-      !/^\S+@\S+\.\S+$/.test(customerEmail) || !/^0\d{9}$/.test(customerPhone) || !catalogPrice) {
+      !/^\S+@\S+\.\S+$/.test(customerEmail) || !/^0\d{9}$/.test(customerPhone)) {
       return json({ error: 'Enter valid customer details and select a supported package.' }, 400);
     }
 
@@ -56,10 +43,56 @@ Deno.serve(async (request) => {
     const { admin, user } = await requireAgent(request);
     const agentId = user.id;
 
+    let networkType = '';
+    let volumeInMB = 0;
+    let salePrice: number | null = null;
+
+    if (requestedBundleId) {
+      // Preferred path: the client picked a bundle_id from the catalog, so the
+      // network, volume and price are read from the row it came from. The
+      // storefront can never make us charge a price or size it chose itself.
+      const { data: bundle, error: bundleError } = await admin
+        .from('bundle_catalog')
+        .select('bundle_id, network, volume_mb, price')
+        .eq('bundle_id', requestedBundleId)
+        .eq('active', true)
+        .maybeSingle();
+
+      if (bundleError) {
+        console.error('bundle_catalog lookup failed:', bundleError);
+        return json({ error: 'Unable to confirm the selected package. Please try again.' }, 502);
+      }
+      if (!bundle) {
+        return json({ error: 'That package is no longer available. Please choose another one.' }, 400);
+      }
+
+      networkType = String(bundle.network);
+      volumeInMB = Number(bundle.volume_mb);
+      salePrice = Number(bundle.price);
+    } else {
+      // Legacy path for the pages that still post a network and a volume.
+      networkType = String(body.networkType || '').trim().toLowerCase();
+      volumeInMB = Number(body.volumeInMB);
+      salePrice = catalogPrice(networkType, volumeInMB);
+    }
+
+    if (!DATA_NETWORKS.includes(networkType as DataNetwork) ||
+      !Number.isInteger(volumeInMB) || volumeInMB <= 0 ||
+      salePrice === null || !Number.isFinite(salePrice) || salePrice <= 0) {
+      return json({ error: 'Enter valid customer details and select a supported package.' }, 400);
+    }
+
+    const listPrice: number = salePrice;
+
+    // The pricing helper only reads one row, but TypeScript cannot expand the
+    // real client's generics that far and reports the type instantiation as
+    // infinitely deep. Narrow it to the structural type the helper declares.
+    const pricingClient = admin as unknown as AgentPricingLike;
+
     // The agent's own price from the Store > Pricing tab wins over the catalog,
     // so editing a price there actually changes what customers are charged.
     const saleAmount = await resolveAgentBundlePrice(
-      admin, agentId, networkType, volumeInMB, catalogPrice,
+      pricingClient, agentId, networkType, volumeInMB, listPrice,
     );
     if (!Number.isFinite(saleAmount) || saleAmount <= 0) {
       return json({ error: 'Enter valid customer details and select a supported package.' }, 400);

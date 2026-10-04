@@ -9,11 +9,16 @@
  * request body.
  */
 
+type PriceRow = { price: number } | null;
+
+// PromiseLike, not Promise: the supabase query builder is thenable but does not
+// implement the full Promise interface, so a Promise return type made every
+// caller that passes a real client fail to typecheck.
 type SupabaseLike = {
   from: (table: string) => {
     select: (cols: string) => {
       eq: (col: string, val: string) => {
-        maybeSingle: () => Promise<{ data: { price: number } | null }>;
+        maybeSingle: () => PromiseLike<{ data: PriceRow }>;
       };
     };
   };
@@ -51,12 +56,12 @@ export async function resolveServicePrice(
   return fallback;
 }
 
-type AgentPricingLike = {
+export type AgentPricingLike = {
   from: (table: string) => {
     select: (cols: string) => {
       eq: (col: string, val: string) => {
         eq: (col: string, val: string) => {
-          maybeSingle: () => Promise<{ data: { price: number } | null }>;
+          maybeSingle: () => PromiseLike<{ data: PriceRow }>;
         };
       };
     };

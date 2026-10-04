@@ -5,6 +5,9 @@ memory-bank/
 *.log
 *.tmp
 *.bak
+.env
+.env.*
+!.env.example
 desktop.ini
 .DS_Store
 Thumbs.db

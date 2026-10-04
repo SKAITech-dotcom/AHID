@@ -19,9 +19,13 @@ Deno.serve(async (request) => {
     if (!reference || !email) return json({ error: 'Reference and email are required.' }, 400);
 
     const supabase = adminClient();
+    // 'agent_id' is the column that exists (added by the wallet-first migration).
+    // This used to ask for 'buyer_agent_id', which is not a column on this table,
+    // so PostgREST rejected the whole select and every lookup 404'd - taking
+    // delivery confirmation and the auto-refund with it.
     const { data, error } = await supabase
       .from('public_data_orders')
-      .select('id, payment_reference, buyer_agent_id, network_type, volume_mb, sale_amount, status, created_at, provider_response')
+      .select('id, payment_reference, agent_id, network_type, volume_mb, sale_amount, status, created_at, provider_response')
       .eq('payment_reference', String(reference))
       .eq('customer_email', String(email).trim().toLowerCase())
       .single();
@@ -74,9 +78,9 @@ Deno.serve(async (request) => {
         }
       }
 
-      if (status === 'failed' && data.buyer_agent_id) {
+      if (status === 'failed' && data.agent_id) {
         await refundWallet(
-          data.buyer_agent_id,
+          data.agent_id,
           String(data.payment_reference),
           Number(data.sale_amount),
           'Instant data bundle not delivered',

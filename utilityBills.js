@@ -222,7 +222,6 @@ export async function verifyAccount() {
     statusEl.textContent = verifiedName ? `Account verified: ${verifiedName}` : 'Account verified by provider.';
     statusEl.className = 'verification-status success';
     verifiedAccountKey = `${currentService}:${accountVal}:${meterType || ''}`;
-    if (verifiedName && !$('customerName').value.trim()) $('customerName').value = verifiedName;
   } catch (err) {
     verifiedAccountKey = '';
     statusEl.textContent = err.message || 'Unable to verify this account.';
@@ -244,7 +243,6 @@ export function nextUtilityStep() {
   const net = Math.max(0, Number($('billAmount').value) || 0);
   const total = calculateGross(net);
   $('reviewService').textContent = `${brand.title}${currentCategory === 'tv' ? ` · ${$('tvPackage').value}` : ''}`;
-  $('reviewName').textContent = $('customerName').value.trim();
   $('reviewAccount').textContent = accountNumber;
   $('reviewNet').textContent = net.toFixed(2);
   $('reviewFee').textContent = Math.max(0, total - net).toFixed(2);
@@ -348,9 +346,7 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
   const billType = currentService === 'ecg_prepaid' ? 'ecg' : currentService;
   const meterTypeForPayment = currentService === 'ecg_prepaid' ? $('meterType').value : null;
   const packageName = currentCategory === 'tv' ? $('tvPackage').value : null;
-  const customerName = $('customerName').value.trim();
   const customerPhone = $('customerPhone').value.trim();
-  const customerEmail = $('customerEmail').value.trim().toLowerCase();
   const amount = parseFloat($('billAmount').value);
 
   try {
@@ -360,9 +356,7 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
         accountNumber,
         meterType: meterTypeForPayment,
         packageName,
-        customerName,
         customerPhone,
-        customerEmail,
         amount,
       }
     });
@@ -376,8 +370,6 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
     // Cache the completed order for tracking
     sessionStorage.setItem('skaitech_utility_payment', JSON.stringify({
       reference: data.reference,
-      email: customerEmail,
-      name: customerName,
       phone: customerPhone,
       billType,
       accountNumber,
@@ -400,7 +392,7 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
       $('receiptRef').textContent = data.reference;
       $('receiptService').textContent = (data.billType || billType).toUpperCase() + (packageName ? ` - ${packageName}` : '');
       $('receiptAccount').textContent = accountNumber;
-      $('receiptName').textContent = customerName || 'Customer';
+      $('receiptName').textContent = data.customerName || 'Customer';
       $('receiptPhone').textContent = customerPhone;
       $('receiptAmount').textContent = `GHS ${Number(data.grossAmount || data.amount || amount).toFixed(2)}`;
       $('receiptDate').textContent = new Date().toLocaleString();
@@ -417,7 +409,7 @@ $('utilityBillForm').addEventListener('submit', async (e) => {
           network: (data.billType || billType).toUpperCase(),
           size: packageName || 'BILL PAYMENT',
           price: `GHS ${Number(data.grossAmount || data.amount || amount).toFixed(2)}`,
-          name: customerName || 'Customer',
+          name: data.customerName || 'Customer',
           phone: customerPhone,
           status: isProcessing ? 'Processing' : 'Successful',
           date: new Date().toLocaleString(),
@@ -442,8 +434,8 @@ async function checkPaymentReturn() {
   const reference = urlParams.get('reference');
   if (!reference || !reference.startsWith('UTIL-')) return;
 
-  const saved = JSON.parse(sessionStorage.getItem('skaitech_utility_payment') || '{}');
-  const email = saved.email || prompt('Please confirm your email address used for payment:');
+  const { data: { user } } = await supabase.auth.getUser();
+  const email = String(user?.email || '').trim();
   if (!email) return;
 
   const noticeEl = $('paymentResultNotice');

@@ -1,23 +1,12 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
-import { resolveAgentBundlePrice } from '../_shared/pricing.ts';
+import {
+  resolveAgentBundlePrice,
+  type AgentPricingLike,
+} from '../_shared/pricing.ts';
+import { DATA_NETWORKS, catalogPrice } from '../_shared/dataCatalog.ts';
 
-const NETWORKS = new Set(['mtn', 'telecel', 'airteltigo']);
-const catalog: Record<string, Record<number, number>> = {
-  mtn: {
-    1024: 4.3, 2048: 8.8, 3072: 13.2, 4096: 17.6, 5120: 22, 6144: 26.1,
-    8192: 34.8, 10240: 42, 15360: 63, 20480: 84, 25600: 103.75,
-    30720: 121.5, 40960: 160, 51200: 200,
-  },
-  telecel: {
-    5120: 21, 10240: 40, 15360: 60, 20480: 78, 30720: 114, 40960: 151, 51200: 185,
-  },
-  airteltigo: {
-    1024: 4.2, 2048: 8.39, 3072: 12.58, 4096: 16.78, 5120: 20.97,
-    6144: 25.17, 7168: 29.36, 8192: 33.56, 10240: 40.84,
-    15360: 60.71,
-  },
-};
+const NETWORKS = new Set<string>(DATA_NETWORKS);
 
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
@@ -45,11 +34,14 @@ Deno.serve(async (request) => {
     if (!/^0\d{9}$/.test(phone)) return json({ error: 'Enter a valid 10-digit Ghanaian phone number.' }, 400);
     if (!NETWORKS.has(networkType)) return json({ error: 'Unsupported network.' }, 400);
     if (!Number.isInteger(volumeInMB) || volumeInMB <= 0 || volumeInMB > 204800) return json({ error: 'Invalid bundle volume.' }, 400);
-    const catalogPrice = catalog[networkType]?.[volumeInMB];
-    if (!catalogPrice) return json({ error: 'This bundle is not available at the current agent price.' }, 400);
+    const listPrice = catalogPrice(networkType, volumeInMB);
+    if (!listPrice) return json({ error: 'This bundle is not available at the current agent price.' }, 400);
+    // See create-public-data-payment: the real client's generics are too deep
+    // for TypeScript to expand against the pricing helper's structural type.
+    const pricingClient = admin as unknown as AgentPricingLike;
     // The agent's own price from the Store > Pricing tab wins over the catalog.
     const saleAmount = await resolveAgentBundlePrice(
-      admin, user.id, networkType, volumeInMB, catalogPrice,
+      pricingClient, user.id, networkType, volumeInMB, listPrice,
     );
     if (!Number.isFinite(saleAmount) || saleAmount <= 0) {
       return json({ error: 'This bundle is not available at the current agent price.' }, 400);

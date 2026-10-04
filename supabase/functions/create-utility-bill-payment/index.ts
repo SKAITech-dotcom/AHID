@@ -33,9 +33,7 @@ Deno.serve(async (request) => {
     const accountNumber = String(body.accountNumber ?? '').trim();
     const meterType = body.meterType ? String(body.meterType).trim() : null;
     const packageName = body.packageName ? String(body.packageName).trim() : null;
-    const customerName = body.customerName ? String(body.customerName).trim() : null;
     const customerPhone = String(body.customerPhone ?? '').trim();
-    const customerEmail = String(body.customerEmail ?? '').trim().toLowerCase();
     const amountVal = Number(body.amount);
 
     const billCategory = VALID_BILL_TYPES[billType];
@@ -51,17 +49,21 @@ Deno.serve(async (request) => {
       return json({ error: 'Please enter a valid 10-digit Ghanaian phone number (e.g., 024XXXXXXX).' }, 400);
     }
 
-    if (!/^\S+@\S+\.\S+$/.test(customerEmail)) {
-      return json({ error: 'Please enter a valid email address for your payment receipt.' }, 400);
-    }
-
     if (!Number.isFinite(amountVal) || amountVal < 5 || amountVal > 10000) {
       return json({ error: 'Please enter an amount between GHS 5.00 and GHS 10,000.00.' }, 400);
     }
 
     // WALLET-FIRST: utilities are paid from the verified agent's wallet.
-    const { admin, user } = await requireAgent(request);
+    // The customer name and email are never collected from the form; they are
+    // resolved from the signed-in agent so orders stay attributable.
+    const { admin, user, agent } = await requireAgent(request);
     agentId = user.id;
+    const customerName = String(agent.full_name || user.user_metadata?.full_name || '').trim() || null;
+    const customerEmail = String(user.email || '').trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(customerEmail)) {
+      return json({ error: 'Your agent account has no valid email address. Add one in your profile settings to pay utility bills.' }, 400);
+    }
+
     const netAmount = Math.round(amountVal * 100) / 100;
     const feeRate = 0.015;
     const grossAmount = Math.round((netAmount / (1 - feeRate) + Number.EPSILON) * 100) / 100;
@@ -144,6 +146,7 @@ Deno.serve(async (request) => {
       billType,
       status: 'completed',
       token: providerResult.token ?? null,
+      customerName,
       customerPhone,
       message: billType === 'ecg'
         ? 'Your electricity token has been generated successfully.'

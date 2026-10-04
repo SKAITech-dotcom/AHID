@@ -33,8 +33,8 @@ const SERVICE_ITEMS = [
 ];
 
 const AGENT_COMING_SOON_ITEMS = [
-  { icon: 'fa-graduation-cap', label: 'SHS Placement', disabled: true },
-  { icon: 'fa-wifi', label: 'MTN Fibre Data', disabled: true },
+  { icon: 'fa-wifi', label: 'Telecel Broadband', disabled: true },
+  { icon: 'fa-file-invoice-dollar', label: 'Telecel Postpaid Bill', disabled: true },
 ];
 
 function currentFile() {
@@ -60,6 +60,8 @@ function drawerItem(item, isAgent) {
 
 function drawerHtml(isAgent) {
   const isHomePage = ['index.html', 'nonagentdashboard.html'].includes(currentFile());
+  // Agents track their purchases on the Orders page instead, which is scoped to
+  // their own account; this lookup page is for customers holding a reference.
   const serviceItems = SERVICE_ITEMS.filter((item) =>
     item.page !== 'nonAgentTrachOrder.html' || !isAgent || isHomePage
   );
