@@ -1,5 +1,7 @@
 import { adminClient, corsPreflight, json, requireAdmin } from '../_shared/supabase.ts';
 import { fetchGrandTechPackages, normalizeDataNetwork } from '../_shared/grandtechDataProvider.ts';
+import { fetchSwiftPackages } from '../_shared/swiftProvider.ts';
+import { providerForBundle } from '../_shared/dataProvider.ts';
 import {
   DATA_NETWORKS,
   SALE_CATALOG,
@@ -30,17 +32,20 @@ Deno.serve(async (request) => {
   try {
     const { admin } = await requireAdmin(request);
 
-    const packages = await fetchGrandTechPackages();
+    const [grandTechPackages, swiftPackages] = await Promise.all([
+      fetchGrandTechPackages(),
+      fetchSwiftPackages(),
+    ]);
 
-    // Cheapest provider package wins per network + volume, matching how
-    // resolveGrandTechPackage picks at purchase time, so the catalog and the
-    // actual dispatch agree on which package fulfills a bundle.
+    // Build a catalog from the provider assigned to each tier. GrandTech is
+    // used only for MTN 1GB and Telecel 5GB; all remaining tiers use Swift.
     const chosen = new Map<string, { packageId: string; cost: number }>();
-    for (const pkg of packages) {
+    for (const pkg of grandTechPackages) {
       if (pkg.soldOut) continue;
       const network = String(pkg.network || '').toLowerCase() as DataNetwork;
       if (!DATA_NETWORKS.includes(network)) continue;
       const volumeInMB = Math.round(pkg.sizeGb * 1024);
+      if (providerForBundle(network, volumeInMB) !== 'grandtech') continue;
       if (!Number.isFinite(volumeInMB) || volumeInMB <= 0) continue;
       // Only sizes that map to a whole number of MB can be sold, because that
       // is the unit volume_mb and the order path are both denominated in.
@@ -52,6 +57,23 @@ Deno.serve(async (request) => {
       if (!current || pkg.priceGhs < current.cost) {
         chosen.set(key, { packageId: pkg.id, cost: pkg.priceGhs });
       }
+    }
+
+    for (const pkg of swiftPackages) {
+      const networkName = String(pkg.network || '').trim().toLowerCase();
+      const namedNetwork = String(pkg.name || '').match(/\b(mtn|telecel|airteltigo|at)\b/i)?.[1]?.toLowerCase();
+      const network = (networkName === 'at' ? 'airteltigo' : networkName || (namedNetwork === 'at' ? 'airteltigo' : namedNetwork)) as DataNetwork;
+      if (!DATA_NETWORKS.includes(network)) continue;
+      const size = String(pkg.name || '').match(/(\d+(?:\.\d+)?)\s*(gb|g|mb)\b/i);
+      if (!size) continue;
+      const volumeInMB = Math.round(Number(size[1]) * (size[2].toLowerCase() === 'mb' ? 1 : 1024));
+      if (!Number.isFinite(volumeInMB) || volumeInMB <= 0 || providerForBundle(network, volumeInMB) !== 'swift') continue;
+      if (catalogPrice(network, volumeInMB) === null) continue;
+      const cost = Number(pkg.price);
+      if (!Number.isFinite(cost) || cost <= 0) continue;
+      const key = `${network}:${volumeInMB}`;
+      const current = chosen.get(key);
+      if (!current || cost < current.cost) chosen.set(key, { packageId: pkg.id, cost });
     }
 
     const sellableBundleIds = new Set<string>();
@@ -139,7 +161,11 @@ Deno.serve(async (request) => {
     try {
       await admin.rpc('log_activity', {
         p_summary: `Synced data bundle catalog: ${upserts.length} sellable, ${stale.length} deactivated`,
-        p_meta: { sellable: upserts.length, deactivated: stale.length, providerPackages: packages.length },
+        p_meta: {
+          sellable: upserts.length,
+          deactivated: stale.length,
+          providerPackages: grandTechPackages.length + swiftPackages.length,
+        },
         p_actor_user_id: null,
       });
     } catch (logError) {
@@ -148,7 +174,7 @@ Deno.serve(async (request) => {
 
     return json({
       success: true,
-      providerPackages: packages.length,
+      providerPackages: grandTechPackages.length + swiftPackages.length,
       sellable: upserts.length,
       deactivated: stale.length,
       bundles: finalRows ?? [],

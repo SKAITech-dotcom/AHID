@@ -52,7 +52,7 @@ Deno.serve(async (request) => {
     let changed = 0;
 
     for (const order of orders ?? []) {
-      const providerName = String(order.provider_name || activeDataProvider());
+      const providerName = String(order.provider_name || activeDataProvider(order.network_type, Number(order.volume_mb)));
       const providerOrderId = String(order.provider_order_id || '');
 
       const live = providerOrderId
@@ -146,7 +146,7 @@ async function syncInstantDataOrders(
 ): Promise<number> {
   let query = supabase
     .from('public_data_orders')
-    .select('id, payment_reference, agent_id, sale_amount, status, created_at, provider_response')
+    .select('id, payment_reference, agent_id, network_type, volume_mb, sale_amount, status, created_at, provider_response')
     .eq('agent_id', agentId)
     .in('status', ['pending_payment', 'processing'])
     .order('created_at', { ascending: true })
@@ -164,7 +164,7 @@ async function syncInstantDataOrders(
 
   for (const order of orders ?? []) {
     const stored = (order.provider_response || {}) as Record<string, unknown>;
-    const provider = String(stored.provider || activeDataProvider());
+    const provider = String(stored.provider || activeDataProvider(order.network_type, Number(order.volume_mb)));
     const providerOrderId = String(stored.providerOrderId ?? '');
 
     const live = providerOrderId

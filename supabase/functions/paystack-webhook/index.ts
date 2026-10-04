@@ -1,6 +1,6 @@
 import { adminClient, json } from '../_shared/supabase.ts';
 import { dispatchAirtimeTopup } from '../_shared/airtimeProvider.ts';
-import { buySwiftPackage, resolveSwiftPackage } from '../_shared/swiftProvider.ts';
+import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
 import { callUtilityProvider } from '../_shared/utilityProvider.ts';
 
 async function signatureFor(payload: string, secret: string) {
@@ -58,9 +58,9 @@ Deno.serve(async (request) => {
       if (!companyAgentId) throw new Error('Public data provider funding is not configured.');
       await admin.from('public_data_orders').update({ status: 'processing' }).eq('id', order.id).eq('status', 'pending_payment');
 
-      const swiftPackage = await resolveSwiftPackage(order.network_type, order.volume_mb);
-      if (!swiftPackage) throw new Error('Unable to confirm the provider bundle price.');
-      const providerCost = Number(swiftPackage.price);
+      const dataPackage = await resolveDataPackage(order.network_type, order.volume_mb);
+      if (!dataPackage) throw new Error('Unable to confirm the provider bundle price.');
+      const providerCost = dataPackage.costGhs;
       if (!Number.isFinite(providerCost) || providerCost <= 0) throw new Error('Unable to confirm the provider bundle price.');
 
       const providerReference = `PUB-DATA-${crypto.randomUUID()}`;
@@ -73,7 +73,7 @@ Deno.serve(async (request) => {
       let providerPayload: Record<string, unknown> = {};
       let success = false;
       try {
-        const dispatch = await buySwiftPackage(swiftPackage.id, order.customer_phone);
+        const dispatch = await buyDataPackage(dataPackage, order.network_type, order.customer_phone);
         providerPayload = dispatch.payload;
         success = dispatch.success;
       } catch (providerError) {
@@ -85,7 +85,8 @@ Deno.serve(async (request) => {
       if (completeError) throw completeError;
       await admin.rpc('mark_public_data_order', {
         p_order_id: order.id, p_status: success ? 'successful' : 'failed', p_provider_amount: providerCost,
-        p_provider_reference: providerReference, p_provider_response: providerPayload,
+        p_provider_reference: providerReference,
+        p_provider_response: { ...providerPayload, provider: dataPackage.provider, providerOrderId: providerPayload.order_id ?? providerPayload.orderId ?? null },
       });
       return json({ received: true });
     }

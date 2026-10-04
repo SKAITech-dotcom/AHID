@@ -2,15 +2,15 @@
  * Data Bundle Provider Integration for Skaitech Ghana
  * Provider: Swift Vendux Reseller API
  *
- * Catalog:  GET  https://swiftvendux.com/api/v1/developer/v1/packages/
- *             - packages: [{ id, name, network, price, validity, category }]
- * Purchase: POST https://swiftvendux.com/api/v1/developer/v1/buy/
- *             - body: { package_id, phone }
- *             - auth: Authorization: Bearer <DATA_API_KEY>
+ * Catalog:  GET  https://swiftvendux.com/api/v1/developer/packages/
+ * Purchase: POST https://swiftvendux.com/api/v1/developer/buy-data/
+ *             - body: { package_id, phone, reference }
+ *             - auth: Authorization: Bearer <SWIFTVENDUX_API_KEY>
  */
 
 export interface SwiftPackage {
   id: string;
+  package_id?: string;
   name: string;
   network: string;
   price: string | number;
@@ -27,10 +27,10 @@ export interface SwiftBuyResult {
   failureReason?: string;
 }
 
-const SWIFT_BASE_URL = 'https://swiftvendux.com/api/v1/developer/v1';
+const SWIFT_BASE_URL = 'https://swiftvendux.com/api/v1/developer';
 
 function swiftApiKey() {
-  const key = Deno.env.get('DATA_API_KEY');
+  const key = Deno.env.get('SWIFTVENDUX_API_KEY');
   if (!key) throw new Error('Swift data provider API key is not configured.');
   return key;
 }
@@ -42,7 +42,8 @@ function normalizeNetwork(networkType: string): string {
     airteltigo: 'AIRTELTIGO',
     at: 'AT',
   };
-  return map[networkType] || networkType.toUpperCase();
+  const key = String(networkType || '').trim().toLowerCase();
+  return map[key] || key.toUpperCase();
 }
 
 export async function fetchSwiftPackages(): Promise<SwiftPackage[]> {
@@ -53,13 +54,22 @@ export async function fetchSwiftPackages(): Promise<SwiftPackage[]> {
     },
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !Array.isArray(payload?.packages)) {
+  const rows = Array.isArray(payload?.packages) ? payload.packages
+    : Array.isArray(payload?.data) ? payload.data
+    : Array.isArray(payload) ? payload : null;
+  if (!response.ok || !rows) {
     console.error('Swift catalog fetch failed:', payload);
     throw new Error('Unable to fetch the Swift bundle catalog.');
   }
-  return (payload.packages as SwiftPackage[]).filter(
-    (pkg) => String(pkg.category || 'data').toLowerCase() === 'data',
-  );
+  return (rows as Record<string, unknown>[]).map((row) => ({
+    ...row,
+    id: String(row.package_id ?? row.id ?? row.uuid ?? ''),
+    name: String(row.name ?? row.package_name ?? row.package ?? ''),
+    network: String(row.network ?? row.network_name ?? ''),
+    price: row.price ?? row.amount ?? '',
+  }) as SwiftPackage).filter((pkg) => pkg.id && pkg.name && pkg.network &&
+    Number.isFinite(Number(pkg.price)) && Number(pkg.price) > 0 &&
+    String((pkg as Record<string, unknown>).category || 'data').toLowerCase() === 'data');
 }
 
 function volumeToGbLabel(volumeInMB: number): string {
@@ -78,7 +88,12 @@ export async function resolveSwiftPackage(networkType: string, volumeInMB: numbe
   const probe = new RegExp(`\\b${gbLabel}\\s*gb\\b`, 'i');
 
   const matches = packages
-    .filter((pkg) => pkg.network.toUpperCase() === network && probe.test(pkg.name))
+    .filter((pkg) => {
+      const packageNetwork = normalizeNetwork(pkg.network);
+      const equivalent = (network === 'AIRTELTIGO' && packageNetwork === 'AT') ||
+        (network === 'AT' && packageNetwork === 'AIRTELTIGO');
+      return (packageNetwork === network || equivalent) && probe.test(pkg.name);
+    })
     .sort((a, b) => Number(a.price) - Number(b.price));
 
   return matches[0] ?? null;
@@ -86,14 +101,15 @@ export async function resolveSwiftPackage(networkType: string, volumeInMB: numbe
 
 export async function buySwiftPackage(packageId: string, phone: string): Promise<SwiftBuyResult> {
   try {
-    const response = await fetch(`${SWIFT_BASE_URL}/buy/`, {
+    const reference = `SWIFT-${crypto.randomUUID()}`;
+    const response = await fetch(`${SWIFT_BASE_URL}/buy-data/`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${swiftApiKey()}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify({ package_id: packageId, phone }),
+      body: JSON.stringify({ package_id: packageId, phone, reference }),
     });
     const payload = await response.json().catch(() => ({ raw: 'Invalid provider response' })) as Record<string, unknown>;
     const success = response.ok && payload.success === true;

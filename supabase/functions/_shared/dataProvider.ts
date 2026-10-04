@@ -36,13 +36,20 @@ export interface DataBuyResult {
   failureReason?: string;
 }
 
-export function activeDataProvider(): DataProviderName {
-  const configured = String(Deno.env.get('DATA_PROVIDER') || '').trim().toLowerCase();
-  if (configured === 'swift' || configured === 'grandtech') return configured;
+/** GrandTech's only designated sellable bundles; all other tiers use Swift. */
+export function providerForBundle(networkType: string, volumeInMB: number): DataProviderName {
+  const network = String(networkType || '').trim().toLowerCase();
+  if ((network === 'mtn' && volumeInMB === 1024) ||
+      (network === 'telecel' && volumeInMB === 5120)) return 'grandtech';
+  return 'swift';
+}
 
-  // Default to GrandTechHub when its key is present, otherwise fall back to
-  // whatever was configured before.
-  return Deno.env.get('GRANDTECH_API_KEY') ? 'grandtech' : 'swift';
+/** Provider fallback for legacy orders whose provider was not saved. */
+export function activeDataProvider(networkType?: string, volumeInMB?: number): DataProviderName {
+  if (networkType && Number.isFinite(volumeInMB)) {
+    return providerForBundle(networkType, Number(volumeInMB));
+  }
+  return 'swift';
 }
 
 /**
@@ -54,7 +61,7 @@ export async function resolveDataPackage(
   networkType: string,
   volumeInMB: number,
 ): Promise<ResolvedDataPackage | null> {
-  if (activeDataProvider() === 'grandtech') {
+  if (providerForBundle(networkType, volumeInMB) === 'grandtech') {
     const pkg = await resolveGrandTechPackage(networkType, volumeInMB);
     if (!pkg) return null;
     return { provider: 'grandtech', id: pkg.id, costGhs: pkg.priceGhs, raw: pkg };

@@ -26,7 +26,8 @@ place the Paystack secret key in frontend JavaScript or commit it to Git.
 
 ```powershell
 supabase secrets set PAYSTACK_SECRET_KEY=
-supabase secrets set DATA_API_KEY=
+supabase secrets set SWIFTVENDUX_API_KEY=YOUR_ROTATED_SWIFT_VENDUX_KEY
+supabase secrets set GRANDTECH_API_KEY=YOUR_GRANDTECH_KEY
 supabase secrets set SITE_URL=https://your-domain.example
 supabase secrets set PUBLIC_DATA_AGENT_ID=YOUR_COMPANY_AGENT_AUTH_UUID
 supabase functions deploy create-result-checker-payment --no-verify-jwt
@@ -35,11 +36,17 @@ supabase functions deploy paystack-webhook --no-verify-jwt
 supabase functions deploy create-agent-wallet-payment
 supabase functions deploy purchase-agent-data
 supabase functions deploy sync-agent-data-order
+supabase functions deploy sync-data-bundle-catalog
 supabase functions deploy create-public-data-payment --no-verify-jwt
 supabase functions deploy get-public-data-order --no-verify-jwt
 supabase functions deploy upload-result-checker-pins
 supabase functions deploy result-checker-stock
 ```
+
+The Swift Vendux key is read only by Supabase Edge Functions. Set it as a
+Supabase secret as shown above; do not put the key in website JavaScript or
+commit it to this repository. Since the previously shared key was exposed,
+revoke it at Swift Vendux and use a newly issued key here.
 
 ## Order IDs and the activity log
 
