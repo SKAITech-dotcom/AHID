@@ -3011,6 +3011,9 @@ html.dark .transaction-card {
 .idm-banner-sub { margin: 0; font-size: 0.82rem; color: #94a3b8; }
 
 .idm-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: #f8fafc;
   color: #111827;
   padding: 8px 14px;
@@ -3020,6 +3023,7 @@ html.dark .transaction-card {
   font-size: 0.85rem;
   white-space: nowrap;
   cursor: pointer;
+  text-decoration: none;
 }
 .idm-banner-btn:hover { background: #e2e8f0; }
 

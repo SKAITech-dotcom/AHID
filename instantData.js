@@ -100,14 +100,6 @@ export function selectDataNetwork(net) {
   document.querySelectorAll('#networkGrid .id-network-btn').forEach((btn) => {
     const active = btn.dataset.network === net;
     btn.classList.toggle('active', active);
-    if (active) {
-      const meta = NETWORK_META[net];
-      btn.style.boxShadow = `0 0 0 3px ${meta.logoBg}55, 0 4px 10px rgba(0,0,0,0.08)`;
-      btn.style.borderColor = meta.logoBg;
-    } else {
-      btn.style.boxShadow = '';
-      btn.style.borderColor = '#2a2a31';
-    }
   });
 
   renderBundles();
