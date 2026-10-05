@@ -65,6 +65,11 @@
       background: #ffffff;
       box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
     }
+    .settings-field input[readonly] {
+      background: #f1f5f9;
+      color: #475569;
+      cursor: not-allowed;
+    }
     .settings-save-btn {
       width: 100%;
       border: none;
@@ -171,7 +176,7 @@
     <!-- PERSONAL DETAILS -->
     <section class="settings-card">
       <h2><i class="fa-solid fa-user-pen"></i> Update Your Details</h2>
-      <p>Keep your profile name, agent code, and phone number up to date.</p>
+      <p>Keep your profile name and phone number up to date. Your agent code is permanent.</p>
 
       <div class="settings-field">
         <label for="setFullName">Full name</label>
@@ -183,8 +188,8 @@
       </div>
       <div class="settings-field">
         <label for="setAgentCode">Agent code</label>
-        <input type="text" id="setAgentCode" maxlength="20">
-        <div class="settings-hint">Your agent code is used to identify you to your buyers.</div>
+        <input type="text" id="setAgentCode" maxlength="20" readonly aria-readonly="true">
+        <div class="settings-hint">Your agent code identifies your account and cannot be changed.</div>
       </div>
 
       <button type="button" class="settings-save-btn" id="saveDetailsBtn">

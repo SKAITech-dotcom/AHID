@@ -3,11 +3,12 @@ import { requireVerifiedAgent } from './agentAuthGuard.js';
 
 /**
  * Agent account settings: shows profile + last login, and lets an agent
- * update their personal details (name, phone, agent code) and credentials
+ * update their personal details (name and phone) and credentials
  * (email / password) while staying inside the portal.
  */
 
 let currentUser = null;
+let currentPhoneColumn = 'phone';
 
 function showNotice(message, type) {
   const el = document.getElementById('settingsNotice');
@@ -37,7 +38,7 @@ function fillForm(user, agent) {
   loadDetail('ovFullName', (agent && agent.full_name) || user.user_metadata?.full_name || '');
   loadDetail('ovAgentCode', (agent && agent.agent_code) || user.user_metadata?.agent_code || '');
   loadDetail('ovEmail', user.email || '');
-  loadDetail('ovPhone', (agent && agent.phone) || user.user_metadata?.phone || '');
+  loadDetail('ovPhone', (agent && (agent.phone || agent.phone_number)) || user.user_metadata?.phone || '');
   loadDetail('ovRole', (agent && agent.role) || user.user_metadata?.role || 'agent');
   loadDetail('ovLastLogin', formatLastLogin(user.last_sign_in_at));
 
@@ -46,7 +47,7 @@ function fillForm(user, agent) {
   const codeEl = document.getElementById('setAgentCode');
   const emailEl = document.getElementById('setEmail');
   if (nameEl) nameEl.value = (agent && agent.full_name) || user.user_metadata?.full_name || '';
-  if (phoneEl) phoneEl.value = (agent && agent.phone) || user.user_metadata?.phone || '';
+  if (phoneEl) phoneEl.value = (agent && (agent.phone || agent.phone_number)) || user.user_metadata?.phone || '';
   if (codeEl) codeEl.value = (agent && agent.agent_code) || user.user_metadata?.agent_code || '';
   if (emailEl) emailEl.value = user.email || '';
 }
@@ -57,16 +58,19 @@ async function loadAccount() {
   currentUser = authResult.user;
 
   let agent = authResult.agent;
-  try {
-    const { data } = await supabase
-      .from('agents')
-      .select('id, role, full_name, agent_code, phone')
+  let result = await supabase.from('agents')
+    .select('id, role, full_name, agent_code, phone')
+    .eq('id', currentUser.id)
+    .maybeSingle();
+  if (result.error && /phone.*column|column.*phone/i.test(result.error.message || '')) {
+    result = await supabase.from('agents')
+      .select('id, role, full_name, agent_code, phone_number')
       .eq('id', currentUser.id)
-      .single();
-    if (data) agent = data;
-  } catch (err) {
-    console.warn('Could not refresh agent row for settings:', err);
+      .maybeSingle();
+    currentPhoneColumn = 'phone_number';
   }
+  if (result.error) throw result.error;
+  if (result.data) agent = result.data;
 
   fillForm(currentUser, agent);
 }
@@ -74,8 +78,6 @@ async function loadAccount() {
 async function handleSaveDetails() {
   const name = (document.getElementById('setFullName').value || '').trim();
   const phone = (document.getElementById('setPhone').value || '').trim();
-  const code = (document.getElementById('setAgentCode').value || '').trim();
-
   if (!canSave()) return;
   if (!name) {
     showNotice('Full name cannot be empty.', 'error');
@@ -86,24 +88,15 @@ async function handleSaveDetails() {
   btn.disabled = true;
 
   try {
-    const payload = { full_name: name, phone, agent_code: code };
-    const [profilesResult, agentsResult] = await Promise.all([
-      supabase.from('profiles').upsert({ id: currentUser.id, ...payload }, { onConflict: 'id' }),
-      supabase.from('agents').upsert({ id: currentUser.id, ...payload }, { onConflict: 'id' }),
-    ]);
+    const payload = { full_name: name, [currentPhoneColumn]: phone };
+    const { error } = await supabase.from('agents').update(payload).eq('id', currentUser.id);
+    if (error) throw error;
 
-    if (profilesResult.error || agentsResult.error) {
-      throw new Error(profilesResult.error?.message || agentsResult.error?.message || 'Unable to save details.');
-    }
-
-    await supabase.auth.updateUser({ data: payload });
+    await supabase.auth.updateUser({ data: { full_name: name, phone } });
 
     localStorage.setItem('currentAgentName', name);
     localStorage.setItem('agent_name', name);
-    if (code) localStorage.setItem('currentAgentCode', code);
-
     loadDetail('ovFullName', name);
-    loadDetail('ovAgentCode', code);
     loadDetail('ovPhone', phone);
 
     showNotice('Your details have been updated.', 'success');
