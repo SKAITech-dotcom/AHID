@@ -1105,18 +1105,63 @@ function closeForgotModal() {
     document.getElementById('forgotPasswordModal').style.display = 'none';
 }
 
-function submitPasswordReset() {
-    const inputVal = document.getElementById('resetEmailOrPhone').value.trim();
+async function submitPasswordReset() {
+    const input = document.getElementById('resetEmailOrPhone');
+    const email = String(input?.value || '').trim().toLowerCase();
 
-    if (!inputVal) {
-        alert('Please enter your email or phone number.');
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+        alert('Enter the email address registered to your account.');
         return;
     }
 
-    // Simulate sending recovery info
-    alert(`Password reset instructions have been sent to: ${inputVal}`);
-    document.getElementById('resetEmailOrPhone').value = '';
-    closeForgotModal();
+    const button = document.querySelector('#forgotPasswordModal button[onclick="submitPasswordReset()"]');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Sending…';
+    }
+    try {
+        const redirectTo = new URL('login.html?recovery=true', window.location.origin).href;
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+        if (error) throw error;
+        input.value = '';
+        closeForgotModal();
+        alert('If that email is registered, a password reset link has been sent. Check your inbox and spam folder.');
+    } catch (error) {
+        console.error('Password reset request failed:', error);
+        alert(error?.message || 'Could not send a reset link. Please try again later.');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Send Reset Link';
+        }
+    }
+}
+
+async function handlePasswordRecovery(event) {
+    event.preventDefault();
+    const password = document.getElementById('newAccountPassword')?.value || '';
+    const confirmation = document.getElementById('confirmAccountPassword')?.value || '';
+    if (password.length < 6) {
+        alert('Use a password with at least 6 characters.');
+        return;
+    }
+    if (password !== confirmation) {
+        alert('The passwords do not match.');
+        return;
+    }
+
+    try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !session) throw new Error('This reset link is invalid or expired. Request a new one.');
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+        await supabase.auth.signOut();
+        alert('Your password has been updated. Sign in with your new password.');
+        window.location.replace('login.html');
+    } catch (error) {
+        console.error('Password update failed:', error);
+        alert(error?.message || 'Could not update your password. Request a new reset link and try again.');
+    }
 }
 
 function togglePasswordVisibility() {
@@ -1291,6 +1336,7 @@ window.changePageSize = changePageSize;
 window.openForgotModal = openForgotModal;
 window.closeForgotModal = closeForgotModal;
 window.submitPasswordReset = submitPasswordReset;
+window.handlePasswordRecovery = handlePasswordRecovery;
 window.togglePasswordVisibility = togglePasswordVisibility;
 window.handleRegistration = handleRegistration;
 window.handleLogin = handleLogin;
@@ -1337,6 +1383,10 @@ async function loadUserData() {
   // An existing authenticated user should not see the sign-in form again.
   // Return them to the requested page, or to the agent home dashboard.
   if (isLoginPage) {
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const isPasswordRecovery = new URLSearchParams(window.location.search).get('recovery') === 'true' ||
+      hashParams.get('type') === 'recovery';
+    if (isPasswordRecovery) return;
     try {
       const { data: { user }, error } = await supabase.auth.getUser();
       if (!error && user) {

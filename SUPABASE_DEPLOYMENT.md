@@ -48,6 +48,17 @@ Supabase secret as shown above; do not put the key in website JavaScript or
 commit it to this repository. Since the previously shared key was exposed,
 revoke it at Swift Vendux and use a newly issued key here.
 
+For account password recovery, open **Authentication > URL Configuration** in
+the Supabase Dashboard and add the website URL below to **Redirect URLs**:
+
+```text
+https://skaitechgh.wasmer.app/login.html?recovery=true
+```
+
+The login page's **Forgot password?** link sends the reset email to the account's
+registered email address. The recovery link returns to the page to choose a new
+password.
+
 ## Order IDs and the activity log
 
 Every order gets a short 5-character code in addition to its long reference.
