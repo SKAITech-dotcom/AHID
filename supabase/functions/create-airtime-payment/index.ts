@@ -1,6 +1,7 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { dispatchAirtimeTopup } from '../_shared/airtimeProvider.ts';
-import { refundWallet, getWalletBalance } from '../_shared/wallet.ts';
+import { refundWallet, getWalletBalance, WalletError } from '../_shared/wallet.ts';
+import { friendlyProviderMessage } from '../_shared/providerMessages.ts';
 
 const VALID_NETWORKS = new Set(['mtn', 'telecel', 'at']);
 
@@ -122,7 +123,8 @@ Deno.serve(async (request) => {
     }
 
     // 3b. FAILED / PENDING_PROVIDER -> refund the wallet and mark the order failed.
-    const failureReason = dispatchResult.failureReason || 'The airtime provider did not accept the top-up.';
+    const failureReason = friendlyProviderMessage(dispatchResult.failureReason, network) ||
+      'The airtime provider did not accept the top-up.';
     await admin.from('airtime_orders').update({
       payment_status: 'failed',
       airtime_status: 'failed',

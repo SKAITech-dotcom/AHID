@@ -8,10 +8,13 @@ const NETWORK_LABELS: Record<string, string> = {
 
 const BILL_LABELS: Record<string, string> = {
   ecg: 'ECG Prepaid',
+  ecg_postpaid: 'ECG Postpaid',
   ghana_water: 'Ghana Water',
   dstv: 'DStv',
   gotv: 'GOtv',
   startimes: 'StarTimes',
+  telecel_broadband: 'Telecel Broadband',
+  telecel_postpaid: 'Telecel Postpaid',
 };
 
 function maskPhone(phone: string): string {

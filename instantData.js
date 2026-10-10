@@ -4,9 +4,9 @@ import { applyWalletBalance, refreshWalletBalance } from './walletBalance.js';
 
 const NETWORK_KEYS = ['mtn', 'telecel', 'airteltigo'];
 const DETECT_PREFIXES = {
-  mtn: ['024', '054', '055', '059', '025', '053'],
+  mtn: ['024', '025', '053', '054', '055', '059'],
   telecel: ['020', '050'],
-  airteltigo: ['027', '026', '057'],
+  airteltigo: ['026', '027', '056', '057'],
 };
 const NETWORK_META = {
   mtn: { label: 'MTN', logoBg: '#ffcc00', logoColor: '#000000', text: 'MTN' },

@@ -1,6 +1,6 @@
 import { adminClient, corsPreflight, json, requireAdmin } from '../_shared/supabase.ts';
 import { fetchGrandTechPackages, normalizeDataNetwork } from '../_shared/grandtechDataProvider.ts';
-import { fetchSwiftPackages } from '../_shared/swiftProvider.ts';
+import { fetchSwiftPackages, swiftPackageVolumeInMB } from '../_shared/swiftProvider.ts';
 import { providerForBundle } from '../_shared/dataProvider.ts';
 import {
   DATA_NETWORKS,
@@ -65,9 +65,8 @@ Deno.serve(async (request) => {
       const namedNetwork = String(pkg.name || '').match(/\b(mtn|telecel|airteltigo|at)\b/i)?.[1]?.toLowerCase();
       const network = (networkName === 'at' ? 'airteltigo' : networkName || (namedNetwork === 'at' ? 'airteltigo' : namedNetwork)) as DataNetwork;
       if (!DATA_NETWORKS.includes(network)) continue;
-      const size = String(pkg.name || '').match(/(\d+(?:\.\d+)?)\s*(gb|g|mb)\b/i);
-      if (!size) continue;
-      const volumeInMB = Math.round(Number(size[1]) * (size[2].toLowerCase() === 'mb' ? 1 : 1024));
+      const volumeInMB = swiftPackageVolumeInMB(pkg.name);
+      if (volumeInMB === null) continue;
       if (!Number.isFinite(volumeInMB) || volumeInMB < 1024 || providerForBundle(network, volumeInMB) !== 'swift') continue;
       if (catalogPrice(network, volumeInMB) === null) continue;
       const cost = Number(pkg.price);

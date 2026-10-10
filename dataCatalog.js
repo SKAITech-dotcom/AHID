@@ -28,9 +28,9 @@ export const NETWORK_BRANDING = {
  * network tabs stay editable and the provider validates the pairing.
  */
 const NETWORK_PREFIXES = {
-  mtn: ['024', '025', '026', '054', '055', '059'],
-  telecel: ['020', '023', '050'],
-  airteltigo: ['027', '028', '057'],
+  mtn: ['024', '025', '053', '054', '055', '059'],
+  telecel: ['020', '050'],
+  airteltigo: ['026', '027', '056', '057'],
 };
 
 export function guessNetworkFromPhone(phone) {

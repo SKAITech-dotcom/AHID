@@ -13,6 +13,7 @@ Deno.serve(async (request) => {
   let agentId = '';
   let walletDebited = false;
   let registrationId: string | null = null;
+  let feeAmount = 0;
 
   try {
     const body = await request.json();
@@ -26,7 +27,7 @@ Deno.serve(async (request) => {
     const priceId = String(body.priceId || '').trim();
     // Price is server-side only. A client-supplied `amount` is ignored so an
     // agent cannot underpay for a registration.
-    const feeAmount = await resolveServicePrice('afa', {
+    feeAmount = await resolveServicePrice('afa', {
       supabase: adminClient(),
       envVar: 'AFA_FEE_AMOUNT',
       fallback: 11,
@@ -70,7 +71,7 @@ Deno.serve(async (request) => {
         source: 'agent',
         created_by: user.id,
       })
-      .select('reference, full_name, phone, town, id_type, id_number, date_of_birth, occupation, price_id, amount, status, source, created_at')
+      .select('id, reference, full_name, phone, town, id_type, id_number, date_of_birth, occupation, price_id, amount, status, source, created_at')
       .single();
     if (insertError) throw insertError;
     registrationId = registration.id;

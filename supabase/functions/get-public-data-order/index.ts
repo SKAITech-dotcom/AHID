@@ -52,7 +52,7 @@ Deno.serve(async (request) => {
           p_provider_reference: null,
           p_provider_response: { ...stored, lastProviderStatus: live.status },
         });
-      } else if (live?.state === 'failed') {
+      } else if (live?.state === 'failed' || live?.state === 'cancelled') {
         status = 'failed';
         await supabase.rpc('mark_public_data_order', {
           p_order_id: data.id,

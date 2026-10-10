@@ -40,7 +40,6 @@ let currentTvProvider = 'dstv';
 let currentService = 'ecg_prepaid';
 let verifiedAccountKey = '';
 let accountVerifyTimer = 0;
-const FEE_PERCENT = 0.015;
 
 const SERVICE_INFO = {
   ecg_prepaid: { title: 'ECG Prepaid', subtitle: 'ECG · Prepaid electricity', logo: 'img/ecg%20logo.jpg' },
@@ -48,23 +47,21 @@ const SERVICE_INFO = {
   ghana_water: { title: 'Ghana Water', subtitle: 'GWCL · Water bill payment', logo: 'img/ghana%20water%20logo.png' },
   dstv: { title: 'DStv', subtitle: 'MultiChoice · TV subscription', logo: 'img/dstv.jpg' },
   gotv: { title: 'GOtv', subtitle: 'MultiChoice · TV subscription', logo: 'img/go%20tv%20logo.png' },
-  startimes: { title: 'StarTimes', subtitle: 'StarTimes · TV subscription', logo: 'img/star%20time%20logo.jpg' },
+startimes: { title: 'StarTimes', subtitle: 'StarTimes · TV subscription', logo: 'img/star%20time%20logo.jpg' },
+  telecel_broadband: { title: 'Telecel Broadband', subtitle: 'Telecel · Broadband subscription payment', logo: 'img/telecel-logo.png' },
+  telecel_postpaid: { title: 'Telecel Postpaid Bill', subtitle: 'Telecel · Postpaid bill payment', logo: 'img/telecel-logo.png' },
 };
 
 function $(id) {
   return document.getElementById(id);
 }
 
-function calculateGross(net) {
-  const safeRate = Number.isFinite(FEE_PERCENT) ? FEE_PERCENT : 0.015;
-  return Math.round(((net / (1 - safeRate)) + Number.EPSILON) * 100) / 100;
-}
-
 export function updateSummary() {
   const amountInput = $('billAmount');
   const netAmount = Math.max(0, parseFloat(amountInput.value) || 0);
-  const grossAmount = calculateGross(netAmount);
-  const fee = Math.max(0, Math.round((grossAmount - netAmount + Number.EPSILON) * 100) / 100);
+  // Wallet purchase: the exact amount is deducted, no checkout fee.
+  const grossAmount = netAmount;
+  const fee = 0;
 
   $('summaryNet').textContent = netAmount.toFixed(2);
   $('summaryFee').textContent = fee.toFixed(2);
@@ -91,10 +88,10 @@ export function setAmount(val) {
 export function switchBillCategory(category, openModal = true) {
   const service = category;
   currentService = service;
-  currentCategory = service === 'ghana_water' ? 'ghana_water' : ['dstv', 'gotv', 'startimes'].includes(service) ? 'tv' : 'ecg';
+currentCategory = service === 'ghana_water' ? 'ghana_water' : ['dstv', 'gotv', 'startimes'].includes(service) ? 'tv' : ['telecel_broadband', 'telecel_postpaid'].includes(service) ? 'telecom' : 'ecg';
   if (currentCategory === 'tv') currentTvProvider = service;
-  ['ecg_prepaid', 'ecg_postpaid', 'ghana_water', 'dstv', 'gotv', 'startimes'].forEach(key => {
-    const buttonIds = { ecg_prepaid: 'serviceEcgPrepaid', ecg_postpaid: 'serviceEcgPostpaid', ghana_water: 'serviceWater', dstv: 'serviceDstv', gotv: 'serviceGotv', startimes: 'serviceStartimes' };
+  ['ecg_prepaid', 'ecg_postpaid', 'ghana_water', 'dstv', 'gotv', 'startimes', 'telecel_broadband', 'telecel_postpaid'].forEach(key => {
+    const buttonIds = { ecg_prepaid: 'serviceEcgPrepaid', ecg_postpaid: 'serviceEcgPostpaid', ghana_water: 'serviceWater', dstv: 'serviceDstv', gotv: 'serviceGotv', startimes: 'serviceStartimes', telecel_broadband: 'serviceTelecelBroadband', telecel_postpaid: 'serviceTelecelPostpaid' };
     const button = $(buttonIds[key]);
     if (button) button.classList.toggle('active', key === service);
   });
@@ -123,12 +120,23 @@ export function switchBillCategory(category, openModal = true) {
     tvPackageField.style.display = 'none';
     accountLabel.textContent = service === 'ecg_postpaid' ? 'ECG Account Number' : 'Prepaid Meter Number';
     accountInput.placeholder = service === 'ecg_postpaid' ? 'Enter ECG account number' : 'Enter prepaid meter number';
-  } else if (currentCategory === 'ghana_water') {
+} else if (currentCategory === 'ghana_water') {
     meterTypeField.style.display = 'none';
     tvProviderRow.style.display = 'none';
     tvPackageField.style.display = 'none';
     accountLabel.textContent = 'GWCL Customer Account Number';
     accountInput.placeholder = 'e.g., GW-84920492';
+  } else if (currentCategory === 'telecom') {
+    meterTypeField.style.display = 'none';
+    tvProviderRow.style.display = 'none';
+    tvPackageField.style.display = 'none';
+    if (service === 'telecel_broadband') {
+      accountLabel.textContent = 'Telecel Account Number';
+      accountInput.placeholder = 'Enter your Telecel broadband account number';
+    } else {
+      accountLabel.textContent = 'Telecel Postpaid Number';
+      accountInput.placeholder = 'Enter your Telecel postpaid number';
+    }
   } else if (currentCategory === 'tv') {
     meterTypeField.style.display = 'none';
     tvProviderRow.style.display = 'none';
@@ -239,13 +247,13 @@ export function nextUtilityStep() {
     $('verificationMsg').scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  const brand = SERVICE_INFO[currentService];
+const brand = SERVICE_INFO[currentService];
   const net = Math.max(0, Number($('billAmount').value) || 0);
-  const total = calculateGross(net);
+  const total = net;
   $('reviewService').textContent = `${brand.title}${currentCategory === 'tv' ? ` · ${$('tvPackage').value}` : ''}`;
   $('reviewAccount').textContent = accountNumber;
   $('reviewNet').textContent = net.toFixed(2);
-  $('reviewFee').textContent = Math.max(0, total - net).toFixed(2);
+  $('reviewFee').textContent = '0.00';
   $('reviewTotal').textContent = total.toFixed(2);
   $('utilityStepOne').style.display = 'none';
   $('utilityStepTwo').style.display = 'block';
@@ -503,7 +511,7 @@ function checkUrlServiceParam() {
   const service = urlParams.get('service');
   if (service === 'water' || service === 'ghana_water') {
     switchBillCategory('ghana_water', false);
-  } else if (['dstv', 'gotv', 'startimes', 'ecg_postpaid', 'ecg_prepaid'].includes(service)) {
+  } else if (['dstv', 'gotv', 'startimes', 'ecg_postpaid', 'ecg_prepaid', 'telecel_broadband', 'telecel_postpaid'].includes(service)) {
     switchBillCategory(service, false);
   } else {
     switchBillCategory('ecg_prepaid', false);

@@ -2,13 +2,15 @@ import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supab
 import { chargeWallet, refundWallet } from '../_shared/wallet.ts';
 import { callUtilityProvider } from '../_shared/utilityProvider.ts';
 
-const VALID_BILL_TYPES: Record<string, 'electricity' | 'water' | 'tv'> = {
+const VALID_BILL_TYPES: Record<string, 'electricity' | 'water' | 'tv' | 'broadband' | 'postpaid'> = {
   ecg: 'electricity',
   ecg_postpaid: 'electricity',
   ghana_water: 'water',
   dstv: 'tv',
   gotv: 'tv',
   startimes: 'tv',
+  telecel_broadband: 'broadband',
+  telecel_postpaid: 'postpaid',
 };
 
 Deno.serve(async (request) => {
@@ -64,10 +66,11 @@ Deno.serve(async (request) => {
       return json({ error: 'Your agent account has no valid email address. Add one in your profile settings to pay utility bills.' }, 400);
     }
 
+    // Charge the exact entered amount: the Paystack checkout fee applies only
+    // when funding the wallet, never to this purchase.
     const netAmount = Math.round(amountVal * 100) / 100;
-    const feeRate = 0.015;
-    const grossAmount = Math.round((netAmount / (1 - feeRate) + Number.EPSILON) * 100) / 100;
-    const feeAmount = Math.round((grossAmount - netAmount + Number.EPSILON) * 100) / 100;
+    const feeAmount = 0;
+    const grossAmount = netAmount;
 
     const accountCheck = await callUtilityProvider('verify', { service: billType, accountNumber, meterType });
     if (!accountCheck.success || !accountCheck.verified) {

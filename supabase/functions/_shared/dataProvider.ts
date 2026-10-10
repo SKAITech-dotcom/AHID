@@ -1,10 +1,7 @@
 /**
- * Data bundle provider facade.
- *
- * GrandTechHub is the primary provider: it is the account we already fund for
- * AFA, and its catalog is the authority on which network + size combinations
- * can actually be delivered. Swift Vendux stays wired up as a fallback via
- * DATA_PROVIDER=swift, so the old route is one env var away.
+ * Data bundle provider facade. GrandTech fulfills MTN 1GB and Telecel 5GB;
+ * Swift fulfills every other bundle. Package IDs and provider costs come from
+ * the active provider-confirmed bundle catalog used by the storefront.
  */
 
 import { buySwiftPackage, resolveSwiftPackage } from './swiftProvider.ts';
@@ -13,8 +10,8 @@ import {
   fetchGrandTechOrderStatus,
   resolveGrandTechPackage,
   type GrandTechOrderState,
-  type GrandTechPackage,
 } from './grandtechDataProvider.ts';
+import { friendlyProviderMessage } from './providerMessages.ts';
 
 export type DataProviderName = 'grandtech' | 'swift';
 
@@ -23,7 +20,7 @@ export interface ResolvedDataPackage {
   id: string;
   /** What the provider charges us, in GHS. Used for margin reporting. */
   costGhs: number;
-  raw: GrandTechPackage | { id: string; price: string | number };
+  raw: { id: string; price: string | number };
 }
 
 export interface DataBuyResult {
@@ -53,30 +50,32 @@ export function activeDataProvider(networkType?: string, volumeInMB?: number): D
 }
 
 /**
- * Resolves the provider package for a network + volume, or null when the
- * provider does not offer that combination. A null result must abort the order
- * and refund - it means we would be selling something undeliverable.
+ * Resolves the provider package from the provider's live catalog. MTN 1GB and
+ * Telecel 5GB are GrandTech-only; every other Data Bundle package is resolved
+ * from Swift. bundle_catalog remains the storefront's sale-price catalog, but
+ * a stale provider mapping there must not block a package the assigned provider
+ * currently offers (or send it to the wrong provider).
  */
 export async function resolveDataPackage(
   networkType: string,
   volumeInMB: number,
 ): Promise<ResolvedDataPackage | null> {
-  if (providerForBundle(networkType, volumeInMB) === 'grandtech') {
-    const pkg = await resolveGrandTechPackage(networkType, volumeInMB);
+  const network = String(networkType || '').trim().toLowerCase();
+  const provider = providerForBundle(network, volumeInMB);
+  if (provider === 'grandtech') {
+    const pkg = await resolveGrandTechPackage(network, volumeInMB);
     if (!pkg) return null;
-    return { provider: 'grandtech', id: pkg.id, costGhs: pkg.priceGhs, raw: pkg };
+    return { provider, id: pkg.id, costGhs: pkg.priceGhs, raw: { id: pkg.id, price: pkg.priceGhs } };
   }
 
-  const pkg = await resolveSwiftPackage(networkType, volumeInMB);
-  if (!pkg) return null;
-  return {
-    provider: 'swift',
-    id: pkg.id,
-    costGhs: Number(pkg.price),
-    raw: pkg,
-  };
+  // All other Data Bundle tiers and the small Instant Data tiers use Swift.
+  if (provider === 'swift') {
+    const pkg = await resolveSwiftPackage(network, volumeInMB);
+    if (!pkg) return null;
+    return { provider: 'swift', id: pkg.id, costGhs: Number(pkg.price), raw: { id: pkg.id, price: pkg.price } };
+  }
+  return null;
 }
-
 export async function buyDataPackage(
   resolved: ResolvedDataPackage,
   networkType: string,
@@ -93,7 +92,9 @@ export async function buyDataPackage(
       // status poll (or a callback) confirms the outcome.
       status: result.success ? 'processing' : 'failed',
       payload: result.payload,
-      failureReason: result.failureReason,
+      failureReason: result.failureReason && !result.success
+        ? friendlyProviderMessage(result.failureReason, networkType)
+        : result.failureReason,
     };
   }
 
@@ -104,7 +105,9 @@ export async function buyDataPackage(
     orderId: result.orderId,
     status: result.status,
     payload: result.payload,
-    failureReason: result.failureReason,
+    failureReason: result.failureReason && !result.success
+      ? friendlyProviderMessage(result.failureReason, networkType)
+      : result.failureReason,
   };
 }
 

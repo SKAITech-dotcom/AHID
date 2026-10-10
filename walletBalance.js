@@ -12,7 +12,7 @@ export function applyWalletBalance(balance) {
     el.textContent = value.toFixed(2);
   });
 
-  ['agentBannerBalance', 'walletPageBalance'].forEach((id) => {
+  ['agentBannerBalance', 'walletPageBalance', 'walletBalance', 'popupBalanceVal', 'walletHeaderDisplay'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.textContent = value.toFixed(2);
   });

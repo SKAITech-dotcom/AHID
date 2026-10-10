@@ -174,11 +174,11 @@ async function syncInstantDataOrders(
       })
       : null;
 
-    let nextStatus: 'successful' | 'failed' | null = null;
+    let nextStatus: 'successful' | 'failed' | 'cancelled' | null = null;
 
-    if (live?.state === 'successful' || live?.state === 'cancelled') {
+    if (live?.state === 'successful') {
       nextStatus = 'successful';
-    } else if (live?.state === 'failed') {
+    } else if (live?.state === 'failed' || live?.state === 'cancelled') {
       nextStatus = 'failed';
     } else {
       const ageMinutes = (Date.now() - new Date(order.created_at).getTime()) / 60000;

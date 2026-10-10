@@ -1,12 +1,12 @@
 import { supabase } from './supabaseClient.js';
 import { checkAgentAccessServer } from './agentAccessCheck.js';
-import { applyWalletBalance } from './walletBalance.js';
+import { applyWalletBalance, refreshWalletBalance } from './walletBalance.js';
 
 // Configuration & Constants
 const NETWORK_PREFIXES = {
-  mtn: ['024', '054', '055', '059', '053', '025'],
+  mtn: ['024', '025', '053', '054', '055', '059'],
   telecel: ['020', '050'],
-  at: ['027', '057', '026'],
+  at: ['026', '027', '056', '057'],
 };
 
 // Application State
@@ -654,6 +654,7 @@ export function toggleAirtimeDrawer() {
 document.addEventListener('DOMContentLoaded', async () => {
   await initAuth();
   enforceAgentAccess();
+  refreshWalletBalance();
   updateSummary();
   updateHistoryCountBadge();
   checkPaymentCallback();

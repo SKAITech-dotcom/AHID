@@ -52,12 +52,12 @@ Deno.serve(async (request) => {
     try {
       dataPackage = await resolveDataPackage(networkType, volumeInMB);
     } catch (error) {
-      return json({ error: errorMessage(error, 'Unable to confirm the current bundle price.') }, 502);
+      return json({ error: errorMessage(error, 'No active provider package is available for this bundle. Please ask an admin to sync the data catalog.') }, 502);
     }
-    if (!dataPackage) return json({ error: 'Unable to confirm the current bundle price.' }, 502);
+    if (!dataPackage) return json({ error: 'No active provider package is available for this bundle. Please ask an admin to sync the data catalog.' }, 502);
     providerCost = dataPackage.costGhs;
     if (!Number.isFinite(providerCost) || providerCost <= 0) {
-      return json({ error: 'Unable to confirm the current bundle price.' }, 502);
+      return json({ error: 'No active provider package is available for this bundle. Please ask an admin to sync the data catalog.' }, 502);
     }
 
     const reference = `DATA-${crypto.randomUUID()}`;

@@ -3,9 +3,9 @@ import { supabase } from './supabaseClient.js';
 // Configuration & Constants
 const FEE_PERCENT = 0.015;
 const NETWORK_PREFIXES = {
-  mtn: ['024', '054', '055', '059', '053', '025'],
+  mtn: ['024', '025', '053', '054', '055', '059'],
   telecel: ['020', '050'],
-  at: ['027', '057', '026'],
+  at: ['026', '027', '056', '057'],
 };
 
 // Application State

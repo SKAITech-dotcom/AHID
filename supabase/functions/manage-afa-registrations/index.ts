@@ -5,7 +5,7 @@ import { submitAfaRegistration } from '../_shared/afaProvider.ts';
 
 const VALID_STATUSES = ['Pending', 'Processing', 'Completed', 'Cancelled'];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const AFA_SELECT = 'reference, full_name, phone, town, id_type, id_number, date_of_birth, occupation, price_id, amount, status, source, created_at, provider_reference, failure_reason';
+const AFA_SELECT = 'id, reference, full_name, phone, town, id_type, id_number, date_of_birth, occupation, price_id, amount, status, source, created_at, provider_reference, failure_reason';
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();

@@ -92,8 +92,10 @@ function generateAgentCode() {
 
 async function ensureAgentProfile(userId, agentName, agentCode, phone = '') {
   try {
-    const profileData = { id: userId, full_name: agentName, agent_code: agentCode, phone };
-    const profileResult = await supabase.from('profiles').upsert(profileData, { onConflict: 'id' });
+    // profiles is read-only to browsers on purpose: its wallet_balance column
+    // is a mirror of wallets.balance and must never be client-writable. Agent
+    // identity (name/code/phone) is therefore written only to `agents`; a
+    // database trigger mirrors those to `profiles`.
 
     // Check if user is an admin to avoid demoting
     let role = 'agent';
@@ -132,7 +134,7 @@ async function ensureAgentProfile(userId, agentName, agentCode, phone = '') {
     } catch (_) {}
 
     return {
-      profileError: profileResult.error,
+      profileError: null,
       agentError: agentResult.error,
       walletError: walletResult.error
     };

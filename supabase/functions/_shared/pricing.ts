@@ -26,13 +26,13 @@ type SupabaseLike = {
 
 export async function resolveServicePrice(
   service: string,
-  options: { supabase?: SupabaseLike; envVar?: string; fallback?: number } = {},
+  options: { supabase?: unknown; envVar?: string; fallback?: number } = {},
 ): Promise<number> {
   const { supabase, envVar, fallback = 0 } = options;
 
   if (supabase) {
     try {
-      const { data } = await supabase
+      const { data } = await (supabase as SupabaseLike)
         .from('service_pricing')
         .select('price')
         .eq('service', service)
