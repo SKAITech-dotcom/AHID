@@ -1,309 +1,536 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta name="description" content="Order instant mobile data bundles for MTN, Telecel and AirtelTigo in Ghana. Low cost non-expiry data, delivered straight to your phone by Skaitech Ghana.">
-  <link rel="canonical" href="https://skaitechgh.wasmer.app/instantData.html">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Skaitech - Instant Data</title>
+  <meta name="description" content="Send instant MTN, Telecel and AirtelTigo data bundles in Ghana, paid from your Skaitech wallet.">
   <meta name="robots" content="noindex, nofollow">
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Skaitech Ghana">
-  <meta property="og:url" content="https://skaitechgh.wasmer.app/instantData.html">
-  <meta property="og:title" content="Skaitech - Instant Data">
-  <meta property="og:description" content="Order instant mobile data bundles for MTN, Telecel and AirtelTigo in Ghana. Low cost non-expiry data, delivered straight to your phone by Skaitech Ghana.">
-  <meta property="og:image" content="https://skaitechgh.wasmer.app/img/akaitech%20more%20final%20logo.jpeg">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Skaitech - Instant Data">
-  <meta name="twitter:description" content="Order instant mobile data bundles for MTN, Telecel and AirtelTigo in Ghana. Low cost non-expiry data, delivered straight to your phone by Skaitech Ghana.">
-  <meta name="twitter:image" content="https://skaitechgh.wasmer.app/img/akaitech%20more%20final%20logo.jpeg">
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Skaitech - Instant Data</title>
-    <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root {
-            --id-bg: #f8fafc;
-            --id-card: #ffffff;
-            --id-card-raised: #ffffff;
-            --id-border: #e8edf3;
-            --id-border-soft: #e2e8f0;
-            --id-text: #0f172a;
-            --id-muted: #64748b;
-            --id-gold: #ffcc00;
-            --id-gold-soft: #ffd633;
-            --id-green: #4ade80;
-            --id-red: #f87171;
-        }
-
-        body {
-            background-color: var(--id-bg);
-            color: var(--id-text);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0 16px 120px;
-        }
-        .id-page { width: 100%; max-width: 920px; margin: 30px auto; padding: 0 0 96px; }
-
-        .id-topbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 16px;
-        }
-        .id-brand {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            text-decoration: none;
-        }
-        .id-brand img { height: 34px; border-radius: 6px; }
-        .id-brand span { font-weight: 800; color: var(--id-text); letter-spacing: -0.5px; font-size: 1rem; }
-        .id-back {
-            color: var(--id-muted); text-decoration: none; font-weight: 700; font-size: 0.85rem;
-            display: inline-flex; align-items: center; gap: 6px;
-        }
-
-        .id-card {
-            background: var(--id-card);
-            border-radius: 16px;
-            padding: 28px;
-            margin-bottom: 14px;
-            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
-            border: 1px solid #e2e8f0;
-        }
-
-        .id-title {
-            font-size: 1.4rem; font-weight: 900; color: var(--id-text); margin: 0 0 6px;
-            letter-spacing: -0.5px;
-        }
-        .id-subtitle {
-            font-size: 0.88rem; color: var(--id-muted); margin: 0 0 14px; line-height: 1.5;
-        }
-        .id-bundle-subtitle {
-            display: flex; align-items: center; gap: 8px;
-            background: linear-gradient(135deg, rgba(255, 204, 0, 0.14), rgba(255, 204, 0, 0.05));
-            border: 1px solid rgba(255, 204, 0, 0.25);
-            border-radius: 12px;
-            padding: 10px 14px;
-            margin: 0 0 16px;
-        }
-        .id-bundle-subtitle i { color: var(--id-gold); font-size: 0.95rem; }
-        .id-bundle-subtitle span {
-            font-size: 0.86rem; font-weight: 800; color: var(--id-gold-soft);
-            letter-spacing: 0.3px; text-transform: uppercase;
-        }
-
-        /* Network selector */
-        .id-step-label {
-            font-size: 0.72rem; font-weight: 800; color: var(--id-muted); letter-spacing: 0.5px;
-            text-transform: uppercase; margin: 18px 0 10px; display: block;
-        }
-        .id-network-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-        .id-network-btn {
-            width: 100%; min-width: 0; min-height: 104px; padding: 16px 18px;
-            border: 1px solid #e8edf3; background: #fff; border-radius: 18px;
-            cursor: pointer; display: flex; align-items: center; justify-content: flex-start; gap: 14px;
-            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-            font-family: inherit; color: #0f172a; box-shadow: 0 8px 22px rgba(15,23,42,.06); text-align: left;
-        }
-        .id-network-btn:hover,.id-network-btn:focus-visible { border-color: #a7f3d0; transform: translateY(-3px); box-shadow: 0 14px 28px rgba(15,23,42,.1); outline: none; }
-        .id-network-btn.active { border-color: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,.14), 0 8px 22px rgba(15,23,42,.06); }
-        .id-network-logo {
-            height: 52px; width: 52px; flex: 0 0 52px; border-radius: 14px; display: flex; align-items: center;
-            justify-content: center; color: #fff; font-weight: 800; font-size: 0.78rem;
-            box-shadow: none;
-        }
-        .id-network-btn span { font-size: .98rem; font-weight: 800; color: #0f172a; }
-
-        /* Phone field */
-        .id-field {
-            width: 100%; padding: 12px 14px; border: 1px solid var(--id-border); border-radius: 12px;
-            font-size: 0.95rem; box-sizing: border-box; outline: none; margin-top: 4px;
-            background: var(--id-card-raised); color: var(--id-text);
-        }
-        .id-field::placeholder { color: #6b7280; }
-        .id-field:focus { border-color: var(--id-gold); box-shadow: 0 0 0 3px rgba(255, 204, 0, 0.12); }
-        .id-phone-wrap { position: relative; }
-        .id-network-hint {
-            display: none; align-items: center; gap: 6px; margin-top: 6px;
-            font-size: 0.78rem; font-weight: 700; color: var(--id-green);
-        }
-        .id-network-hint.show { display: inline-flex; }
-
-        /* Bundle list (stacked cards: Data left, Cost right) */
-        .id-bundle-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-        .id-bundle-row {
-            display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 14px;
-            width: 100%; text-align: left;
-            min-height: 118px; box-sizing: border-box;
-            background: #fff; border: 1px solid #e8edf3; border-radius: 18px;
-            padding: 18px; cursor: pointer; font-family: inherit;
-            box-shadow: 0 8px 22px rgba(15,23,42,.06);
-            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-        }
-        .id-bundle-row:hover,.id-bundle-row:focus-visible { border-color: #a7f3d0; transform: translateY(-3px); box-shadow: 0 14px 28px rgba(15,23,42,.1); outline: none; }
-        .id-bundle-row.active {
-            border-color: #10b981;
-            background: #f0fdf4;
-            box-shadow: 0 0 0 2px rgba(16,185,129,.14), 0 8px 22px rgba(15,23,42,.06);
-        }
-        .id-bundle-left { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-        .id-bundle-data-label {
-            font-size: 0.68rem; font-weight: 800; color: var(--id-muted);
-            letter-spacing: 0.6px; text-transform: uppercase;
-        }
-        .id-bundle-size { font-size: 1.28rem; font-weight: 900; color: #0f172a; letter-spacing: -0.3px; }
-        .id-bundle-right { display: flex; width: 100%; flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
-        .id-bundle-cost-label {
-            font-size: 0.68rem; font-weight: 800; color: var(--id-muted);
-            letter-spacing: 0.6px; text-transform: uppercase;
-        }
-        .id-bundle-price { font-size: 1.02rem; font-weight: 900; color: #047857; }
-
-        .id-fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-        /* Sticky checkout bar */
-        .id-checkout-bar {
-            position: fixed; left: 0; right: 0; bottom: 0; background: #fff;
-            border-top: 1px solid #e2e8f0; box-shadow: 0 -4px 20px rgba(15,23,42,.1);
-            padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-        }
-        .id-checkout-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-        .id-checkout-phone { font-size: 0.76rem; color: var(--id-muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .id-checkout-total { font-size: 1.2rem; font-weight: 900; color: var(--id-gold); }
-        .id-buy-btn {
-            border: none; background: #059669; color: #fff; font-weight: 900; font-size: 0.95rem;
-            padding: 15px 28px; border-radius: 12px; cursor: pointer; white-space: nowrap;
-            box-shadow: 0 8px 18px rgba(5,150,105,.2); transition: opacity 0.15s;
-        }
-        .id-buy-btn:hover { opacity: 0.9; }
-        .id-buy-btn:disabled { opacity: 0.55; cursor: not-allowed; }
-
-        .id-notice {
-            display: none; padding: 12px 14px; border-radius: 12px; font-size: 0.86rem;
-            font-weight: 600; margin-bottom: 14px;
-        }
-        .id-notice.error { display: block; background: rgba(248, 113, 113, 0.12); color: var(--id-red); border: 1px solid rgba(248, 113, 113, 0.3); }
-        .id-notice.info { display: block; background: rgba(255, 204, 0, 0.1); color: var(--id-gold); border: 1px solid rgba(255, 204, 0, 0.25); }
-
-        /* Result overlay */
-        .id-overlay {
-            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); display: none;
-            align-items: center; justify-content: center; padding: 20px; z-index: 1000;
-        }
-        .id-overlay.active { display: flex; }
-        .id-result-card {
-            background: var(--id-card); border: 1px solid var(--id-border); border-radius: 18px; padding: 26px 22px; width: 100%; max-width: 380px;
-            text-align: center; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-        }
-        .id-result-icon { font-size: 2.6rem; margin-bottom: 10px; }
-        .id-result-title { font-size: 1.2rem; font-weight: 800; color: var(--id-text); margin: 0 0 6px; }
-        .id-result-desc { font-size: 0.88rem; color: var(--id-muted); margin: 0 0 16px; line-height: 1.45; }
-        .id-result-ref {
-            background: var(--id-card-raised); border: 1px solid var(--id-border); border-radius: 10px; padding: 10px;
-            font-family: monospace; font-size: 0.8rem; color: var(--id-gold-soft); margin-bottom: 16px; word-break: break-all;
-        }
-        .id-result-btn {
-            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-            background: #059669; color: #fff; border: none; border-radius: 10px; padding: 12px 22px;
-            font-weight: 800; cursor: pointer; text-decoration: none; font-size: 0.9rem;
-        }
-        .id-result-btn.ghost { background: var(--id-card-raised); color: var(--id-muted); margin-left: 8px; border: 1px solid var(--id-border); }
-        .id-automated-badge {
-            display: inline-flex; align-items: center; gap: 6px; background: rgba(74, 222, 128, 0.12); color: var(--id-green);
-            border: 1px solid rgba(74, 222, 128, 0.3); border-radius: 9999px; padding: 4px 12px;
-            font-size: 0.72rem; font-weight: 800; margin-bottom: 12px;
-        }
-        @media (max-width: 760px) {
-            .id-page { max-width: 620px; margin: 20px auto; }
-            .id-card { padding: 18px; }
-            .id-network-grid { gap: 12px; }
-            .id-network-btn { min-height: 88px; padding: 14px 12px; gap: 10px; }
-            .id-network-logo { height: 48px; width: 48px; flex-basis: 48px; }
-            .id-bundle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-            .id-bundle-row { min-height: 108px; padding: 14px; }
-        }
-        @media (max-width: 420px) {
-            .id-network-grid,.id-bundle-grid { grid-template-columns: 1fr; }
-            .id-network-btn { min-height: 76px; }
-            .id-bundle-row { min-height: 88px; }
-            .id-fields-grid { grid-template-columns: 1fr; }
-            .id-buy-btn { padding: 13px 18px; }
-        }
-    </style>
-<script>
-  // Apply the saved theme before first paint, otherwise a dark-mode agent sees
-  // a white flash while the shell boots. Kept inline and tiny on purpose.
-  try {
-    if (localStorage.getItem('skaitech_theme') === 'dark') {
-      document.documentElement.classList.add('dark');
+  <link rel="canonical" href="https://skaitechgh.wasmer.app/instantData.html">
+  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* Dark-only by design: this page mirrors the SwiftVendux data storefront,
+       which is dark in both themes. It does not read the site light/dark
+       toggle, so the layout does not shift when an agent flips it elsewhere. */
+    :root {
+      --sv-bg: #0b0f19;
+      --sv-surface: #111827;
+      --sv-surface-2: #161f31;
+      --sv-border: rgba(148, 163, 184, 0.16);
+      --sv-border-strong: rgba(148, 163, 184, 0.30);
+      --sv-text: #e9eef8;
+      --sv-muted: #8b97ad;
+      --sv-danger: #ef4444;
+      --sv-danger-soft: rgba(239, 68, 68, 0.12);
+      --sv-ok: #22c55e;
+      /* Uniform dark navy accent. Not overridden per network: a single accent
+         keeps the page cohesive and the bundle list readable. */
+      --sv-accent: #1e40af;
+      --sv-accent-ink: #ffffff;
     }
-  } catch (e) {}
-</script>
+
+    html, body {
+      background: var(--sv-bg);
+      color: var(--sv-text);
+    }
+
+    body {
+      margin: 0;
+      padding: 0 14px 132px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .sv-page {
+      width: 100%;
+      max-width: 480px;
+      margin: 22px auto 0;
+    }
+
+    /* ---------- network tabs ---------- */
+    .sv-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .sv-tab {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 8px;
+      border: 1px solid var(--sv-border);
+      border-radius: 12px;
+      background: var(--sv-surface);
+      color: var(--sv-muted);
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: border-color .18s ease, color .18s ease, background .18s ease;
+    }
+    .sv-tab:hover { border-color: var(--sv-border-strong); color: var(--sv-text); }
+    .sv-tab.active {
+      border-color: var(--sv-accent);
+      color: var(--sv-text);
+      background: var(--sv-surface-2);
+    }
+    .sv-tab-dot {
+      width: 20px; height: 20px; border-radius: 6px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.6rem; font-weight: 900; color: #fff;
+      flex: 0 0 20px;
+    }
+
+    /* ---------- header banner card ---------- */
+    .sv-hero {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--sv-border);
+      border-radius: 16px;
+      background: linear-gradient(135deg, var(--sv-surface-2) 0%, var(--sv-surface) 70%);
+      box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.7);
+      margin-bottom: 12px;
+    }
+    .sv-hero-badge {
+      width: 46px; height: 46px; flex: 0 0 46px;
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; font-weight: 900; color: #fff;
+    }
+    .sv-hero-text { min-width: 0; flex: 1; }
+    .sv-hero-name {
+      margin: 0 0 3px;
+      font-size: 1.02rem;
+      font-weight: 800;
+      letter-spacing: -0.2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sv-hero-tag { margin: 0; font-size: 0.74rem; color: var(--sv-muted); }
+    .sv-hero-price {
+      flex: 0 0 auto;
+      padding: 7px 12px;
+      border-radius: 9999px;
+      background: var(--sv-accent);
+      color: var(--sv-accent-ink);
+      font-size: 0.9rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .sv-hero-price.muted { background: var(--sv-surface); color: var(--sv-muted); }
+
+    /* ---------- cards ---------- */
+    .sv-card {
+      border: 1px solid var(--sv-border);
+      border-radius: 16px;
+      background: var(--sv-surface);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .sv-label {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      color: var(--sv-muted);
+      margin-bottom: 8px;
+    }
+
+    /* ---------- recipient input ---------- */
+    .sv-input-wrap { position: relative; }
+    .sv-input-wrap > i {
+      position: absolute;
+      left: 13px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--sv-muted);
+      font-size: 0.9rem;
+      pointer-events: none;
+    }
+    .sv-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 13px 14px 13px 38px;
+      border: 1px solid var(--sv-border);
+      border-radius: 12px;
+      background: var(--sv-surface-2);
+      color: var(--sv-text);
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.6px;
+      outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease;
+    }
+    .sv-input::placeholder { color: #64748b; letter-spacing: normal; font-weight: 500; }
+    .sv-input:focus {
+      border-color: var(--sv-accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--sv-accent) 18%, transparent);
+    }
+    .sv-input.invalid { border-color: var(--sv-danger); }
+    .sv-hint {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+    .sv-hint.show { display: flex; }
+    .sv-hint.ok { color: var(--sv-ok); }
+    .sv-hint.bad { color: var(--sv-danger); }
+
+    /* ---------- bundle list ---------- */
+    .sv-card-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .sv-card-head h2 {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 800;
+    }
+    .sv-card-head span { font-size: 0.72rem; color: var(--sv-muted); font-weight: 700; }
+
+    .sv-bundles {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 46vh;
+      overflow-y: auto;
+      /* Room for the focus ring so a scrolled row is not clipped at the edge. */
+      padding: 2px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--sv-border-strong) transparent;
+    }
+    .sv-bundles::-webkit-scrollbar { width: 6px; }
+    .sv-bundles::-webkit-scrollbar-thumb { background: var(--sv-border-strong); border-radius: 99px; }
+
+    .sv-bundle {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 13px 14px;
+      border: 1px solid var(--sv-border);
+      border-radius: 14px;
+      background: var(--sv-surface-2);
+      color: var(--sv-text);
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color .16s ease, background .16s ease, transform .16s ease;
+    }
+    .sv-bundle:hover { border-color: var(--sv-border-strong); transform: translateY(-1px); }
+    .sv-bundle:focus-visible {
+      outline: none;
+      border-color: var(--sv-accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--sv-accent) 22%, transparent);
+    }
+    .sv-bundle.selected {
+      border-color: var(--sv-accent);
+      background: color-mix(in srgb, var(--sv-accent) 10%, var(--sv-surface-2));
+    }
+
+    /* Custom radio. The native input stays in the DOM for keyboard and screen
+       reader semantics; only its rendering is replaced. */
+    .sv-radio {
+      position: relative;
+      width: 18px; height: 18px; flex: 0 0 18px;
+      border: 2px solid var(--sv-border-strong);
+      border-radius: 9999px;
+      transition: border-color .16s ease;
+    }
+    .sv-bundle.selected .sv-radio { border-color: var(--sv-accent); }
+    .sv-bundle.selected .sv-radio::after {
+      content: '';
+      position: absolute;
+      inset: 3px;
+      border-radius: 9999px;
+      background: var(--sv-accent);
+    }
+    .sv-bundle input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      width: 1px; height: 1px;
+      margin: 0;
+      pointer-events: none;
+    }
+
+    .sv-bundle-info { flex: 1; min-width: 0; }
+    .sv-bundle-title {
+      display: block;
+      font-size: 0.95rem;
+      font-weight: 800;
+      letter-spacing: -0.1px;
+    }
+    .sv-bundle-meta {
+      display: block;
+      margin-top: 2px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--sv-muted);
+    }
+    /* Named vendor package badge (Kokrokoo, Midnight, Voice). */
+    .sv-cat {
+      display: inline-block;
+      margin-top: 3px;
+      padding: 1px 8px;
+      border-radius: 9999px;
+      background: color-mix(in srgb, var(--sv-accent) 18%, transparent);
+      border: 1px solid color-mix(in srgb, var(--sv-accent) 45%, transparent);
+      color: #a8c0ff;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+
+    .sv-bundle-price { flex: 0 0 auto; text-align: right; }
+    .sv-price {
+      display: block;
+      font-size: 0.92rem;
+      font-weight: 900;
+      color: var(--sv-accent);
+    }
+    /* Price red plus a Low balance tag, directly under the price. */
+    .sv-bundle.unaffordable .sv-price { color: var(--sv-danger); }
+    .sv-low {
+      display: none;
+      margin-top: 4px;
+      padding: 2px 7px;
+      border-radius: 9999px;
+      background: var(--sv-danger-soft);
+      border: 1px solid rgba(239, 68, 68, 0.32);
+      color: var(--sv-danger);
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+    .sv-bundle.unaffordable .sv-low { display: inline-block; }
+
+    .sv-bundle.disabled { opacity: 0.45; cursor: not-allowed; }
+    .sv-bundle.disabled:hover { transform: none; border-color: var(--sv-border); }
+
+    /* ---------- notice ---------- */
+    .sv-notice {
+      display: none;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      line-height: 1.45;
+      margin-bottom: 12px;
+    }
+    .sv-notice.show { display: block; }
+    .sv-notice.error {
+      background: var(--sv-danger-soft);
+      border: 1px solid rgba(239, 68, 68, 0.32);
+      color: #fca5a5;
+    }
+    .sv-notice.info {
+      background: rgba(30, 64, 175, 0.14);
+      border: 1px solid rgba(30, 64, 175, 0.4);
+      color: #a8c0ff;
+    }
+
+    .sv-empty {
+      padding: 22px 12px;
+      text-align: center;
+      color: var(--sv-muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+
+    /* ---------- footer bar ---------- */
+    .sv-footer {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-sizing: border-box;
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+      background: rgba(11, 15, 25, 0.94);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid var(--sv-border);
+    }
+    .sv-balance { flex: 0 0 auto; }
+    .sv-balance-label {
+      display: block;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: var(--sv-muted);
+    }
+    .sv-balance-value {
+      display: block;
+      margin-top: 2px;
+      font-size: 0.98rem;
+      font-weight: 900;
+      color: var(--sv-text);
+      white-space: nowrap;
+    }
+    .sv-send {
+      flex: 1;
+      min-width: 0;
+      padding: 14px 12px;
+      border: none;
+      border-radius: 12px;
+      background: var(--sv-accent);
+      color: var(--sv-accent-ink);
+      font-family: inherit;
+      font-size: 0.86rem;
+      font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: opacity .16s ease;
+    }
+    .sv-send:hover:not(:disabled) { opacity: 0.9; }
+    .sv-send:disabled {
+      background: var(--sv-surface-2);
+      color: var(--sv-muted);
+      cursor: not-allowed;
+    }
+
+    /* ---------- result overlay ---------- */
+    .sv-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      display: none;
+      align-items: center; justify-content: center;
+      padding: 20px;
+      background: rgba(2, 6, 16, 0.78);
+    }
+    .sv-overlay.active { display: flex; }
+    .sv-modal {
+      width: 100%;
+      max-width: 360px;
+      box-sizing: border-box;
+      padding: 26px 22px;
+      border: 1px solid var(--sv-border);
+      border-radius: 18px;
+      background: var(--sv-surface);
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+    }
+    .sv-modal-icon { font-size: 2.4rem; margin-bottom: 10px; }
+    .sv-modal-title { margin: 0 0 6px; font-size: 1.1rem; font-weight: 800; }
+    .sv-modal-desc { margin: 0 0 16px; font-size: 0.85rem; color: var(--sv-muted); line-height: 1.5; }
+    .sv-modal-ref {
+      padding: 10px;
+      margin-bottom: 16px;
+      border-radius: 10px;
+      background: var(--sv-surface-2);
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.78rem;
+      color: var(--sv-accent);
+      word-break: break-all;
+    }
+    .sv-modal-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 22px;
+      border: none;
+      border-radius: 10px;
+      background: var(--sv-accent);
+      color: var(--sv-accent-ink);
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    @media (max-width: 420px) {
+      body { padding: 0 10px 128px; }
+      .sv-page { margin-top: 14px; }
+      .sv-bundles { max-height: 42vh; }
+      .sv-tab span:not(.sv-tab-dot) { display: none; }
+      .sv-send { font-size: 0.8rem; padding: 13px 8px; }
+    }
+  </style>
 </head>
 <body>
-    <div class="id-page">
-        <!-- Status notice -->
-        <div id="idNotice" class="id-notice"></div>
+  <div class="sv-page">
+    <div id="svNotice" class="sv-notice"></div>
 
-        <!-- Main card -->
-        <div class="id-card">
-            <span class="id-automated-badge"><i class="fa-solid fa-bolt"></i> INSTANT AUTOMATED DELIVERY</span>
-            <h1 class="id-title">Instant Data Top-Up</h1>
-            <p class="id-subtitle">Painless instant top-ups with real delivery. No stress, no expiry worries.</p>
+    <div class="sv-tabs" id="networkTabs" role="tablist" aria-label="Mobile network"></div>
 
-            <div class="id-bundle-subtitle">
-                <i class="fa-solid fa-bolt"></i>
-                <span>Low Cost Non Expiry Bundles</span>
-            </div>
+    <!-- Header banner: active network, tagline, and the selected bundle's price. -->
+    <section class="sv-hero">
+      <span class="sv-hero-badge" id="heroBadge">AT</span>
+      <div class="sv-hero-text">
+        <h1 class="sv-hero-name" id="heroName">Loading...</h1>
+        <p class="sv-hero-tag" id="heroTag">From wallet - Instant delivery</p>
+      </div>
+      <span class="sv-hero-price muted" id="heroPrice">&#8372;0.00</span>
+    </section>
 
-            <span class="id-step-label">1. Select Network</span>
-            <div class="id-network-grid" id="networkGrid"></div>
+    <section class="sv-card">
+      <label class="sv-label" for="recipientPhone">Recipient Number</label>
+      <div class="sv-input-wrap">
+        <i class="fa-solid fa-mobile-screen"></i>
+        <input
+          type="tel"
+          id="recipientPhone"
+          class="sv-input"
+          placeholder="024XXXXXXX"
+          inputmode="numeric"
+          autocomplete="tel"
+          maxlength="10"
+          aria-describedby="phoneHint"
+          oninput="handleDataPhoneInput()"
+        >
+      </div>
+      <div id="phoneHint" class="sv-hint"></div>
+    </section>
 
-            <span class="id-step-label">2. Recipient Phone Number</span>
-            <div class="id-phone-wrap">
-                <input type="tel" id="recipientPhone" class="id-field" placeholder="024XXXXXXX" maxlength="10" oninput="handleDataPhoneInput()">
-                <div id="phoneNetworkHint" class="id-network-hint"></div>
-            </div>
+    <section class="sv-card">
+      <div class="sv-card-head">
+        <h2>Choose a bundle</h2>
+        <span id="bundleCount"></span>
+      </div>
+      <div class="sv-bundles" id="bundleList" role="radiogroup" aria-label="Data bundles"></div>
+    </section>
+  </div>
 
-            <span class="id-step-label">3. Choose Bundle</span>
-            <div class="id-bundle-grid" id="bundleGrid"></div>
-
-            <span class="id-step-label">4. Your Details (for receipt)</span>
-            <div class="id-fields-grid">
-                <div>
-                    <input type="text" id="customerName" class="id-field" placeholder="Your Name">
-                </div>
-                <div>
-                    <input type="email" id="customerEmail" class="id-field" placeholder="you@example.com">
-                </div>
-            </div>
-        </div>
+  <!-- Footer bar: live wallet balance plus the single action. -->
+  <div class="sv-footer">
+    <div class="sv-balance">
+      <span class="sv-balance-label">Wallet Balance</span>
+      <span class="sv-balance-value" id="walletBalance">GHC 0.00</span>
     </div>
+    <button type="button" id="sendBtn" class="sv-send" disabled onclick="startDataPurchase()">Select a bundle</button>
+  </div>
 
-    <!-- Sticky checkout bar -->
-    <div class="id-checkout-bar">
-        <div class="id-checkout-info">
-            <span class="id-checkout-phone" id="checkoutPhone">Select a bundle to continue</span>
-            <span class="id-checkout-total" id="checkoutTotal">GHS 0.00</span>
-        </div>
-        <button id="buyBtn" class="id-buy-btn" onclick="startInstantDataCheckout()">
-            <i class="fa-solid fa-bolt"></i> Buy Now
-        </button>
+  <div id="resultOverlay" class="sv-overlay" onclick="if(event.target === this) closeDataResult()">
+    <div class="sv-modal" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+      <div class="sv-modal-icon" id="resultIcon">&#9989;</div>
+      <h3 class="sv-modal-title" id="resultTitle">Order placed</h3>
+      <p class="sv-modal-desc" id="resultDesc"></p>
+      <div class="sv-modal-ref" id="resultRef">-</div>
+      <button type="button" class="sv-modal-btn" onclick="closeDataResult()">Done</button>
     </div>
+  </div>
 
-    <!-- Result overlay -->
-    <div id="resultOverlay" class="id-overlay" onclick="if(event.target === this) closeInstantDataResult()">
-        <div class="id-result-card">
-            <div class="id-result-icon" id="resultIcon">✅</div>
-            <h3 class="id-result-title" id="resultTitle">Payment Initialized</h3>
-            <p class="id-result-desc" id="resultDesc"></p>
-            <div class="id-result-ref" id="resultRef">-</div>
-            <button class="id-result-btn" onclick="closeInstantDataResult()">Continue</button>
-        </div>
-    </div>
-
-    <script type="module" src="agentNav.js"></script>
-    <script type="module" src="instantData.js"></script>
+  <script type="module" src="agentNav.js"></script>
+  <script type="module" src="instantData.js"></script>
 </body>
 </html>

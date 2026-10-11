@@ -39,7 +39,7 @@ Deno.serve(async (request) => {
     const [networksResult, bundlesResult] = await Promise.all([
       supabase
         .from('networks')
-        .select('id, name, brand_color, badge_text, tagline, phone_prefixes')
+        .select('id, name, brand_color, badge_text, tagline, legacy_key, phone_prefixes')
         .order('sort_order', { ascending: true }),
       supabase
         .from('bundles')
@@ -59,6 +59,9 @@ Deno.serve(async (request) => {
         brandColor: String(network.brand_color),
         badgeText: String(network.badge_text ?? ''),
         tagline: String(network.tagline ?? ''),
+        // The longer pre-existing key ('airteltigo'), accepted in ?network=
+        // URLs from the older storefront.
+        legacyKey: network.legacy_key ? String(network.legacy_key) : null,
         phonePrefixes: Array.isArray(network.phone_prefixes) ? (network.phone_prefixes as unknown[]).map(String) : [],
         bundles: bundles
           .filter((bundle) => String(bundle.network_id) === String(network.id))

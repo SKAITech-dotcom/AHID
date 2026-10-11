@@ -1,371 +1,494 @@
 import { supabase } from './supabaseClient.js';
 import { checkAgentAccessServer } from './agentAccessCheck.js';
-import { applyWalletBalance, refreshWalletBalance } from './walletBalance.js';
-
-const NETWORK_KEYS = ['mtn', 'telecel', 'airteltigo'];
-const DETECT_PREFIXES = {
-  mtn: ['024', '025', '053', '054', '055', '059'],
-  telecel: ['020', '050'],
-  airteltigo: ['026', '027', '056', '057'],
-};
-const NETWORK_META = {
-  mtn: { label: 'MTN', logoBg: '#ffcc00', logoColor: '#000000', text: 'MTN' },
-  telecel: { label: 'Telecel', logoBg: '#dc2626', logoColor: '#ffffff', text: 'Telecel' },
-  airteltigo: { label: 'AirtelTigo', logoBg: '#2563eb', logoColor: '#ffffff', text: 'AT' },
-};
 
 /**
- * Data bundles are delivered asynchronously: the backend returns 'processing'
- * as soon as the provider accepts the order, and the order only becomes
- * 'successful' once delivery is confirmed. Treating anything that is not
- * 'successful' as a failure would report a healthy, in-flight order as
- * "Delivery Issue" to the customer, so every state is described explicitly.
+ * Instant data storefront (instantData.html).
+ *
+ * Catalog comes from the `data-catalog` edge function, which reads the
+ * `networks` and `bundles` tables through RLS. Prices are only ever rendered
+ * from that response and the purchase sends a bundle_key, never an amount, so
+ * what is displayed is what the server charges.
+ *
+ * Special named packages (Kokrokoo, Midnight, Voice) come back from the same
+ * catalog. They are rendered with a category badge, and they stay sellable only
+ * once a Hubtel package id is mapped and is_available is flipped on the seed
+ * row - the storefront never offers a bundle the provider cannot deliver.
+ *
+ * The wallet balance shown in the footer is read from `profiles.wallet_balance`,
+ * a trigger-maintained mirror of the authoritative `wallets.balance`. It is
+ * read-only to clients; only the charge/refund RPCs move real money.
+ *
+ * Everything rendered from the database goes through escapeHtml. Bundle titles
+ * are admin-editable text, and innerHTML without escaping is how a price label
+ * becomes a script injection.
  */
-const DATA_ORDER_STATE = {
-  successful: { icon: '✅', title: 'Bundle Delivered!', label: 'Successful' },
-  failed: { icon: '⚠️', title: 'Delivery Issue', label: 'Failed' },
-  cancelled: { icon: '⚠️', title: 'Order Cancelled', label: 'Cancelled' },
-  processing: { icon: '⏳', title: 'Processing Bundle', label: 'Processing' },
-  pending: { icon: '⏳', title: 'Processing Bundle', label: 'Pending' },
-};
 
-function describeDataOrderStatus(rawStatus) {
-  const key = String(rawStatus || '').trim().toLowerCase();
-  return DATA_ORDER_STATE[key] || DATA_ORDER_STATE.processing;
-}
-
-// Bundle catalog (sizes in MB, prices in GHS) — mirrors the public-data
-// catalog enforced on the backend. Low-cost non-expiry bundles.
-const BUNDLES = {
-  mtn: [
-    { size: '5 MB', mB: 5, price: 0.5 },
-    { size: '10 MB', mB: 10, price: 1 },
-    { size: '20 MB', mB: 20, price: 2 },
-    { size: '30 MB', mB: 30, price: 3 },
-    { size: '50 MB', mB: 50, price: 5 },
-    { size: '100 MB', mB: 100, price: 10 },
-    { size: '150 MB', mB: 150, price: 15 },
-    { size: '200 MB', mB: 200, price: 20 },
-  ],
-  telecel: [
-    { size: '5 MB', mB: 5, price: 0.5 },
-    { size: '10 MB', mB: 10, price: 1 },
-    { size: '20 MB', mB: 20, price: 2 },
-    { size: '30 MB', mB: 30, price: 3 },
-    { size: '50 MB', mB: 50, price: 5 },
-    { size: '100 MB', mB: 100, price: 10 },
-    { size: '150 MB', mB: 150, price: 15 },
-    { size: '200 MB', mB: 200, price: 20 },
-  ],
-  airteltigo: [
-    { size: '5 MB', mB: 5, price: 0.5 },
-    { size: '10 MB', mB: 10, price: 1 },
-    { size: '20 MB', mB: 20, price: 2 },
-    { size: '30 MB', mB: 30, price: 3 },
-    { size: '50 MB', mB: 50, price: 5 },
-    { size: '100 MB', mB: 100, price: 10 },
-    { size: '150 MB', mB: 150, price: 15 },
-    { size: '200 MB', mB: 200, price: 20 },
-  ],
-};
-
-let selectedNetwork = 'mtn';
-let selectedBundleIndex = 0;
-let checkoutBusy = false;
+const CEDI = '\u20B5';
+const GHANA_PHONE = /^0[0-9]{9}$/;
 
 const $ = (id) => document.getElementById(id);
 
-function parseUrlParam() {
-  const net = new URLSearchParams(window.location.search).get('network');
-  if (net && NETWORK_KEYS.includes(net.toLowerCase())) {
-    selectedNetwork = net.toLowerCase();
-  }
+const AFFORDABLE_CATEGORIES = new Set(['Standard', 'XXL']);
+
+const state = {
+  networks: [],
+  providerConfigured: false,
+  activeNetworkId: null,
+  selectedBundleKey: null,
+  balance: 0,
+  busy: false,
+  /** Stable per (network, bundle, phone) so a retry cannot double-charge. */
+  idempotencyKey: null,
+};
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[char]));
 }
 
-function detectNetworkFromPhone(phone) {
-  const clean = phone.replace(/\D/g, '');
-  if (clean.length < 3) return null;
-  const prefix = clean.slice(0, 3);
-  for (const net of NETWORK_KEYS) {
-    if (DETECT_PREFIXES[net].includes(prefix)) return net;
-  }
-  return null;
+function formatCedi(amount) {
+  return `${CEDI}${Number(amount || 0).toFixed(2)}`;
 }
 
-export function selectDataNetwork(net) {
-  if (!NETWORK_KEYS.includes(net)) return;
-  selectedNetwork = net;
-  selectedBundleIndex = 0;
-
-  document.querySelectorAll('#networkGrid .id-network-btn').forEach((btn) => {
-    const active = btn.dataset.network === net;
-    btn.classList.toggle('active', active);
-  });
-
-  renderBundles();
-  updateCheckoutBar();
+function formatGhs(amount) {
+  return `GHC ${Number(amount || 0).toFixed(2)}`;
 }
 
-export function handleDataPhoneInput() {
-  const input = $('recipientPhone');
-  let val = input.value.replace(/\D/g, '');
-  if (val.length > 10) val = val.slice(0, 10);
-  input.value = val;
-
-  const hint = $('phoneNetworkHint');
-  const detected = detectNetworkFromPhone(val);
-
-  if (detected) {
-    hint.className = 'id-network-hint show';
-    hint.innerHTML = `<i class="fa-solid fa-circle-check" style="color: #16a34a;"></i> ${NETWORK_META[detected].label}`;
-    if (detected !== selectedNetwork && val.length >= 3) {
-      selectDataNetwork(detected);
-    }
-  } else {
-    hint.className = 'id-network-hint';
-    hint.innerHTML = '';
-  }
-
-  updateCheckoutBar();
+function activeNetwork() {
+  return state.networks.find((network) => network.id === state.activeNetworkId) || null;
 }
 
-function renderNetworks() {
-  const grid = $('networkGrid');
-  grid.innerHTML = NETWORK_KEYS.map((net) => {
-    const meta = NETWORK_META[net];
-    return `
-      <button type="button" class="id-network-btn" data-network="${net}" onclick="selectDataNetwork('${net}')">
-        <span class="id-network-logo" style="background: ${meta.logoBg}; color: ${meta.logoColor};">${net === 'mtn' ? 'MTN' : net === 'telecel' ? 'T' : 'AT'}</span>
-        <span>${meta.text}</span>
-      </button>
-    `;
-  }).join('');
-  selectDataNetwork(selectedNetwork);
+function activeBundles() {
+  const network = activeNetwork();
+  return network ? network.bundles : [];
 }
 
-function renderBundles() {
-  const grid = $('bundleGrid');
-  const bundles = BUNDLES[selectedNetwork];
-  grid.innerHTML = bundles.map((b, i) => `
-    <button type="button" class="id-bundle-row ${i === selectedBundleIndex ? 'active' : ''}" onclick="selectDataBundle(${i})">
-      <span class="id-bundle-left">
-        <span class="id-bundle-data-label">Data Bundle</span>
-        <span class="id-bundle-size">${b.size}</span>
-      </span>
-      <span class="id-bundle-right">
-        <span class="id-bundle-cost-label">Cost</span>
-        <span class="id-bundle-price">GHS ${b.price.toFixed(2)}</span>
-      </span>
-    </button>
-  `).join('');
+function selectedBundle() {
+  return activeBundles().find((bundle) => bundle.bundleKey === state.selectedBundleKey) || null;
 }
 
-export function selectDataBundle(index) {
-  const bundles = BUNDLES[selectedNetwork];
-  if (!bundles[index]) return;
-  selectedBundleIndex = index;
-  renderBundles();
-  updateCheckoutBar();
-}
-
-function updateCheckoutBar() {
-  const bundle = BUNDLES[selectedNetwork][selectedBundleIndex];
-  const phone = ($('recipientPhone').value || '').trim();
-  const phonePreview = phone ? { mtn: 'MTN', telecel: 'Telecel', airteltigo: 'AirtelTigo' }[selectedNetwork] + ' ' + phone : 'Select a bundle to continue';
-  $('checkoutPhone').textContent = `${NETWORK_META[selectedNetwork].text} • ${phonePreview} • ${bundle.size}`;
-  $('checkoutTotal').textContent = `GHS ${bundle.price.toFixed(2)}`;
-}
-
-function showNotice(message, isError = false) {
-  const notice = $('idNotice');
-  notice.className = isError ? 'id-notice error' : 'id-notice info';
+function showNotice(message, kind = 'error') {
+  const notice = $('svNotice');
+  notice.className = `sv-notice show ${kind}`;
   notice.textContent = message;
 }
 
 function clearNotice() {
-  $('idNotice').className = 'id-notice';
-  $('idNotice').textContent = '';
+  const notice = $('svNotice');
+  notice.className = 'sv-notice';
+  notice.textContent = '';
 }
 
-function openResult(title, desc, ref, icon = '✅') {
-  $('resultIcon').textContent = icon;
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+
+/**
+ * A single fixed dark navy accent, shared by every network. The hero badge and
+ * tab dot keep the network's own brand colour as a small identifying glyph, but
+ * the page chrome (price pill, buttons, focus rings) never recolours per
+ * network, so the storefront stays uniform and the bundles stay readable.
+ */
+function applyNetworkAccent() {
+  document.documentElement.style.setProperty('--sv-accent', '#1e40af');
+  document.documentElement.style.setProperty('--sv-accent-ink', '#ffffff');
+}
+
+function renderTabs() {
+  const tabs = $('networkTabs');
+  if (!state.networks.length) {
+    tabs.innerHTML = '';
+    return;
+  }
+
+  tabs.innerHTML = state.networks.map((network) => `
+    <button
+      type="button"
+      role="tab"
+      class="sv-tab ${network.id === state.activeNetworkId ? 'active' : ''}"
+      aria-selected="${network.id === state.activeNetworkId}"
+      onclick="selectDataNetwork('${escapeHtml(network.id)}')"
+    >
+      <span class="sv-tab-dot" style="background:${escapeHtml(network.brandColor)}">${escapeHtml(network.badgeText)}</span>
+      <span>${escapeHtml(network.name.replace(/\s+Data$/i, ''))}</span>
+    </button>
+  `).join('');
+}
+
+function renderHero() {
+  const network = activeNetwork();
+  if (!network) {
+    $('heroBadge').textContent = '--';
+    $('heroName').textContent = 'No networks available';
+    $('heroTag').textContent = '';
+    return;
+  }
+
+  const bundle = selectedBundle();
+  $('heroBadge').textContent = network.badgeText;
+  $('heroBadge').style.background = network.brandColor;
+  $('heroName').textContent = network.name;
+  $('heroTag').textContent = network.tagline || 'From wallet - Instant delivery';
+
+  const price = $('heroPrice');
+  if (bundle) {
+    price.textContent = formatCedi(bundle.price);
+    price.classList.remove('muted');
+  } else {
+    price.textContent = formatCedi(0);
+    price.classList.add('muted');
+  }
+}
+
+function renderBundles() {
+  const list = $('bundleList');
+  const bundles = activeBundles();
+  const network = activeNetwork();
+
+  $('bundleCount').textContent = bundles.length ? `${bundles.length} available` : '';
+
+  if (!bundles.length) {
+    list.innerHTML = `
+      <div class="sv-empty">
+        No ${network ? escapeHtml(network.name) : ''} bundles are on sale yet.<br>
+        Packages are switched on once the provider mapping is confirmed.
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = bundles.map((bundle) => {
+    const unaffordable = Number(bundle.price) > state.balance;
+    const selected = bundle.bundleKey === state.selectedBundleKey;
+    const meta = [network?.name, bundle.category].filter(Boolean).join(' • ');
+    const isSpecial = !AFFORDABLE_CATEGORIES.has(bundle.category);
+    const category = isSpecial
+      ? `<span class="sv-cat">${escapeHtml(bundle.category)}</span>`
+      : '';
+
+    return `
+      <button
+        type="button"
+        role="radio"
+        class="sv-bundle ${selected ? 'selected' : ''} ${unaffordable ? 'unaffordable' : ''}"
+        aria-checked="${selected}"
+        onclick="selectDataBundle('${escapeHtml(bundle.bundleKey)}')"
+      >
+        <input type="radio" name="sv-bundle" tabindex="-1" aria-hidden="true" ${selected ? 'checked' : ''} readonly>
+        <span class="sv-radio" aria-hidden="true"></span>
+        <span class="sv-bundle-info">
+          <span class="sv-bundle-title">${escapeHtml(bundle.title)}</span>
+          <span class="sv-bundle-meta">${escapeHtml(meta)}</span>
+          ${category}
+        </span>
+        <span class="sv-bundle-price">
+          <span class="sv-price">${formatCedi(bundle.price)}</span>
+          <span class="sv-low">Low balance</span>
+        </span>
+      </button>
+    `;
+  }).join('');
+}
+
+function renderBalance() {
+  $('walletBalance').textContent = formatGhs(state.balance);
+}
+
+function renderFooter() {
+  const button = $('sendBtn');
+  const network = activeNetwork();
+  const bundle = selectedBundle();
+  const phone = ($('recipientPhone').value || '').replace(/\D/g, '');
+
+  if (state.busy) {
+    button.disabled = true;
+    button.textContent = 'Sending...';
+    return;
+  }
+
+  if (!bundle) {
+    button.disabled = true;
+    button.textContent = 'Select a bundle';
+    return;
+  }
+
+  if (!GHANA_PHONE.test(phone)) {
+    button.disabled = true;
+    button.textContent = 'Enter recipient number';
+    return;
+  }
+
+  if (Number(bundle.price) > state.balance) {
+    button.disabled = true;
+    button.textContent = 'Wallet balance too low';
+    return;
+  }
+
+  button.disabled = false;
+  button.textContent = `Send ${network ? network.name : 'data'} ${formatCedi(bundle.price)}`;
+}
+
+function renderAll() {
+  applyNetworkAccent();
+  renderTabs();
+  renderHero();
+  renderBundles();
+  renderBalance();
+  renderFooter();
+}
+
+// ---------------------------------------------------------------------------
+// Interaction
+// ---------------------------------------------------------------------------
+
+export function selectDataNetwork(networkId) {
+  if (!state.networks.some((network) => network.id === networkId)) return;
+  state.activeNetworkId = networkId;
+  // The selection is per network, so switching networks must not leave a bundle
+  // key selected that does not exist on the new one.
+  state.selectedBundleKey = null;
+  state.idempotencyKey = null;
+  renderAll();
+}
+
+export function selectDataBundle(bundleKey) {
+  if (!activeBundles().some((bundle) => bundle.bundleKey === bundleKey)) return;
+  state.selectedBundleKey = bundleKey;
+  state.idempotencyKey = null;
+  renderAll();
+}
+
+/**
+ * Detects the network from the first three digits.
+ *
+ * Only a prefix that some active network claims triggers a switch. An
+ * unrecognised prefix deliberately does nothing: `networks.phone_prefixes` is
+ * data that gets corrected when allocations change, so guessing on a miss would
+ * switch a customer to the wrong network instead of leaving their choice alone.
+ */
+function detectNetwork(phone) {
+  const prefix = phone.slice(0, 3);
+  if (!/^0\d\d$/.test(prefix)) return null;
+  return state.networks.find((network) =>
+    (network.phonePrefixes || []).some((candidate) => String(candidate) === prefix)
+  ) || null;
+}
+
+export function handleDataPhoneInput() {
+  const input = $('recipientPhone');
+  const digits = input.value.replace(/\D/g, '').slice(0, 10);
+  if (digits !== input.value) input.value = digits;
+
+  const hint = $('phoneHint');
+  hint.className = 'sv-hint';
+
+  if (digits.length === 10) {
+    const detected = detectNetwork(digits);
+    if (detected && detected.id !== state.activeNetworkId) {
+      selectDataNetwork(detected.id);
+    }
+    hint.className = 'sv-hint ok show';
+    hint.innerHTML = '<i class="fa-solid fa-circle-check"></i> Valid number';
+  } else if (digits.length === 3) {
+    const detected = detectNetwork(digits);
+    if (detected) {
+      hint.className = 'sv-hint ok show';
+      hint.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${escapeHtml(detected.name)}`;
+      if (detected.id !== state.activeNetworkId) selectDataNetwork(detected.id);
+    } else {
+      input.classList.remove('invalid');
+      renderFooter();
+      return;
+    }
+  } else if (digits.length > 0) {
+    hint.className = 'sv-hint bad show';
+    hint.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> Enter 10 digits';
+    input.classList.add('invalid');
+  }
+
+  input.classList.remove('invalid');
+  state.idempotencyKey = null;
+  renderFooter();
+}
+
+function openResult({ icon, title, description, reference }) {
+  $('resultIcon').innerHTML = icon;
   $('resultTitle').textContent = title;
-  $('resultDesc').textContent = desc;
-  $('resultRef').textContent = ref || '-';
+  $('resultDesc').textContent = description;
+  $('resultRef').textContent = reference || '-';
   $('resultOverlay').classList.add('active');
 }
 
-export function closeInstantDataResult() {
+export function closeDataResult() {
   $('resultOverlay').classList.remove('active');
 }
 
-// CHECKOUT: wallet-first instant data purchase. The bundle price is charged
-// from the verified agent's wallet; delivery failure auto-refunds the wallet.
-export async function startInstantDataCheckout() {
-  if (checkoutBusy) return;
+// ---------------------------------------------------------------------------
+// Data loading
+// ---------------------------------------------------------------------------
 
-  const phone = ($('recipientPhone').value || '').trim();
-  const name = ($('customerName').value || '').trim();
-  const email = ($('customerEmail').value || '').trim().toLowerCase();
+async function loadCatalog() {
+  const { data, error } = await supabase.functions.invoke('data-catalog');
+  if (error) throw new Error(error.message || 'Could not reach the data catalog.');
+  if (data?.error) throw new Error(String(data.error));
 
-  if (!/^0[235]\d{8}$/.test(phone)) {
-    showNotice('Enter a valid 10-digit Ghanaian recipient phone number (e.g. 024XXXXXXX).', true);
-    return;
-  }
-  const detected = detectNetworkFromPhone(phone);
-  if (detected && detected !== selectedNetwork) {
-    selectDataNetwork(detected);
-  }
-  if (!name) {
-    showNotice('Please enter the customer name for the receipt.', true);
-    return;
-  }
-  if (!/^\S+@\S+\.\S+$/.test(email)) {
-    showNotice('Please enter a valid email address for the payment receipt.', true);
-    return;
+  const networks = Array.isArray(data?.networks) ? data.networks : [];
+  state.networks = networks;
+  state.providerConfigured = data?.provider?.configured === true;
+
+  if (!state.activeNetworkId && networks.length) {
+    const preferred = new URLSearchParams(window.location.search).get('network');
+    // legacyKey keeps older ?network=airteltigo links working; the catalog id
+    // for AirtelTigo is 'at'.
+    const requested = networks.find((network) =>
+      network.id === preferred || network.legacyKey === preferred
+    );
+    state.activeNetworkId = (requested || networks[0]).id;
   }
 
+  if (!state.providerConfigured) {
+    showNotice('Data delivery is not switched on yet, so no bundle can be sent. This is not a problem with your wallet.', 'info');
+  } else if (!networks.length) {
+    showNotice('No data bundles are on sale right now. Please check back shortly.', 'info');
+  }
+}
+
+/**
+ * Reads the live wallet balance straight from `wallets` (the authoritative
+ * table the charge/refund RPCs maintain), so the footer can never show the
+ * stale `profiles.wallet_balance` mirror. The mirror is only a fallback for an
+ * account whose wallet row has not been provisioned yet.
+ */
+async function loadBalance() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return;
+
+  const { data: wallet } = await supabase
+    .from('wallets')
+    .select('balance')
+    .eq('id', session.user.id)
+    .maybeSingle();
+
+  if (wallet?.balance !== null && wallet?.balance !== undefined) {
+    state.balance = Number(wallet.balance) || 0;
+    return;
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('wallet_balance')
+    .eq('id', session.user.id)
+    .maybeSingle();
+
+  if (profile?.wallet_balance !== null && profile?.wallet_balance !== undefined) {
+    state.balance = Number(profile.wallet_balance) || 0;
+  }
+}
+
+export async function startDataPurchase() {
+  if (state.busy) return;
+
+  const bundle = selectedBundle();
+  const phone = ($('recipientPhone').value || '').replace(/\D/g, '');
+
+  if (!bundle) {
+    showNotice('Select a data bundle first.');
+    return;
+  }
+  if (!GHANA_PHONE.test(phone)) {
+    showNotice('Enter a valid 10-digit Ghanaian recipient number (e.g. 024XXXXXXX).');
+    return;
+  }
+  if (Number(bundle.price) > state.balance) {
+    showNotice(`Your wallet balance is ${formatGhs(state.balance)}, which does not cover this ${formatCedi(bundle.price)} bundle. Top up your wallet to buy it.`);
+    return;
+  }
+
+  // One key per distinct order. A retry of the same order reuses it, so the
+  // server returns the original transaction instead of charging again.
+  const orderKey = `${state.activeNetworkId}:${bundle.bundleKey}:${phone}`;
+  if (!state.idempotencyKey) {
+    state.idempotencyKey = `${orderKey}`.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) +
+      `-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  state.busy = true;
+  clearNotice();
+  renderFooter();
+
+  try {
+    const { data, error } = await supabase.functions.invoke('purchase-data-bundle', {
+      body: { bundleKey: bundle.bundleKey, phone, idempotencyKey: state.idempotencyKey },
+    });
+
+    if (error) throw new Error(error.message || 'Unable to complete the purchase.');
+    if (typeof data?.walletBalance === 'number') state.balance = data.walletBalance;
+
+    if (data?.success) {
+      state.idempotencyKey = null;
+      openResult({
+        icon: '&#9989;',
+        title: 'Bundle delivered',
+        description: `${bundle.title} sent to ${phone}. ${data.message || ''}`.trim(),
+        reference: data.shortCode || data.reference,
+      });
+    } else if (data?.pending) {
+      // Wallet held, delivery unconfirmed. Not offered as a retry: resending
+      // could deliver the bundle twice.
+      openResult({
+        icon: '&#9203;',
+        title: 'Delivery being confirmed',
+        description: data.message || 'We are confirming this delivery. Your wallet is on hold until we settle it. Please do not resend.',
+        reference: data.shortCode || data.reference,
+      });
+    } else {
+      openResult({
+        icon: '&#9888;',
+        title: 'Bundle not delivered',
+        description: data?.message || data?.error || 'The order could not be completed. Any wallet charge has been reversed.',
+        reference: data?.shortCode || data?.reference,
+      });
+    }
+
+    $('recipientPhone').value = '';
+    $('phoneHint').className = 'sv-hint';
+  } catch (err) {
+    console.warn('Data purchase error:', err);
+    showNotice(err.message || 'Unable to complete the purchase. Please try again.');
+  } finally {
+    state.busy = false;
+    renderAll();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+
+document.addEventListener('DOMContentLoaded', async () => {
   const { isAgent } = await checkAgentAccessServer();
   if (!isAgent) {
     const params = new URLSearchParams();
     params.set('action', 'agent');
     params.set('notice', 'agent');
-    params.set('register', 'true');
     params.set('redirect', 'instantData.html');
     window.location.href = `login.html?${params.toString()}`;
     return;
   }
 
-  const bundle = BUNDLES[selectedNetwork][selectedBundleIndex];
-  checkoutBusy = true;
-  const btn = $('buyBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Charging wallet...';
-  clearNotice();
-
   try {
-    const { data, error } = await supabase.functions.invoke('create-public-data-payment', {
-      body: {
-        name,
-        email,
-        phone,
-        networkType: selectedNetwork,
-        volumeInMB: bundle.mB,
-      },
-    });
-    if (error) throw error;
-    if (data?.success !== true) throw new Error(data?.message || data?.error || 'Unable to complete the purchase.');
-
-    if (Number.isFinite(Number(data.walletBalance))) applyWalletBalance(data.walletBalance);
-
-    const state = describeDataOrderStatus(data.status);
-    const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
-    orders.unshift({
-      trackingId: data.orderReference,
-      network: NETWORK_META[selectedNetwork].label,
-      size: bundle.size,
-      price: `GHS ${bundle.price.toFixed(2)}`,
-      name,
-      phone,
-      status: state.label,
-      date: new Date().toLocaleString(),
-    });
-    localStorage.setItem('skaitech_orders', JSON.stringify(orders));
-
-    openResult(
-      state.title,
-      data.message || (state.label === 'Successful'
-        ? 'The bundle has been delivered to the recipient line. Your wallet balance was updated.'
-        : state.label === 'Failed'
-          ? 'Delivery failed and your wallet has been refunded.'
-          : state.label === 'Cancelled'
-            ? 'The order was cancelled and your wallet has been refunded.'
-            : 'Payment received. The bundle is being delivered and will arrive shortly.'),
-      data.orderReference,
-      state.icon,
-    );
+    await Promise.all([loadCatalog(), loadBalance()]);
   } catch (err) {
-    console.warn('Instant data checkout error:', err);
-    showNotice(err.message || 'Unable to complete the purchase. Please try again.', true);
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Buy Now';
-    checkoutBusy = false;
-  }
-}
-
-// RETURNING FROM PAYSTACK: verify order + show delivery status.
-async function handlePaymentCallback() {
-  const params = new URLSearchParams(window.location.search);
-  const reference = params.get('reference');
-  if (!reference || !String(reference).startsWith('PUB-')) return;
-
-  const saved = JSON.parse(sessionStorage.getItem('skaitech_public_payment') || '{}');
-  if (saved.reference && saved.reference !== reference) return;
-  const email = saved.email || '';
-
-  if (email) {
-    const { data } = await supabase.functions.invoke('get-public-data-order', {
-      body: { reference, email },
-    }).catch(() => ({}));
-
-    if (data?.order) {
-      const order = data.order;
-      const state = describeDataOrderStatus(order.status);
-      const desc = state.label === 'Successful'
-        ? 'Payment confirmed and the data bundle has been delivered to the recipient line.'
-        : state.label === 'Failed'
-          ? 'Payment was received but delivery failed. Our team will follow up or refund.'
-          : state.label === 'Cancelled'
-            ? 'The order was cancelled and the payment refunded.'
-            : 'Payment received. Your bundle is still being processed and will arrive shortly.';
-      const volumeMb = Number(order.volume_mb || 0);
-      const volumeLabel = volumeMb >= 1024
-        ? `${volumeMb / 1024}GB`
-        : `${volumeMb} MB`;
-
-      const orders = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
-      orders.unshift({
-        trackingId: reference,
-        network: (order.network_type || '').toUpperCase(),
-        size: volumeLabel,
-        price: `GHS ${Number(order.sale_amount).toFixed(2)}`,
-        name: saved.name || '',
-        phone: saved.phone || '',
-        status: state.label,
-        date: new Date(order.created_at || Date.now()).toLocaleString(),
-      });
-      localStorage.setItem('skaitech_orders', JSON.stringify(orders));
-
-      openResult(state.title, desc, reference, state.icon);
-    } else {
-      openResult('Order Status', 'We could not fetch the latest status right now. Check the Track Order page shortly.', reference, '⏳');
-    }
-  } else {
-    openResult('Order Status', 'A return link was opened without saved checkout details.', reference, '⏳');
+    console.warn('Instant data page load failed:', err);
+    showNotice('Could not load data bundles right now. Please refresh and try again.');
   }
 
-  window.history.replaceState({}, document.title, window.location.pathname);
-}
-
-// INIT
-document.addEventListener('DOMContentLoaded', () => {
-  parseUrlParam();
-  renderNetworks();
-  renderBundles();
-  updateCheckoutBar();
-  handlePaymentCallback();
-  refreshWalletBalance();
-
-  // Pre-fill email from an existing session if available.
-  supabase.auth.getSession().then(({ data }) => {
-    if (data.session?.user?.email && !$('customerEmail').value) {
-      $('customerEmail').value = data.session.user.email;
-    }
-  }).catch(() => {});
+  renderAll();
 });
 
 window.selectDataNetwork = selectDataNetwork;
-window.handleDataPhoneInput = handleDataPhoneInput;
 window.selectDataBundle = selectDataBundle;
-window.startInstantDataCheckout = startInstantDataCheckout;
-window.closeInstantDataResult = closeInstantDataResult;
+window.handleDataPhoneInput = handleDataPhoneInput;
+window.startDataPurchase = startDataPurchase;
+window.closeDataResult = closeDataResult;

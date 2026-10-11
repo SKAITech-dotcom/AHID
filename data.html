@@ -25,9 +25,11 @@
       --sv-danger: #ef4444;
       --sv-danger-soft: rgba(239, 68, 68, 0.12);
       --sv-ok: #22c55e;
-      /* Overridden per selected network from networks.brand_color. */
-      --sv-accent: #f59e0b;
-      --sv-accent-ink: #0b0f19;
+      /* Uniform dark navy accent. Not overridden per selected network: the
+         hero badge and tab dots still carry brand colours, but the page chrome
+         stays one navy so the bundle list stays readable. */
+      --sv-accent: #1e40af;
+      --sv-accent-ink: #ffffff;
     }
 
     html, body {
@@ -279,6 +281,20 @@
       font-weight: 700;
       color: var(--sv-muted);
     }
+    /* Named vendor package badge (Kokrokoo, Midnight, Voice). */
+    .sv-cat {
+      display: inline-block;
+      margin-top: 3px;
+      padding: 1px 8px;
+      border-radius: 9999px;
+      background: color-mix(in srgb, var(--sv-accent) 18%, transparent);
+      border: 1px solid color-mix(in srgb, var(--sv-accent) 45%, transparent);
+      color: #a8c0ff;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
 
     .sv-bundle-price { flex: 0 0 auto; text-align: right; }
     .sv-price {
@@ -324,9 +340,9 @@
       color: #fca5a5;
     }
     .sv-notice.info {
-      background: rgba(245, 158, 11, 0.10);
-      border: 1px solid rgba(245, 158, 11, 0.28);
-      color: #fcd34d;
+      background: rgba(30, 64, 175, 0.14);
+      border: 1px solid rgba(30, 64, 175, 0.4);
+      color: #a8c0ff;
     }
 
     .sv-empty {

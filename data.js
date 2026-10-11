@@ -9,6 +9,12 @@ import { checkAgentAccessServer } from './agentAccessCheck.js';
  * from that response and the purchase sends a bundle_key, never an amount, so
  * what is displayed is what the server charges.
  *
+ * The page chrome uses one fixed dark navy accent rather than the network's
+ * brand colour: the hero badge and tab dots still carry the brand colour as a
+ * small identifying glyph, but the price pill, buttons and focus rings never
+ * recolour per network, so the storefront stays uniform and bundles stay
+ * readable.
+ *
  * The wallet balance shown in the footer is read from `profiles.wallet_balance`,
  * a trigger-maintained mirror of the authoritative `wallets.balance`. It is
  * read-only to clients; only the charge/refund RPCs move real money.
@@ -20,6 +26,8 @@ import { checkAgentAccessServer } from './agentAccessCheck.js';
 
 const CEDI = '\u20B5';
 const GHANA_PHONE = /^0[0-9]{9}$/;
+
+const AFFORDABLE_CATEGORIES = new Set(['Standard', 'XXL']);
 
 const $ = (id) => document.getElementById(id);
 
@@ -78,22 +86,14 @@ function clearNotice() {
 // ---------------------------------------------------------------------------
 
 /**
- * The accent colour follows the selected network, so the header badge, price
- * pill and action button all read as "this network" at a glance. brandColor is
- * constrained to a 6-digit hex by a CHECK constraint, and the fallback covers
- * the case of a network row that predates that constraint.
+ * A single fixed dark navy accent, shared by every network. The hero badge and
+ * tab dot keep the network's own brand colour as a small identifying glyph, but
+ * the page chrome (price pill, buttons, focus rings) never recolours per
+ * network, so the storefront stays uniform and the bundles stay readable.
  */
 function applyNetworkAccent() {
-  const network = activeNetwork();
-  const color = /^#[0-9A-Fa-f]{6}$/.test(network?.brandColor || '') ? network.brandColor : '#f59e0b';
-  document.documentElement.style.setProperty('--sv-accent', color);
-  // Pick a readable ink for the accent. Cedi yellow and white on light brand
-  // colours fail contrast; this only computes lightness, not full WCAG.
-  const r = parseInt(color.slice(1, 3), 16);
-  const g = parseInt(color.slice(3, 5), 16);
-  const b = parseInt(color.slice(5, 7), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  document.documentElement.style.setProperty('--sv-accent-ink', luminance > 0.6 ? '#0b0f19' : '#ffffff');
+  document.documentElement.style.setProperty('--sv-accent', '#1e40af');
+  document.documentElement.style.setProperty('--sv-accent-ink', '#ffffff');
 }
 
 function renderTabs() {
@@ -163,6 +163,10 @@ function renderBundles() {
     const unaffordable = Number(bundle.price) > state.balance;
     const selected = bundle.bundleKey === state.selectedBundleKey;
     const meta = [network?.name, bundle.category].filter(Boolean).join(' • ');
+    const isSpecial = !AFFORDABLE_CATEGORIES.has(bundle.category);
+    const category = isSpecial
+      ? `<span class="sv-cat">${escapeHtml(bundle.category)}</span>`
+      : '';
 
     return `
       <button
@@ -177,6 +181,7 @@ function renderBundles() {
         <span class="sv-bundle-info">
           <span class="sv-bundle-title">${escapeHtml(bundle.title)}</span>
           <span class="sv-bundle-meta">${escapeHtml(meta)}</span>
+          ${category}
         </span>
         <span class="sv-bundle-price">
           <span class="sv-price">${formatCedi(bundle.price)}</span>
@@ -335,7 +340,11 @@ async function loadCatalog() {
 
   if (!state.activeNetworkId && networks.length) {
     const preferred = new URLSearchParams(window.location.search).get('network');
-    const requested = networks.find((network) => network.id === preferred);
+    // legacyKey keeps older ?network=airteltigo links working; the catalog id
+    // for AirtelTigo is 'at'.
+    const requested = networks.find((network) =>
+      network.id === preferred || network.legacyKey === preferred
+    );
     state.activeNetworkId = (requested || networks[0]).id;
   }
 

@@ -98,27 +98,36 @@ Switch one bundle on, buy it, and confirm delivery before switching on the rest.
 
 ---
 
-## 4. Named bundles that are not seeded
+## 4. Named bundles
 
-`Kokrokoo`, `Midnight` and `Voice` bundles are named vendor products. They are not
-in the seed because their price and package id can only come from Hubtel, and
-inventing a GHS figure would put a price on screen with no cost basis behind it.
+`Kokrokoo`, `Midnight` and `Voice` bundles are named vendor products. They are
+seeded by migration `20261011000000_special_data_packages.sql` but **gated off**:
+`is_available = false` and a placeholder price, so neither the storefront nor a
+purchase can touch them until Hubtel supplies the real package id.
 
-Once Hubtel supplies them:
+Turning one on means confirming the id **and** the price against Hubtel's
+catalogue first, then:
 
 ```sql
-insert into public.bundles
-  (bundle_key, network_id, title, data_amount, volume_mb, price, category,
-   validity, hubtel_package_id, provider_cost, is_available, sort_order)
-values
-  ('mtn-kokrokoo-1gb', 'mtn', 'Kokrokoo 1GB', '1GB (2 days)', 1024, 6.00,
-   'Kokrokoo', '2 days', '<hubtel id>', 5.20, true, 95);
+update public.bundles
+   set hubtel_package_id = '<id from hubtel>',
+       provider_cost     = <our cost in GHS>,
+       price             = <sale price from hubtel>,
+       volume_mb         = <real volume in MB>,
+       validity          = '<duration only if hubtel states one>',
+       is_available      = true,
+       unavailable_reason = null
+ where bundle_key = 'mtn-kokrokoo-1gb';
 ```
 
-`volume_mb` is required and is what the order path is denominated in — a display
-string is not something to parse. Use `validity` for the duration the provider
-actually states; leave it NULL rather than inventing one, because `data-catalog`
+`volume_mb` is what the order path is denominated in — a display string is not
+something to parse. Use `validity` for the duration the provider actually
+states; leave it NULL rather than inventing one, because `data-catalog`
 passes it straight through and the UI shows it verbatim.
+
+Voice bundles have no data volume, so before the Voice rows can be enabled the
+fulfilment model (minutes vs. an MB-equivalent) must be confirmed with Hubtel —
+they currently carry a placeholder volume and a loud `unavailable_reason`.
 
 ---
 
