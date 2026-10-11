@@ -1,18 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta name="description" content="Buy airtime top-up for MTN, Telecel, AirtelTigo and Glo in Ghana through Skaitech Ghana. Fast delivery and transparent agent pricing.">
+  <meta name="description" content="Buy airtime top-up for MTN, Telecel and AT (AirtelTigo) in Ghana through Skaitech Ghana. Fast delivery and transparent agent pricing.">
   <link rel="canonical" href="https://skaitechgh.wasmer.app/airtime.html">
   <meta name="robots" content="noindex, nofollow">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Skaitech Ghana">
   <meta property="og:url" content="https://skaitechgh.wasmer.app/airtime.html">
   <meta property="og:title" content="Buy Airtime Top-Up - Skaitech Ghana">
-  <meta property="og:description" content="Buy airtime top-up for MTN, Telecel, AirtelTigo and Glo in Ghana through Skaitech Ghana. Fast delivery and transparent agent pricing.">
+  <meta property="og:description" content="Buy airtime top-up for MTN, Telecel and AT (AirtelTigo) in Ghana through Skaitech Ghana. Fast delivery and transparent agent pricing.">
   <meta property="og:image" content="https://skaitechgh.wasmer.app/img/akaitech%20more%20final%20logo.jpeg">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Buy Airtime Top-Up - Skaitech Ghana">
-  <meta name="twitter:description" content="Buy airtime top-up for MTN, Telecel, AirtelTigo and Glo in Ghana through Skaitech Ghana. Fast delivery and transparent agent pricing.">
+  <meta name="twitter:description" content="Buy airtime top-up for MTN, Telecel and AT (AirtelTigo) in Ghana through Skaitech Ghana. Fast delivery and transparent agent pricing.">
   <meta name="twitter:image" content="https://skaitechgh.wasmer.app/img/akaitech%20more%20final%20logo.jpeg">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,33 +21,93 @@
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    .airtime-network-icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    body {
+      background-color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #0f172a;
+    }
+
+    .bill-wrapper {
+      max-width: 920px;
+      margin: 30px auto;
+      padding: 0 16px 96px;
+    }
+
+    .bill-card {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+      border: 1px solid #e2e8f0;
+    }
+
+    .bill-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .bill-header h1 {
+      font-size: 1.6rem;
       font-weight: 800;
-      font-size: 1rem;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-      overflow: hidden;
+      color: #0f172a;
+      margin: 0 0 6px 0;
     }
-    .airtime-network-icon img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
+
+    .bill-header p {
+      color: #64748b;
+      font-size: 0.9rem;
+      margin: 0;
     }
+
+    .utility-service-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; }
+    .utility-service-card { width:100%; min-width:0; min-height:132px; padding:20px 18px; display:flex; align-items:center; gap:14px; text-align:left; color:#0f172a; background:#fff; border:1px solid #e8edf3; border-radius:18px; box-shadow:0 8px 22px rgba(15,23,42,.06); cursor:pointer; transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease; }
+    .utility-service-card:hover,.utility-service-card:focus-visible { transform:translateY(-3px); border-color:#a7f3d0; box-shadow:0 14px 28px rgba(15,23,42,.1); outline:none; }
+    .utility-logo-wrap { position:relative; width:58px; height:58px; flex:0 0 58px; display:grid; place-items:center; overflow:hidden; border-radius:14px; background:#f1f5f9; color:#64748b; }
+    .utility-logo-wrap img { width:100%; height:100%; object-fit:contain; padding:5px; box-sizing:border-box; }
+    .utility-logo-fallback { display:none; font-size:1.2rem; }
+    .utility-logo-fallback:not([hidden]) { display:block; }
+    .utility-service-card .service-copy { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; }
+    .utility-service-card strong { display:block; font-size:1rem; font-weight:800; line-height:1.25; }
+    .utility-service-card small { display:block; margin-top:5px; color:#64748b; font-size:.84rem; line-height:1.35; }
+    .utility-service-card .service-arrow { flex:0 0 auto; color:#94a3b8; font-size:1.25rem; }
+    .utility-modal-overlay { position:fixed; inset:0; z-index:1200; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(15,23,42,.58); backdrop-filter:blur(4px); overflow-y:auto; }
+    .utility-modal-overlay.active { display:flex; }
+    .utility-modal-card { width:min(100%,560px); max-height:min(92vh,900px); overflow:auto; position:relative; }
+    .utility-modal-topline { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#94a3b8; font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+    .utility-modal-back { display:inline-flex; align-items:center; gap:6px; border:0; background:none; color:#475569; font-weight:700; font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; cursor:pointer; padding:6px 8px; border-radius:8px; }
+    .utility-modal-back:hover { background:#f1f5f9; color:#1e40af; }
+    .utility-modal-close { width:36px; height:36px; border:0; border-radius:50%; background:#f1f5f9; color:#475569; font-size:1.4rem; line-height:1; cursor:pointer; }
+    .modal-service-brand { display:flex; flex-direction:column; align-items:center; text-align:center; margin:4px 0 22px; }
+    .modal-service-brand img { width:76px; height:64px; object-fit:contain; margin-bottom:10px; }
+    .modal-service-brand h2 { margin:0; font-size:1.25rem; color:#0f172a; }
+    .modal-service-brand p { margin:4px 0 0; color:#64748b; font-size:.88rem; }
+    .utility-step-indicator { display:flex; align-items:center; justify-content:center; gap:12px; margin:0 0 20px; }
+    .utility-step { display:flex; align-items:center; gap:7px; color:#94a3b8; font-size:.78rem; font-weight:700; }
+    .utility-step .step-number { width:27px; height:27px; border-radius:50%; display:grid; place-items:center; background:#e2e8f0; color:#64748b; }
+    .utility-step.active { color:#047857; }
+    .utility-step.active .step-number,.utility-step.done .step-number { background:#a7f3d0; color:#065f46; }
+    .utility-step-line { width:56px; height:2px; background:#e2e8f0; }
+    .field-help { display:block; margin-top:7px; color:#64748b; font-size:.8rem; }
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
+    .utility-wallet-pill { display:inline-flex; align-items:center; gap:8px; margin-top:12px; padding:7px 12px; border-radius:999px; background:#ecfdf5; color:#047857; font-size:.85rem; }
+    .utility-bottom-nav { position:fixed; z-index:90; bottom:0; left:0; right:0; display:flex; justify-content:space-around; gap:4px; padding:8px max(8px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background:rgba(255,255,255,.96); border-top:1px solid #e2e8f0; box-shadow:0 -6px 20px rgba(15,23,42,.08); backdrop-filter:blur(12px); }
+    .utility-bottom-nav a { min-width:56px; display:flex; flex-direction:column; align-items:center; gap:3px; color:#64748b; text-decoration:none; font-size:.68rem; font-weight:600; }
+    .utility-bottom-nav a i { font-size:1.05rem; }
+    .utility-bottom-nav a.active { color:#2563eb; }
+
     .quick-history-btn {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 6px 12px;
-      border-radius: 20px;
+      padding: 7px 12px;
+      border-radius: 999px;
       border: 1px solid #cbd5e1;
       background: #ffffff;
       color: #334151;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
@@ -57,84 +117,188 @@
       color: #2563eb;
       border-color: #2563eb;
     }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #334151;
+      margin-bottom: 6px;
+    }
+
+    .field input {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      box-sizing: border-box;
+      outline: none;
+      background-color: #ffffff;
+      transition: border-color 0.2s;
+    }
+
+    .field input:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .phone-field-wrapper { position: relative; }
+
+    .phone-network-indicator {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: #f1f5f9;
+      color: #64748b;
+      pointer-events: none;
+    }
+
+    .phone-network-indicator.detected {
+      background: #dcfce7;
+      color: #166534;
+    }
+
     .phone-validation-hint {
       font-size: 0.8rem;
-      margin-top: 4px;
+      margin-top: 6px;
       display: flex;
       align-items: center;
       gap: 6px;
       color: #64748b;
     }
-    .phone-validation-hint.valid {
-      color: #16a34a;
-    }
-    .phone-validation-hint.invalid {
-      color: #dc2626;
-    }
-    .agent-wallet-banner {
-      background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
-      border: 1px solid #bfdbfe;
-      border-radius: 12px;
-      padding: 12px 16px;
+    .phone-validation-hint.valid { color: #16a34a; }
+    .phone-validation-hint.invalid { color: #dc2626; }
+
+    .chip-group {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 18px;
-    }
-    .agent-wallet-info {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .agent-wallet-info i {
-      font-size: 1.4rem;
-      color: #2563eb;
-    }
-    .agent-wallet-text {
-      font-size: 0.85rem;
-      color: #1e293b;
-    }
-    .agent-wallet-text strong {
-      display: block;
-      font-size: 0.95rem;
-      color: #15803d;
-    }
-    .receipt-actions {
-      display: flex;
-      gap: 10px;
-      margin-top: 20px;
       flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
     }
-    .receipt-actions button, .receipt-actions a {
-      flex: 1;
-      min-width: 130px;
-      padding: 10px 14px;
+
+    .chip-btn {
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #334151;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .chip-btn:hover, .chip-btn.active {
+      background: #2563eb;
+      border-color: #2563eb;
+      color: white;
+    }
+
+    .order-summary {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 20px 0;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+      color: #64748b;
+    }
+
+    .summary-row strong { color: #0f172a; }
+
+    .summary-row.total {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .pay-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #2563eb, #1e40af);
+      color: white;
+      border: none;
+      padding: 14px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.2s;
+    }
+
+    .pay-btn:hover { opacity: 0.95; }
+    .pay-btn:disabled { background: #94a3b8; cursor: not-allowed; box-shadow: none; }
+
+    .verify-btn {
+      background: #f1f5f9;
+      color: #334151;
+      border: 1px solid #cbd5e1;
+      padding: 10px 18px;
       border-radius: 8px;
       font-weight: 700;
       font-size: 0.9rem;
       cursor: pointer;
-      text-align: center;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      border: none;
+      white-space: nowrap;
+      transition: all 0.2s;
     }
-    .btn-receipt-print {
-      background: #f1f5f9;
-      color: #334151;
-      border: 1px solid #cbd5e1 !important;
+    .verify-btn:hover { background: #e2e8f0; border-color: #94a3b8; }
+
+    .notice {
+      display: none;
+      margin-top: 16px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 0.9rem;
     }
-    .btn-receipt-print:hover {
-      background: #e2e8f0;
+    .notice.show { display: block; }
+    .notice.info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    .notice.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    .notice.success { background:#ecfdf5; color:#166534; border:1px solid #bbf7d0; }
+
+    /* Processing/history overlays must sit above the flow modal (z-index 1200). */
+    #processingModal, #historyModal { z-index: 1300; }
+
+    @media (max-width: 760px) {
+      .bill-wrapper { max-width: 620px; }
+      .bill-card { padding:18px; }
+      .utility-service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .utility-service-card { min-height: 104px; padding: 14px 12px; gap: 10px; }
+      .utility-logo-wrap { width: 48px; height: 48px; flex-basis: 48px; }
+      .utility-service-card strong { font-size: .94rem; }
+      .utility-service-card small { font-size: .78rem; }
+      .utility-modal-overlay { padding:10px; align-items:flex-end; }
+      .utility-modal-card { max-height:94vh; border-radius:20px 20px 12px 12px; }
     }
-    .btn-receipt-new {
-      background: #2563eb;
-      color: #ffffff;
-    }
-    .btn-receipt-new:hover {
-      background: #1d4ed8;
+    @media (max-width: 420px) {
+      .utility-service-grid { grid-template-columns: 1fr; }
+      .utility-service-card { min-height: 88px; padding: 12px 14px; }
     }
   </style>
 <script>
@@ -149,329 +313,191 @@
 </head>
 <body>
 
-  <!-- MAIN AIRTIME CONTAINER -->
-  <main class="airtime-wrapper">
+  <main class="bill-wrapper">
 
-    <!-- Top Action Bar -->
-    <div style="display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 20px;">
-      <button type="button" class="quick-history-btn" onclick="openAirtimeHistory()">
-        <i class="fa-solid fa-clock-rotate-left"></i> Recent Purchases (<span id="historyCountBadge">0</span>)
-      </button>
-      <a href="orders.html" class="quick-history-btn" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; background: #2563eb; color: #fff; border-color: transparent;">
-        <i class="fa-solid fa-table-list"></i> My Transactions
-      </a>
-    </div>
-
-    <!-- Agent Wallet Banner (Shown if authenticated as agent) -->
-    <div id="agentWalletBanner" class="agent-wallet-banner" style="display: none;">
-      <div class="agent-wallet-info">
-        <i class="fa-solid fa-wallet"></i>
-        <div class="agent-wallet-text">
-          <span>Logged in as Verified Agent</span>
-          <strong>Wallet Balance: GHS <span id="agentBannerBalance">0.00</span></strong>
-        </div>
-      </div>
-      <a href="deposit.html" style="background: #2563eb; color: white; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; text-decoration: none;">
-        + Top Up Wallet
-      </a>
-    </div>
-
-    <!-- Status Notice (Redirect / Result / Alerts) -->
+    <!-- Status Notice (Result / Alerts) -->
     <div id="paymentResultNotice" class="notice"></div>
 
-    <!-- MAIN FORM CARD -->
-    <div id="airtimeFormCard" class="airtime-card">
-      <div class="airtime-header">
-        <h1>Buy Airtime Top-Up</h1>
-        <p>Instant automated recharge for MTN, Telecel, and AT numbers in Ghana.</p>
+    <!-- SERVICE SELECTION -->
+    <section class="utility-dashboard">
+      <div class="bill-header">
+        <h1>Airtime Top-Up</h1>
+        <p>Choose a network to send instant airtime to any Ghana number.</p>
+        <div class="utility-wallet-pill"><i class="fa-solid fa-wallet"></i> Wallet · GH₵ <strong class="wallet-balance">0.00</strong></div>
+        <div style="margin-top: 12px;">
+          <button type="button" class="quick-history-btn" onclick="openAirtimeHistory()">
+            <i class="fa-solid fa-clock-rotate-left"></i> Recent Purchases (<span id="historyCountBadge">0</span>)
+          </button>
+        </div>
       </div>
-
-      <form id="airtimeForm" onsubmit="handleAirtimeSubmit(event)">
-
-        <!-- 1. NETWORK SELECTION -->
-        <div class="field">
-          <label style="font-weight: 700; color: #1e293b; margin-bottom: 8px; display: block;">
-            1. Select Mobile Network
-          </label>
-          <div class="network-selection-grid">
-            
-            <!-- MTN -->
-            <button type="button" class="network-select-btn active active-mtn" id="netBtnMtn" onclick="selectNetwork('mtn')">
-              <span class="network-check-badge"><i class="fa-solid fa-circle-check"></i></span>
-              <div class="airtime-network-icon" style="background: #ffcc00; color: #000;">
-                <img src="img/mtn-logo.png" alt="MTN Ghana" onerror="this.onerror=null; this.parentElement.innerText='MTN';">
-              </div>
-              <span class="network-label">MTN</span>
-            </button>
-
-            <!-- Telecel -->
-            <button type="button" class="network-select-btn" id="netBtnTelecel" onclick="selectNetwork('telecel')">
-              <span class="network-check-badge"><i class="fa-solid fa-circle-check"></i></span>
-              <div class="airtime-network-icon" style="background: #e11d48; color: #fff;">
-                <img src="img/telecel-logo.png" alt="Telecel Ghana" onerror="this.onerror=null; this.parentElement.innerText='T';">
-              </div>
-              <span class="network-label">Telecel</span>
-            </button>
-
-            <!-- AT -->
-            <button type="button" class="network-select-btn" id="netBtnAt" onclick="selectNetwork('at')">
-              <span class="network-check-badge"><i class="fa-solid fa-circle-check"></i></span>
-              <div class="airtime-network-icon" style="background: #0284c7; color: #fff;">
-                <img src="img/airtel-logo.png" alt="AT Ghana" onerror="this.onerror=null; this.parentElement.innerText='AT';">
-              </div>
-              <span class="network-label">AT (AirtelTigo)</span>
-            </button>
-
-          </div>
-        </div>
-
-        <!-- 2. RECIPIENT PHONE NUMBER -->
-        <div class="field">
-          <label for="recipientPhone">2. Recipient Phone Number (Ghana)</label>
-          <div class="phone-field-wrapper">
-            <input 
-              type="tel" 
-              id="recipientPhone" 
-              maxlength="10" 
-              placeholder="e.g. 0244123456" 
-              required 
-              oninput="handlePhoneInput()"
-              autocomplete="tel"
-            >
-            <div id="phoneNetworkIndicator" class="phone-network-indicator">
-              <i class="fa-solid fa-sim-card"></i> <span id="indicatorText">MTN</span>
-            </div>
-          </div>
-          <div id="phoneValidationHint" class="phone-validation-hint">
-            <i class="fa-solid fa-circle-info"></i> Enter standard 10-digit Ghana mobile number
-          </div>
-        </div>
-
-        <!-- 3. AIRTIME AMOUNT -->
-        <div class="field">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label for="airtimeAmount" style="margin-bottom: 0;">3. Airtime Amount (GHS)</label>
-            <span style="font-size: 0.78rem; color: #64748b;">Min: GHS 1.00 &bull; Max: GHS 500.00</span>
-          </div>
-
-          <div style="position: relative;">
-            <span style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-weight: 700; color: #64748b; font-size: 0.95rem;">GHS</span>
-            <input 
-              type="number" 
-              id="airtimeAmount" 
-              min="1" 
-              max="500" 
-              step="0.5" 
-              value="10" 
-              required 
-              style="padding-left: 54px;" 
-              oninput="handleAmountInput()"
-            >
-          </div>
-
-          <!-- Quick Amount Chips -->
-          <div class="airtime-amount-chips" id="amountChipsContainer">
-            <button type="button" class="airtime-chip" onclick="setAirtimeAmount(1)">1 GHS</button>
-            <button type="button" class="airtime-chip" onclick="setAirtimeAmount(2)">2 GHS</button>
-            <button type="button" class="airtime-chip" onclick="setAirtimeAmount(5)">5 GHS</button>
-            <button type="button" class="airtime-chip active" onclick="setAirtimeAmount(10)">10 GHS</button>
-            <button type="button" class="airtime-chip" onclick="setAirtimeAmount(20)">20 GHS</button>
-            <button type="button" class="airtime-chip" onclick="setAirtimeAmount(50)">50 GHS</button>
-            <button type="button" class="airtime-chip" onclick="setAirtimeAmount(100)">100 GHS</button>
-          </div>
-        </div>
-
-        <!-- 4. CUSTOMER OPTIONAL DETAILS -->
-        <div class="field" style="margin-top: 18px;">
-          <label for="customerEmail">Email Address (for receipt &amp; order tracking)</label>
-          <input 
-            type="email" 
-            id="customerEmail" 
-            placeholder="you@example.com (optional)"
-          >
-        </div>
-
-        <!-- 5. PAYMENT METHOD -->
-        <div class="field">
-          <label>4. Payment Method</label>
-          <div class="payment-methods-grid">
-            
-            <!-- Agent Wallet Card -->
-            <div class="payment-method-card active" id="payMethodWallet">
-              <div class="payment-method-icon" style="color: #10b981;">
-                <i class="fa-solid fa-wallet"></i>
-              </div>
-              <div class="payment-method-details">
-                <h4>Agent Wallet Balance</h4>
-                <p id="walletCardSubtitle">Available to verified agents</p>
-                <span class="payment-fee-badge free" id="walletFeeBadge">0% Fee (Instant)</span>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        <!-- 6. ORDER BREAKDOWN SUMMARY -->
-        <div class="airtime-summary-card">
-          <div class="airtime-summary-row">
-            <span>Recipient Number:</span>
-            <strong id="summaryPhone">0244123456</strong>
-          </div>
-          <div class="airtime-summary-row">
-            <span>Mobile Network:</span>
-            <span id="summaryNetworkBadge" style="font-weight: 700; color: #000; background: #ffcc00; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">MTN</span>
-          </div>
-          <div class="airtime-summary-row">
-            <span>Airtime Amount:</span>
-            <span>GHS <strong id="summaryAirtimeNet">10.00</strong></span>
-          </div>
-          <div class="airtime-summary-row">
-            <span>Payment Method:</span>
-            <span id="summaryPaymentMethod">Agent Wallet (0% Fee)</span>
-          </div>
-          <div class="airtime-summary-row">
-            <span>Processing Fee:</span>
-            <span>GHS <span id="summaryFeeAmount">0.00</span></span>
-          </div>
-          <div class="airtime-summary-row total">
-            <span>Total to Pay:</span>
-            <span style="color: #2563eb;">GHS <span id="summaryGrossTotal">10.00</span></span>
-          </div>
-        </div>
-
-        <!-- 7. SUBMIT BUTTON -->
-        <button type="submit" class="pay-btn" id="submitAirtimeBtn">
-          <i class="fa-solid fa-lock"></i> Buy GHS <span id="btnAmountText">10.00</span> Airtime
+      <div class="utility-service-grid" id="airtimeServiceGrid" aria-label="Airtime networks">
+        <button type="button" class="utility-service-card" onclick="switchNetwork('mtn')">
+          <span class="utility-logo-wrap"><img src="img/mtn-logo.png" alt="MTN Ghana logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><i class="utility-logo-fallback fa-solid fa-mobile-screen-button" aria-hidden="true" hidden></i></span>
+          <span class="service-copy"><strong>MTN Airtime</strong><small>MTN · Instant airtime top-up</small></span>
+          <span class="service-arrow" aria-hidden="true">→</span>
         </button>
+        <button type="button" class="utility-service-card" onclick="switchNetwork('telecel')">
+          <span class="utility-logo-wrap"><img src="img/telecel-logo.png" alt="Telecel Ghana logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><i class="utility-logo-fallback fa-solid fa-mobile-screen-button" aria-hidden="true" hidden></i></span>
+          <span class="service-copy"><strong>Telecel Airtime</strong><small>Telecel · Instant airtime top-up</small></span>
+          <span class="service-arrow" aria-hidden="true">→</span>
+        </button>
+        <button type="button" class="utility-service-card" onclick="switchNetwork('at')">
+          <span class="utility-logo-wrap"><img src="img/airtel-logo.png" alt="AT Ghana logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><i class="utility-logo-fallback fa-solid fa-mobile-screen-button" aria-hidden="true" hidden></i></span>
+          <span class="service-copy"><strong>AT Airtime</strong><small>AT (AirtelTigo) · Instant airtime top-up</small></span>
+          <span class="service-arrow" aria-hidden="true">→</span>
+        </button>
+      </div>
+    </section>
 
-      </form>
+    <!-- AIRTIME FLOW MODAL -->
+    <div class="utility-modal-overlay" id="airtimeModal" role="dialog" aria-modal="true" aria-labelledby="networkBrandTitle" onclick="if(event.target===this) closeAirtimeFlow()">
+      <div class="bill-card utility-modal-card" id="airtimeFormCard" onclick="event.stopPropagation()">
+        <div class="utility-modal-topline">
+          <button type="button" class="utility-modal-back" id="airtimeBackBtn" onclick="backAirtimeStep()">
+            <i class="fa-solid fa-arrow-left"></i> <span id="airtimeBackLabel">Back</span>
+          </button>
+          <span>Secure airtime purchase</span>
+          <button type="button" class="utility-modal-close" onclick="closeAirtimeFlow()" aria-label="Close airtime form">&times;</button>
+        </div>
 
-      <div id="formNotice" class="notice"></div>
+        <div class="modal-service-brand" id="selectedNetworkBrand">
+          <img id="networkBrandLogo" src="img/mtn-logo.png" alt="MTN logo">
+          <h2 id="networkBrandTitle">MTN Airtime</h2>
+          <p id="networkBrandSubtitle">MTN · Instant airtime top-up</p>
+        </div>
+
+        <form id="airtimeForm">
+          <div class="utility-step-indicator" aria-label="Purchase steps">
+            <span class="utility-step active" id="airtimeStepOneIndicator"><span class="step-number">1</span><span>Details</span></span>
+            <span class="utility-step-line" aria-hidden="true"></span>
+            <span class="utility-step" id="airtimeStepTwoIndicator"><span class="step-number">2</span><span>Review</span></span>
+          </div>
+          <span id="airtimeStepLabel" class="sr-only">Step 1 of 2 · Enter details</span>
+
+          <!-- STEP 1: DETAILS -->
+          <div id="airtimeStepOne">
+            <div class="field">
+              <label for="recipientPhone">Recipient Phone Number</label>
+              <div class="phone-field-wrapper">
+                <input type="tel" id="recipientPhone" maxlength="10" placeholder="e.g. 0244123456" required oninput="handlePhoneInput()" autocomplete="tel">
+                <div id="phoneNetworkIndicator" class="phone-network-indicator"><i class="fa-solid fa-sim-card"></i> <span id="indicatorText">MTN</span></div>
+              </div>
+              <div id="phoneValidationHint" class="phone-validation-hint">
+                <i class="fa-solid fa-circle-info"></i> Enter standard 10-digit Ghana mobile number
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="airtimeAmount">Airtime Amount (GHS) <span style="color:#dc2626">*</span></label>
+              <input type="number" id="airtimeAmount" min="1" max="500" step="1" value="10" required oninput="handleAmountInput()">
+              <div class="chip-group" id="amountChips">
+                <button type="button" class="chip-btn" data-amount="1" onclick="setAirtimeAmount(1)">GH₵ 1</button>
+                <button type="button" class="chip-btn" data-amount="2" onclick="setAirtimeAmount(2)">GH₵ 2</button>
+                <button type="button" class="chip-btn" data-amount="5" onclick="setAirtimeAmount(5)">GH₵ 5</button>
+                <button type="button" class="chip-btn active" data-amount="10" onclick="setAirtimeAmount(10)">GH₵ 10</button>
+                <button type="button" class="chip-btn" data-amount="20" onclick="setAirtimeAmount(20)">GH₵ 20</button>
+                <button type="button" class="chip-btn" data-amount="50" onclick="setAirtimeAmount(50)">GH₵ 50</button>
+                <button type="button" class="chip-btn" data-amount="100" onclick="setAirtimeAmount(100)">GH₵ 100</button>
+              </div>
+            </div>
+
+            <button type="button" class="pay-btn" id="airtimeNextBtn" onclick="nextAirtimeStep()">
+              Continue to Review <i class="fa-solid fa-arrow-right"></i>
+            </button>
+          </div>
+
+          <!-- STEP 2: REVIEW -->
+          <section id="airtimeStepTwo" style="display:none" aria-label="Review purchase">
+            <h2 style="font-size:1.15rem;margin:0 0 14px;color:#0f172a">Review &amp; Confirm</h2>
+            <div class="order-summary">
+              <div class="summary-row"><span>Recipient Number</span><strong id="reviewPhone">-</strong></div>
+              <div class="summary-row"><span>Mobile Network</span><strong id="reviewNetwork">-</strong></div>
+              <div class="summary-row"><span>Airtime Amount</span><strong>GH₵ <span id="reviewAmount">0.00</span></strong></div>
+              <div class="summary-row"><span>Payment Method</span><strong>Agent Wallet - 0% Fee</strong></div>
+              <div class="summary-row total"><span>Total to Pay</span><strong>GH₵ <span id="reviewTotal">0.00</span></strong></div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:16px">
+              <button type="button" class="verify-btn" onclick="backAirtimeStep()" style="min-height:48px">Back</button>
+              <button type="submit" class="pay-btn" id="submitAirtimeBtn" style="flex:1;margin-top:0"><i class="fa-solid fa-lock"></i> Confirm &amp; Pay</button>
+            </div>
+          </section>
+        </form>
+
+        <div id="formNotice" class="notice"></div>
+      </div>
     </div>
 
-    <!-- RECEIPT CARD (Shown after successful purchase or return from Paystack) -->
-    <div id="airtimeReceiptCard" class="receipt-card">
-      <div class="receipt-header">
-        <div class="receipt-badge" id="receiptBadge">
-          <i class="fa-solid fa-circle-check"></i> <span id="receiptBadgeText">Airtime Delivered Successfully</span>
+    <!-- RECENT PURCHASES MODAL -->
+    <div id="historyModal" class="airtime-modal-overlay" onclick="if(event.target === this) closeAirtimeHistory()">
+      <div class="airtime-history-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px;">
+          <h3 style="margin: 0; font-size: 1.2rem; font-weight: 800; color: #0f172a;">
+            <i class="fa-solid fa-clock-rotate-left" style="color: #2563eb;"></i> Recent Airtime Purchases
+          </h3>
+          <button type="button" onclick="closeAirtimeHistory()" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748b;">&times;</button>
         </div>
-        <h2 style="margin: 6px 0 2px; font-size: 1.3rem;">Airtime Purchase Receipt</h2>
-        <p style="margin: 0; color: #64748b; font-size: 0.85rem;" id="receiptTimestamp">-</p>
-      </div>
 
-      <div class="receipt-details">
-        <div class="row">
-          <span>Transaction Reference</span>
-          <strong id="receiptRef" style="font-family: monospace; font-size: 0.85rem;">-</strong>
+        <div class="airtime-history-scroll" id="historyListContainer">
+          <p style="text-align: center; color: #94a3b8; padding: 24px 0;">No airtime orders found yet.</p>
         </div>
-        <div class="row">
-          <span>Recipient Number</span>
-          <strong id="receiptPhone">-</strong>
-        </div>
-        <div class="row">
-          <span>Network</span>
-          <strong id="receiptNetwork">-</strong>
-        </div>
-        <div class="row">
-          <span>Airtime Value</span>
-          <strong id="receiptAmount">GHS 0.00</strong>
-        </div>
-        <div class="row">
-          <span>Fee / Total Paid</span>
-          <strong id="receiptTotalPaid">GHS 0.00</strong>
-        </div>
-        <div class="row">
-          <span>Payment Method</span>
-                    <strong id="receiptPaymentMethod">Agent Wallet</strong>
-        </div>
-        <div class="row">
-          <span>Delivery Status</span>
-          <span id="receiptStatus" style="font-weight: 700; color: #15803d;">Delivered</span>
-        </div>
-        <div class="row" id="receiptProviderNoteRow" style="display: none;">
-          <span>Provider Notice</span>
-          <span id="receiptProviderNotice" style="font-size: 0.82rem; color: #b45309; text-align: right; max-width: 60%;">Queued for automated dispatch.</span>
+
+        <div style="margin-top: 16px; text-align: right;">
+          <button type="button" class="quick-history-btn" onclick="closeAirtimeHistory()" style="width: auto; padding: 8px 18px;">
+            Close
+          </button>
         </div>
       </div>
+    </div>
 
-      <div class="receipt-actions">
-        <button type="button" class="btn-receipt-print" onclick="window.print()">
-          <i class="fa-solid fa-print"></i> Print Receipt
-        </button>
-        <button type="button" class="btn-receipt-new" onclick="startNewAirtimePurchase()">
-          <i class="fa-solid fa-rotate-right"></i> Send Another Top-Up
-        </button>
-        <button type="button" class="btn-receipt-print" onclick="openAirtimeHistory()">
-          <i class="fa-solid fa-clock-rotate-left"></i> View History
-        </button>
+    <!-- TRANSACTION PROCESSING MODAL -->
+    <div id="processingModal" class="airtime-modal-overlay">
+      <div class="airtime-processing-card">
+        <div class="spinner-pulse"></div>
+        <h3 style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin: 0 0 8px 0;">Processing Airtime Top-Up</h3>
+        <p style="color: #64748b; font-size: 0.9rem; margin: 0 0 16px 0;" id="processingStepText">
+          Connecting to the automated recharge system...
+        </p>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 0.8rem; color: #475569;">
+          Please do not close or refresh this page.
+        </div>
+      </div>
+    </div>
+
+    <!-- AIRTIME AGENT GATE MODAL -->
+    <div id="airtimeAgentGateModal" class="agent-gate-modal" onclick="if(event.target === this) closeAirtimeAgentGate()">
+      <div class="agent-gate-card">
+        <button type="button" class="agent-gate-close" onclick="closeAirtimeAgentGate()" aria-label="Close modal">&times;</button>
+        <div class="agent-gate-icon">
+          <i class="fa-solid fa-mobile-screen-button"></i>
+        </div>
+        <h3 class="agent-gate-title">Agent Registration Required</h3>
+        <p class="agent-gate-desc">
+          Only registered agents can purchase airtime. Please register as an agent to continue purchasing MTN, Telecel, and AT airtime top-ups.
+        </p>
+        <div class="agent-gate-actions">
+          <a href="login.html?register=true" class="agent-gate-btn-primary">
+            <i class="fa-solid fa-user-plus"></i> Register as Agent
+          </a>
+          <a href="javascript:void(0)" onclick="closeAirtimeAgentGate(); return false;" class="agent-gate-btn-secondary">
+            <i class="fa-solid fa-xmark"></i> Cancel
+          </a>
+        </div>
       </div>
     </div>
 
   </main>
 
-  <!-- TRANSACTION PROCESSING MODAL -->
-  <div id="processingModal" class="airtime-modal-overlay">
-    <div class="airtime-processing-card">
-      <div class="spinner-pulse"></div>
-      <h3 style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin: 0 0 8px 0;">Processing Airtime Top-Up</h3>
-      <p style="color: #64748b; font-size: 0.9rem; margin: 0 0 16px 0;" id="processingStepText">
-        Connecting to the automated recharge system...
-      </p>
-      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 0.8rem; color: #475569;">
-        Please do not close or refresh this page.
-      </div>
-    </div>
-  </div>
-
-  <!-- RECENT PURCHASES MODAL -->
-  <div id="historyModal" class="airtime-modal-overlay" onclick="if(event.target === this) closeAirtimeHistory()">
-    <div class="airtime-history-card">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px;">
-        <h3 style="margin: 0; font-size: 1.2rem; font-weight: 800; color: #0f172a;">
-          <i class="fa-solid fa-clock-rotate-left" style="color: #2563eb;"></i> Recent Airtime Purchases
-        </h3>
-        <button type="button" onclick="closeAirtimeHistory()" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748b;">&times;</button>
-      </div>
-
-      <div class="airtime-history-scroll" id="historyListContainer">
-        <!-- Dynamically rendered rows -->
-        <p style="text-align: center; color: #94a3b8; padding: 24px 0;">No airtime orders found yet.</p>
-      </div>
-
-      <div style="margin-top: 16px; text-align: right;">
-        <button type="button" class="btn-receipt-print" onclick="closeAirtimeHistory()" style="width: auto; padding: 8px 18px;">
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- AIRTIME AGENT GATE MODAL -->
-  <div id="airtimeAgentGateModal" class="agent-gate-modal" onclick="if(event.target === this) closeAirtimeAgentGate()">
-    <div class="agent-gate-card">
-      <button type="button" class="agent-gate-close" onclick="closeAirtimeAgentGate()" aria-label="Close modal">&times;</button>
-      <div class="agent-gate-icon">
-        <i class="fa-solid fa-mobile-screen-button"></i>
-      </div>
-      <h3 class="agent-gate-title">Agent Registration Required</h3>
-      <p class="agent-gate-desc">
-        Only registered agents can purchase airtime. Please register as an agent to continue purchasing MTN, Telecel, and AT airtime top-ups.
-      </p>
-      <div class="agent-gate-actions">
-        <a href="login.html?register=true" class="agent-gate-btn-primary">
-          <i class="fa-solid fa-user-plus"></i> Register as Agent
-        </a>
-        <a href="javascript:void(0)" onclick="closeAirtimeAgentGate(); return false;" class="agent-gate-btn-secondary">
-          <i class="fa-solid fa-xmark"></i> Cancel
-        </a>
-      </div>
-    </div>
-  </div>
-
-  <!-- FOOTER -->
-  <footer style="text-align: center; padding: 24px 16px; color: #94a3b8; font-size: 0.85rem; border-top: 1px solid #e2e8f0; margin-top: 40px;">
-    &copy; 2026 Skaitech Ghana. All rights reserved. Fast &amp; Reliable Telecommunications Services.
+  <footer style="text-align: center; padding: 20px; color: #94a3b8; font-size: 0.85rem;">
+    &copy; 2026 Skaitech Ghana. All rights reserved. Powered by Skaitech.
   </footer>
+
+  <nav class="utility-bottom-nav" aria-label="Main navigation">
+    <a href="dashboard.html"><i class="fa-solid fa-house"></i><span>Home</span></a>
+    <a href="instantData.html"><i class="fa-solid fa-wifi"></i><span>Buy Data</span></a>
+    <a href="orders.html"><i class="fa-solid fa-receipt"></i><span>Orders</span></a>
+    <a href="agentWallet.html"><i class="fa-solid fa-wallet"></i><span>Wallet</span></a>
+    <a href="settings.html"><i class="fa-solid fa-gear"></i><span>Settings</span></a>
+  </nav>
 
   <script type="module" src="agentNav.js"></script>
   <script type="module" src="airtime.js"></script>

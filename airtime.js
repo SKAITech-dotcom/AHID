@@ -2,35 +2,58 @@ import { supabase } from './supabaseClient.js';
 import { checkAgentAccessServer } from './agentAccessCheck.js';
 import { applyWalletBalance, refreshWalletBalance } from './walletBalance.js';
 
-// Configuration & Constants
+// Non-agents are sent to Sign In / Sign Up with an agent prompt.
+const AGENT_AUTH_URL = 'login.html?action=agent&notice=agent&register=true&redirect=airtime.html';
+
+// Prefix to network detection (Ghana numbering plan).
 const NETWORK_PREFIXES = {
   mtn: ['024', '025', '053', '054', '055', '059'],
   telecel: ['020', '050'],
   at: ['026', '027', '056', '057'],
 };
 
-// Application State
+// Brand copy rendered in the modal header per selected network.
+const NETWORK_INFO = {
+  mtn: { title: 'MTN Airtime', subtitle: 'MTN · Instant airtime top-up', logo: 'img/mtn-logo.png' },
+  telecel: { title: 'Telecel Airtime', subtitle: 'Telecel · Instant airtime top-up', logo: 'img/telecel-logo.png' },
+  at: { title: 'AT Airtime', subtitle: 'AT (AirtelTigo) · Instant airtime top-up', logo: 'img/airtel-logo.png' },
+};
+
+// Application state
 let selectedNetwork = 'mtn';
-let paymentMethod = 'wallet';
 let currentAmount = 10;
 let agentUser = null;
 let agentWalletBalance = 0;
 let agentVerified = false;
 
-// Idempotency: a stable request id per purchase so duplicate submits never
-// double-charge. Server treats it as airtime_orders.idempotency_key.
-function newClientRequestId() {
-  return 'rid_' + crypto.randomUUID().replace(/-/g, '').slice(0, 24);
-}
-
 function $(id) {
   return document.getElementById(id);
 }
 
-// Airtime is wallet-only: the agent pays the face value, so there is no
-// gateway fee to add on top.
-function calculateGross(net) {
-  return net;
+// Stable idempotency key per purchase so a duplicate submit never double-charges.
+function newClientRequestId() {
+  return 'rid_' + crypto.randomUUID().replace(/-/g, '').slice(0, 24);
+}
+
+// Amount Selection via chips
+export function setAirtimeAmount(val) {
+  currentAmount = Number(val);
+  const amountInput = $('airtimeAmount');
+  if (amountInput) amountInput.value = currentAmount;
+  syncAmountChips();
+}
+
+// Amount Input Handler
+export function handleAmountInput() {
+  const val = parseFloat($('airtimeAmount').value);
+  currentAmount = Number.isFinite(val) ? val : 0;
+  syncAmountChips();
+}
+
+function syncAmountChips() {
+  document.querySelectorAll('#amountChips .chip-btn').forEach((chip) => {
+    chip.classList.toggle('active', Number(chip.dataset.amount) === currentAmount);
+  });
 }
 
 // Prefix to Network Detection
@@ -39,11 +62,26 @@ function detectNetworkFromPhone(phone) {
   if (clean.length < 3) return null;
   const prefix = clean.slice(0, 3);
   for (const [net, prefixes] of Object.entries(NETWORK_PREFIXES)) {
-    if (prefixes.includes(prefix)) {
-      return net;
-    }
+    if (prefixes.includes(prefix)) return net;
   }
   return null;
+}
+
+// Update the active service card + modal brand (no modal open/close side effects).
+function applyNetworkBrand(net) {
+  const brand = NETWORK_INFO[net] || NETWORK_INFO.mtn;
+  selectedNetwork = net;
+  const title = $('networkBrandTitle');
+  const subtitle = $('networkBrandSubtitle');
+  const logo = $('networkBrandLogo');
+  if (title) title.textContent = brand.title;
+  if (subtitle) subtitle.textContent = brand.subtitle;
+  if (logo) {
+    logo.src = brand.logo;
+    logo.alt = `${brand.title} logo`;
+  }
+  const indicatorText = $('indicatorText');
+  if (indicatorText) indicatorText.textContent = net.toUpperCase();
 }
 
 // Phone Input Handling
@@ -56,24 +94,20 @@ export function handlePhoneInput() {
   const indicator = $('phoneNetworkIndicator');
   const indicatorText = $('indicatorText');
   const validationHint = $('phoneValidationHint');
-  const summaryPhone = $('summaryPhone');
-
-  summaryPhone.textContent = val || '0244XXXXXX';
 
   const detected = detectNetworkFromPhone(val);
 
   if (detected) {
     indicator.className = 'phone-network-indicator detected';
     indicatorText.textContent = detected.toUpperCase();
-    if (detected !== selectedNetwork && val.length === 3) {
-      selectNetwork(detected);
+    if (detected !== selectedNetwork && val.length >= 3) {
+      applyNetworkBrand(detected);
     }
   } else {
     indicator.className = 'phone-network-indicator';
     indicatorText.textContent = selectedNetwork.toUpperCase();
   }
 
-  // Validate format
   if (val.length === 10) {
     if (/^0[235]\d{8}$/.test(val)) {
       validationHint.className = 'phone-validation-hint valid';
@@ -91,108 +125,86 @@ export function handlePhoneInput() {
   }
 }
 
-// Network Selection
-export function selectNetwork(net) {
-  selectedNetwork = net;
-
-  const btnMtn = $('netBtnMtn');
-  const btnTelecel = $('netBtnTelecel');
-  const btnAt = $('netBtnAt');
-
-  btnMtn.className = 'network-select-btn' + (net === 'mtn' ? ' active active-mtn' : '');
-  btnTelecel.className = 'network-select-btn' + (net === 'telecel' ? ' active active-telecel' : '');
-  btnAt.className = 'network-select-btn' + (net === 'at' ? ' active active-at' : '');
-
-  const badge = $('summaryNetworkBadge');
-  if (net === 'mtn') {
-    badge.textContent = 'MTN';
-    badge.style.background = '#ffcc00';
-    badge.style.color = '#000000';
-  } else if (net === 'telecel') {
-    badge.textContent = 'Telecel';
-    badge.style.background = '#e11d48';
-    badge.style.color = '#ffffff';
-  } else if (net === 'at') {
-    badge.textContent = 'AT';
-    badge.style.background = '#0284c7';
-    badge.style.color = '#ffffff';
+// Open the flow for a network (called from the service tiles).
+export function switchNetwork(net, openModal = true) {
+  if (!NETWORK_INFO[net]) net = 'mtn';
+  applyNetworkBrand(net);
+  clearVerification();
+  if (openModal) {
+    $('airtimeModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+    window.setTimeout(() => $('recipientPhone').focus(), 80);
   }
-
-  const indicatorText = $('indicatorText');
-  if (indicatorText) indicatorText.textContent = net.toUpperCase();
 }
 
-// Amount Selection via Chips
-export function setAirtimeAmount(val) {
-  currentAmount = Number(val);
-  $('airtimeAmount').value = currentAmount;
+// Step 1 -> Step 2
+export function nextAirtimeStep() {
+  const phone = $('recipientPhone').value.trim();
+  const netAmount = Math.max(0, Number($('airtimeAmount').value) || 0);
 
-  // Update chip active states
-  const chips = document.querySelectorAll('#amountChipsContainer .airtime-chip');
-  chips.forEach(chip => {
-    if (parseFloat(chip.textContent) === currentAmount) {
-      chip.classList.add('active');
-    } else {
-      chip.classList.remove('active');
-    }
-  });
-
-  updateSummary();
-}
-
-// Amount Input Handler
-export function handleAmountInput() {
-  const val = parseFloat($('airtimeAmount').value);
-  currentAmount = Number.isFinite(val) ? val : 0;
-
-  // Update chips active state
-  const chips = document.querySelectorAll('#amountChipsContainer .airtime-chip');
-  chips.forEach(chip => {
-    if (parseFloat(chip.textContent) === currentAmount) {
-      chip.classList.add('active');
-    } else {
-      chip.classList.remove('active');
-    }
-  });
-
-  updateSummary();
-}
-
-// Payment Method Selection
-export function selectPaymentMethod(method) {
-  // Wallet-only: Paystack is the wallet top-up rail, not an airtime payment
-  // method, so it is no longer offered here.
-  if (method !== 'wallet') {
-    showNotice('Airtime is paid from your agent wallet. Add funds from the wallet page if your balance is low.', true);
+  if (!/^0[235]\d{8}$/.test(phone)) {
+    showNotice('Please enter a valid 10-digit Ghanaian mobile number (e.g. 0244123456).', true);
+    return;
+  }
+  if (netAmount < 1.00 || netAmount > 500.00) {
+    showNotice('Airtime amount must be between GHS 1.00 and GHS 500.00.', true);
     return;
   }
 
-  if (!agentUser) {
-    if (confirm('Agent Wallet payment is available to registered Skaitech Agents. Would you like to log in as an agent?')) {
-      window.location.href = 'login.html';
-    }
-    return;
-  }
+  currentAmount = netAmount;
+  const brand = NETWORK_INFO[selectedNetwork] || NETWORK_INFO.mtn;
+  $('reviewPhone').textContent = phone;
+  $('reviewNetwork').textContent = brand.title.replace(' Airtime', '');
+  $('reviewAmount').textContent = netAmount.toFixed(2);
+  $('reviewTotal').textContent = netAmount.toFixed(2);
 
-  paymentMethod = 'wallet';
-
-  $('payMethodWallet').classList.add('active');
-
-  $('summaryPaymentMethod').textContent = 'Agent Wallet (0% Fee)';
-
-  updateSummary();
+  $('airtimeStepOne').style.display = 'none';
+  $('airtimeStepTwo').style.display = 'block';
+  $('airtimeStepLabel').textContent = 'Step 2 of 2 · Review and pay';
+  $('airtimeStepOneIndicator').classList.remove('active');
+  $('airtimeStepOneIndicator').classList.add('done');
+  $('airtimeStepTwoIndicator').classList.add('active');
+  $('airtimeBackLabel').textContent = 'Back';
+  clearNotice();
 }
 
-// Update Real-Time Order Breakdown
-export function updateSummary() {
-  const netAmount = Math.max(0, currentAmount);
-  const grossAmount = calculateGross(netAmount);
-  const fee = 0.00;
+// Back: Step 2 -> Step 1, or Step 1 -> network selection.
+export function backAirtimeStep() {
+  const onReview = $('airtimeStepTwo').style.display !== 'none';
+  if (onReview) {
+    $('airtimeStepTwo').style.display = 'none';
+    $('airtimeStepOne').style.display = 'block';
+    $('airtimeStepLabel').textContent = 'Step 1 of 2 · Enter details';
+    $('airtimeStepOneIndicator').classList.add('active');
+    $('airtimeStepOneIndicator').classList.remove('done');
+    $('airtimeStepTwoIndicator').classList.remove('active');
+    clearNotice();
+  } else {
+    closeAirtimeFlow();
+  }
+}
 
-  $('summaryAirtimeNet').textContent = netAmount.toFixed(2);
-  $('summaryFeeAmount').textContent = fee.toFixed(2);
-  $('summaryGrossTotal').textContent = grossAmount.toFixed(2);
-  $('btnAmountText').textContent = grossAmount.toFixed(2);
+// Reset the flow and close the modal.
+export function closeAirtimeFlow() {
+  const form = $('airtimeForm');
+  if (form) form.reset();
+  $('airtimeStepTwo').style.display = 'none';
+  $('airtimeStepOne').style.display = 'block';
+  $('airtimeStepLabel').textContent = 'Step 1 of 2 · Enter details';
+  $('airtimeStepOneIndicator').classList.add('active');
+  $('airtimeStepOneIndicator').classList.remove('done');
+  $('airtimeStepTwoIndicator').classList.remove('active');
+  $('airtimeBackLabel').textContent = 'Back';
+  clearVerification();
+  clearNotice();
+  setAirtimeAmount(10);
+  const submitBtn = $('submitAirtimeBtn');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="fa-solid fa-lock"></i> Confirm &amp; Pay';
+  }
+  $('airtimeModal').classList.remove('active');
+  document.body.style.overflow = '';
 }
 
 // Display Notice Alerts
@@ -213,6 +225,29 @@ function clearNotice() {
   }
 }
 
+function clearVerification() {
+  const validationHint = $('phoneValidationHint');
+  if (validationHint) {
+    validationHint.className = 'phone-validation-hint';
+    validationHint.innerHTML = '<i class="fa-solid fa-circle-info"></i> Enter standard 10-digit Ghana mobile number';
+  }
+  const indicator = $('phoneNetworkIndicator');
+  if (indicator) {
+    indicator.className = 'phone-network-indicator';
+    const indicatorText = $('indicatorText');
+    if (indicatorText) indicatorText.textContent = selectedNetwork.toUpperCase();
+  }
+}
+
+// Page-level result banner (top of page, not an inline receipt).
+function showResultNotice(message, isError = false) {
+  const el = $('paymentResultNotice');
+  if (!el) return;
+  el.className = `notice show ${isError ? 'error' : 'success'}`;
+  el.textContent = message;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 // Processing Modal Helpers
 function showProcessing(stepText = 'Connecting to recharge gateway...') {
   const modal = $('processingModal');
@@ -226,7 +261,7 @@ function hideProcessing() {
   if (modal) modal.classList.remove('active');
 }
 
-// Save Order to Local History
+// Local order cache (for the Recent Purchases list + badge)
 function saveOrderToLocalHistory(order) {
   try {
     const orders = JSON.parse(localStorage.getItem('skaitech_airtime_orders') || '[]');
@@ -243,7 +278,6 @@ function saveOrderToLocalHistory(order) {
   }
 }
 
-// Update Recent Purchases Count Badge
 function updateHistoryCountBadge() {
   try {
     const orders = JSON.parse(localStorage.getItem('skaitech_airtime_orders') || '[]');
@@ -254,99 +288,18 @@ function updateHistoryCountBadge() {
   }
 }
 
-// Render Receipt Card
-function showReceipt(order) {
-  $('airtimeFormCard').style.display = 'none';
-  const receiptCard = $('airtimeReceiptCard');
-  receiptCard.style.display = 'block';
-
-  $('receiptRef').textContent = order.reference || '-';
-  $('receiptPhone').textContent = order.phone || '-';
-  $('receiptNetwork').textContent = (order.network || '').toUpperCase();
-  $('receiptAmount').textContent = `GHS ${Number(order.amount || 0).toFixed(2)}`;
-  $('receiptTotalPaid').textContent = `GHS ${Number(order.grossAmount || order.amount || 0).toFixed(2)}`;
-  $('receiptPaymentMethod').textContent = (order.paymentMethod || 'paystack').toUpperCase();
-  $('receiptTimestamp').textContent = order.createdAt ? new Date(order.createdAt).toLocaleString() : new Date().toLocaleString();
-
-  const badge = $('receiptBadge');
-  const badgeText = $('receiptBadgeText');
-  const statusText = $('receiptStatus');
-  const providerNoteRow = $('receiptProviderNoteRow');
-  const providerNotice = $('receiptProviderNotice');
-
-  if (order.airtimeStatus === 'delivered') {
-    badge.style.background = '#dcfce7';
-    badge.style.color = '#15803d';
-    badgeText.textContent = 'Airtime Delivered Successfully';
-    statusText.textContent = 'Delivered';
-    statusText.style.color = '#15803d';
-    providerNoteRow.style.display = 'none';
-  } else if (order.airtimeStatus === 'pending_provider') {
-    badge.style.background = '#fef3c7';
-    badge.style.color = '#b45309';
-    badgeText.textContent = 'Payment Confirmed • Queued for Dispatch';
-    statusText.textContent = 'Queued (Awaiting Provider)';
-    statusText.style.color = '#b45309';
-    providerNoteRow.style.display = 'flex';
-    providerNotice.textContent = 'Payment secured. Awaiting topup gateway processing.';
-  } else if (order.airtimeStatus === 'failed') {
-    badge.style.background = '#fee2e2';
-    badge.style.color = '#b91c1c';
-    badgeText.textContent = 'Top-Up Declined';
-    statusText.textContent = 'Failed';
-    statusText.style.color = '#b91c1c';
-    providerNoteRow.style.display = 'flex';
-    providerNotice.textContent = order.failureReason || 'Declined by network provider.';
-  } else {
-    badge.style.background = '#eff6ff';
-    badge.style.color = '#1d4ed8';
-    badgeText.textContent = 'Payment Verified • In Progress';
-    statusText.textContent = 'Processing';
-    statusText.style.color = '#1d4ed8';
-    providerNoteRow.style.display = 'none';
-  }
-
-  // Save to local cache
-  saveOrderToLocalHistory({
-    reference: order.reference,
-    phone: order.phone,
-    network: order.network,
-    amount: order.amount,
-    grossAmount: order.grossAmount || order.amount,
-    paymentMethod: order.paymentMethod,
-    airtimeStatus: order.airtimeStatus,
-    createdAt: order.createdAt || new Date().toISOString()
-  });
-
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// Reset and Start New Purchase
-export function startNewAirtimePurchase() {
-  $('airtimeReceiptCard').style.display = 'none';
-  $('airtimeFormCard').style.display = 'block';
-  clearNotice();
-  $('recipientPhone').value = '';
-  handlePhoneInput();
-  setAirtimeAmount(10);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
 // Form Submission
 export async function handleAirtimeSubmit(event) {
   event.preventDefault();
   clearNotice();
 
   const phone = $('recipientPhone').value.trim();
-  const emailInput = $('customerEmail').value.trim();
-  const netAmount = Math.max(0, currentAmount);
+  const netAmount = Math.max(0, Number($('airtimeAmount').value) || 0);
 
-  // Validation
   if (!/^0[235]\d{8}$/.test(phone)) {
     showNotice('Please enter a valid 10-digit Ghanaian mobile number (e.g. 0244123456).', true);
     return;
   }
-
   if (netAmount < 1.00 || netAmount > 500.00) {
     showNotice('Airtime amount must be between GHS 1.00 and GHS 500.00.', true);
     return;
@@ -360,34 +313,30 @@ export async function handleAirtimeSubmit(event) {
       throw new Error('Airtime purchases are available only to registered Skaitech Agents. Please register or sign in as an agent.');
     }
 
-    // Stable idempotency key for this purchase attempt (server deduplicates).
-    const clientRequestId = newClientRequestId();
-
     if (agentWalletBalance < netAmount) {
       throw new Error(`Insufficient wallet balance (GHS ${agentWalletBalance.toFixed(2)}). Please deposit funds from the wallet page.`);
     }
 
     showProcessing('Deducting from agent wallet & dispatching top-up...');
 
+    const clientRequestId = newClientRequestId();
     const { data, error } = await supabase.functions.invoke('create-airtime-payment', {
       body: {
         network: selectedNetwork,
         phone,
         amount: netAmount,
         paymentMethod: 'wallet',
-        customerEmail: emailInput || agentUser?.email || '',
         clientRequestId,
       }
     });
 
     hideProcessing();
 
-    if (error || data?.error) {
-      throw new Error(data?.error || error?.message || 'Wallet transaction failed.');
+    if (error || data?.error || data?.success === false) {
+      throw new Error(data?.message || data?.error || error?.message || 'Wallet transaction failed.');
     }
 
-    // Trust the server-returned balance (it is authoritative and accounts for
-    // any provider refund).
+    // Trust the server-returned balance (authoritative; accounts for refunds).
     if (data.walletBalance !== undefined && data.walletBalance !== null) {
       agentWalletBalance = Number(data.walletBalance);
       applyWalletBalance(agentWalletBalance);
@@ -396,18 +345,19 @@ export async function handleAirtimeSubmit(event) {
       applyWalletBalance(agentWalletBalance);
     }
 
-    showReceipt({
+    saveOrderToLocalHistory({
       reference: data.reference,
       phone: data.phone || phone,
       network: data.network || selectedNetwork,
-      amount: data.amount || netAmount,
-      grossAmount: data.amount || netAmount,
+      amount: Number(data.amount || netAmount),
       paymentMethod: 'wallet',
-      airtimeStatus: data.airtimeStatus,
-      createdAt: new Date().toISOString()
+      airtimeStatus: data.airtimeStatus || 'delivered',
+      createdAt: new Date().toISOString(),
     });
 
-    return;
+    const brand = NETWORK_INFO[selectedNetwork] || NETWORK_INFO.mtn;
+    closeAirtimeFlow();
+    showResultNotice(data.message || `${brand.title} top-up of GHS ${netAmount.toFixed(2)} sent to ${phone}.`);
   } catch (err) {
     hideProcessing();
     showNotice(err.message || 'Error completing request.', true);
@@ -415,90 +365,21 @@ export async function handleAirtimeSubmit(event) {
   }
 }
 
-// Check if returning from Paystack redirect (query string ?reference=AIR-...)
-async function checkPaymentCallback() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const reference = urlParams.get('reference');
-  if (!reference || !reference.startsWith('AIR-')) return;
-
-  const resultNotice = $('paymentResultNotice');
-  resultNotice.className = 'notice show info';
-  resultNotice.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Verifying your payment and checking airtime delivery...';
-
-  showProcessing('Verifying transaction with network...');
-
-  let attempts = 0;
-  const maxAttempts = 6;
-
-  async function poll() {
-    attempts++;
-    try {
-      const { data, error } = await supabase.functions.invoke('get-airtime-order', {
-        body: { reference }
-      });
-
-      if (error || data?.error) {
-        throw new Error(data?.error || error?.message || 'Failed to retrieve order status.');
-      }
-
-      const order = data.order;
-      if (order.paymentStatus === 'paid' || order.airtimeStatus === 'delivered' || order.airtimeStatus === 'pending_provider' || attempts >= maxAttempts) {
-        hideProcessing();
-        resultNotice.style.display = 'none';
-        showReceipt(order);
-        // Clean URL without reloading
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } else {
-        // Retry polling in 2.5s
-        setTimeout(poll, 2500);
-      }
-    } catch (err) {
-      hideProcessing();
-      resultNotice.className = 'notice show error';
-      resultNotice.textContent = 'Could not confirm airtime delivery: ' + err.message;
-    }
-  }
-
-  poll();
-}
-
 // Check Agent Auth Session and Load Wallet
 async function initAuth() {
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    // Verify agent status server-side before enabling purchase flows.
     const { isAgent } = await checkAgentAccessServer();
     agentVerified = isAgent;
 
     if (session?.user) {
-      const user = session.user;
-      agentUser = user;
-
-      // Update header button to Agent Dashboard
-      const authBtn = $('headerAuthBtn');
-      if (authBtn) {
-        authBtn.textContent = 'Agent Dashboard';
-        authBtn.href = 'dashboard.html';
-      }
-
-      // Always load wallet when signed in (may be a non-agent account too).
+      agentUser = session.user;
       const { data: wallet } = await supabase
         .from('wallets')
         .select('balance')
-        .eq('id', user.id)
+        .eq('id', session.user.id)
         .maybeSingle();
-
-      if (wallet) {
-        agentWalletBalance = Number(wallet.balance) || 0;
-        $('agentWalletBanner').style.display = 'flex';
-        $('agentBannerBalance').textContent = agentWalletBalance.toFixed(2);
-        $('walletCardSubtitle').textContent = `Balance: GHS ${agentWalletBalance.toFixed(2)}`;
-      }
-
-      // Pre-fill email
-      if (user.email && $('customerEmail')) {
-        $('customerEmail').value = user.email;
-      }
+      if (wallet) agentWalletBalance = Number(wallet.balance) || 0;
     }
   } catch (e) {
     console.warn('Auth check error:', e);
@@ -506,20 +387,10 @@ async function initAuth() {
   }
 }
 
-// Page-level agent gate. Non-agents are redirected to Sign In / Sign Up with
-// an agent prompt. Returning from a Paystack callback (?reference=...) is
-// allowed so the receipt can still be shown for a payment that was made.
+// Non-agents are redirected to Sign In / Sign Up with an agent prompt.
 function enforceAgentAccess() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const returningFromGateway = urlParams.get('reference');
-  if (returningFromGateway) return;
-
   if (!agentVerified) {
-    const network = urlParams.get('network');
-    const redirect = network
-      ? `airtime.html?network=${encodeURIComponent(network)}`
-      : 'airtime.html';
-    window.location.href = `login.html?action=agent&notice=agent&register=true&redirect=${encodeURIComponent(redirect)}`;
+    window.location.href = AGENT_AUTH_URL;
   }
 }
 
@@ -552,10 +423,9 @@ export async function openAirtimeHistory() {
           phone: o.recipient_phone,
           network: o.network,
           amount: Number(o.amount),
-          grossAmount: Number(o.gross_amount),
           paymentMethod: o.payment_method,
-          airtimeStatus: o.airtimeStatus || o.airtime_status,
-          createdAt: o.created_at
+          airtimeStatus: o.airtime_status,
+          createdAt: o.created_at,
         }));
       }
     } catch (e) {
@@ -563,12 +433,9 @@ export async function openAirtimeHistory() {
     }
   }
 
-  // Merge and deduplicate by reference
   const map = new Map();
   [...remoteOrders, ...localOrders].forEach(o => {
-    if (o.reference && !map.has(o.reference)) {
-      map.set(o.reference, o);
-    }
+    if (o.reference && !map.has(o.reference)) map.set(o.reference, o);
   });
   const allOrders = Array.from(map.values());
 
@@ -579,8 +446,9 @@ export async function openAirtimeHistory() {
 
   container.innerHTML = allOrders.map(order => {
     const isDelivered = order.airtimeStatus === 'delivered';
-    const isPending = order.airtimeStatus === 'pending_provider' || order.airtimeStatus === 'pending';
+    const isPending = ['pending_provider', 'pending'].includes(order.airtimeStatus);
     const statusColor = isDelivered ? '#15803d' : (isPending ? '#b45309' : '#b91c1c');
+    const statusBg = isDelivered ? '#dcfce7' : (isPending ? '#fef3c7' : '#fee2e2');
     const statusLabel = isDelivered ? 'Delivered' : (isPending ? 'Queued' : 'Failed');
     const dateStr = order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'Recent';
 
@@ -591,21 +459,16 @@ export async function openAirtimeHistory() {
             ${(order.network || '').toUpperCase()} Airtime - GHS ${Number(order.amount).toFixed(2)}
           </div>
           <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">
-            To: <strong>${order.phone}</strong> &bull; Ref: ${order.reference.slice(0, 16)}...
+            To: <strong>${order.phone}</strong> &bull; Ref: ${String(order.reference).slice(0, 16)}...
           </div>
           <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 2px;">
-            ${dateStr} &bull; Paid via ${(order.paymentMethod || 'paystack').toUpperCase()}
+            ${dateStr} &bull; Paid via ${(order.paymentMethod || 'wallet').toUpperCase()}
           </div>
         </div>
         <div style="text-align: right;">
-          <span style="font-weight: 700; font-size: 0.8rem; color: ${statusColor}; background: ${isDelivered ? '#dcfce7' : (isPending ? '#fef3c7' : '#fee2e2')}; padding: 3px 8px; border-radius: 9999px;">
+          <span style="font-weight: 700; font-size: 0.8rem; color: ${statusColor}; background: ${statusBg}; padding: 3px 8px; border-radius: 9999px;">
             ${statusLabel}
           </span>
-          <div style="margin-top: 6px;">
-            <button type="button" onclick="viewHistoricalReceipt('${order.reference}')" style="background: none; border: 1px solid #cbd5e1; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; color: #2563eb; font-weight: 600;">
-              Receipt
-            </button>
-          </div>
         </div>
       </div>
     `;
@@ -617,75 +480,53 @@ export function closeAirtimeHistory() {
   if (modal) modal.classList.remove('active');
 }
 
-export async function viewHistoricalReceipt(reference) {
-  closeAirtimeHistory();
-  const localOrders = JSON.parse(localStorage.getItem('skaitech_airtime_orders') || '[]');
-  const match = localOrders.find(o => o.reference === reference);
-  if (match) {
-    showReceipt(match);
-    return;
-  }
-
-  showProcessing('Retrieving transaction receipt...');
-  try {
-    const { data, error } = await supabase.functions.invoke('get-airtime-order', {
-      body: { reference }
-    });
-    hideProcessing();
-    if (data?.order) {
-      showReceipt(data.order);
-    }
-  } catch {
-    hideProcessing();
-  }
-}
-
-// Side Drawer Navigation
-export function toggleAirtimeDrawer() {
-  const drawer = $('sideDrawer');
-  const overlay = $('sidebarOverlay');
-  if (drawer && overlay) {
-    drawer.classList.toggle('active');
-    overlay.classList.toggle('active');
-  }
-}
-
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', async () => {
   await initAuth();
   enforceAgentAccess();
   refreshWalletBalance();
-  updateSummary();
   updateHistoryCountBadge();
-  checkPaymentCallback();
+  syncAmountChips();
 
-  // Check URL parameters (e.g. ?network=mtn&phone=024...)
   const params = new URLSearchParams(window.location.search);
-  const net = params.get('network');
-  if (net && ['mtn', 'telecel', 'at'].includes(net.toLowerCase())) {
-    selectNetwork(net.toLowerCase());
-  }
+  const net = (params.get('network') || '').toLowerCase();
   const phone = params.get('phone');
+  const amt = parseFloat(params.get('amount'));
+
+  if (net && NETWORK_INFO[net]) {
+    switchNetwork(net, true);
+  }
   if (phone) {
-    $('recipientPhone').value = phone;
+    $('recipientPhone').value = phone.replace(/\D/g, '').slice(0, 10);
     handlePhoneInput();
   }
-  const amt = parseFloat(params.get('amount'));
   if (amt && amt >= 1 && amt <= 500) {
     setAirtimeAmount(amt);
   }
 });
 
+// Wire the form submit
+const airtimeForm = $('airtimeForm');
+if (airtimeForm) airtimeForm.addEventListener('submit', handleAirtimeSubmit);
+
+// Escape closes the flow / history
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if ($('historyModal')?.classList.contains('active')) {
+    closeAirtimeHistory();
+  } else if ($('airtimeModal')?.classList.contains('active')) {
+    closeAirtimeFlow();
+  }
+});
+
 // Expose globals for inline onclick handlers
-window.selectNetwork = selectNetwork;
+window.switchNetwork = switchNetwork;
 window.handlePhoneInput = handlePhoneInput;
 window.setAirtimeAmount = setAirtimeAmount;
 window.handleAmountInput = handleAmountInput;
-window.selectPaymentMethod = selectPaymentMethod;
-window.handleAirtimeSubmit = handleAirtimeSubmit;
-window.startNewAirtimePurchase = startNewAirtimePurchase;
+window.nextAirtimeStep = nextAirtimeStep;
+window.backAirtimeStep = backAirtimeStep;
+window.closeAirtimeFlow = closeAirtimeFlow;
 window.openAirtimeHistory = openAirtimeHistory;
 window.closeAirtimeHistory = closeAirtimeHistory;
-window.viewHistoricalReceipt = viewHistoricalReceipt;
-window.toggleAirtimeDrawer = toggleAirtimeDrawer;
 window.closeAirtimeAgentGate = closeAirtimeAgentGate;
