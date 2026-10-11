@@ -903,6 +903,17 @@ async function loadStoredOrders() {
                 instantDataReadError = 'Instant Data history could not be refreshed. Please reload, or contact support if this continues.';
             }
 
+            // The new storefronts (data.html + instantData.html) buy through
+            // purchase-data-bundle, which writes to data_transactions, a third
+            // table. RLS scopes it to the caller's own rows; bundles() is embedded
+            // so the title can be shown instead of the raw bundle_key.
+            const { data: platformDataOrders } = await supabase
+                .from('data_transactions')
+                .select('reference, short_code, network_id, bundle_key, recipient_phone, amount, status, created_at, bundles(title, volume_mb)')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(200);
+
             const remoteOrders = [];
             if (txData?.airtime) {
                 txData.airtime.forEach(o => {
@@ -962,6 +973,25 @@ async function loadStoredOrders() {
                         package: `${o.customer_name || 'Customer'} · ${formatDataVolume(o.volume_mb)} (GHS ${Number(o.sale_amount).toFixed(2)})`,
                         status: o.status,
                         providerRef: o.provider_reference || '',
+                        date: new Date(o.created_at).toLocaleDateString()
+                    });
+                });
+            }
+            // Synchronize the new-platform instant data purchases into the same
+            // list so the Instant Data tab shows both generations of storefront.
+            if (platformDataOrders) {
+                platformDataOrders.forEach(o => {
+                    const bundle = Array.isArray(o.bundles) ? o.bundles[0] : o.bundles;
+                    const title = bundle?.title || o.bundle_key || 'Data bundle';
+                    remoteOrders.push({
+                        id: o.reference || o.id.slice(0, 8),
+                        shortId: o.short_code || '',
+                        type: 'instant_data',
+                        network: (o.network_id || '').toUpperCase(),
+                        phone: maskPhoneDisplay(o.recipient_phone),
+                        package: `${title} (GHS ${Number(o.amount).toFixed(2)})`,
+                        status: o.status === 'success' ? 'successful' : o.status,
+                        providerRef: '',
                         date: new Date(o.created_at).toLocaleDateString()
                     });
                 });
