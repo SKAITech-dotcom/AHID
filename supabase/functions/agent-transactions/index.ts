@@ -57,13 +57,13 @@ Deno.serve(async (request) => {
         .select('id, payment_reference, recipient_phone, network, amount, fee_amount, gross_amount, payment_method, payment_status, airtime_status, provider_reference, short_code, failure_reason, created_at')
         .eq('agent_id', agentId)
         .order('created_at', { ascending: false })
-        .limit(200),
+        .limit(1000),
       admin
         .from('utility_orders')
         .select('id, bill_type, bill_category, account_number, package_name, amount, fee_amount, gross_amount, customer_name, customer_phone, payment_reference, status, token_code, provider_reference, short_code, created_at')
         .eq('agent_id', agentId)
         .order('created_at', { ascending: false })
-        .limit(200),
+        .limit(1000),
     ]);
 
     if (airtimeRes.error) console.error('agent-transactions airtime error:', airtimeRes.error);
@@ -98,21 +98,23 @@ Deno.serve(async (request) => {
 
     const utilityOrders = (utilityRes.data ?? []).map((o) => {
       const statusLabel = utilityStatusLabel(o.status);
-      const label = BILL_LABELS[o.bill_type] || String(o.bill_type).toUpperCase();
-      const account = maskAccount(o.account_number);
-      const details =
-        `${label}${o.package_name ? ` • ${o.package_name}` : ''} • Acct ${account}`;
+      const isEcg = o.bill_type === 'ecg';
+      const packageName = o.package_name ? ` • ${o.package_name}` : '';
+      const details = `GHS ${Number(o.amount).toFixed(2)}${packageName}`;
+
       return {
         type: 'utility',
         id: o.id,
         reference: o.payment_reference,
         shortCode: o.short_code,
         billType: o.bill_type,
-        billLabel: label,
-        account: o.account_number,
-        accountMasked: account,
+        billLabel: BILL_LABELS[o.bill_type] || o.bill_type,
+        billCategory: o.bill_category,
+        accountNumber: o.account_number,
+        accountMasked: maskAccount(o.account_number),
         packageName: o.package_name,
         customerName: o.customer_name,
+        customerPhone: o.customer_phone,
         phone: o.customer_phone,
         phoneMasked: maskPhone(o.customer_phone),
         amount: Number(o.amount),
@@ -121,47 +123,25 @@ Deno.serve(async (request) => {
         status: o.status,
         statusLabel,
         details,
-        tokenCode: o.token_code,
+        tokenCode: isEcg ? (o.token_code || null) : null,
         providerReference: o.provider_reference,
         createdAt: o.created_at,
       };
     });
 
-    const all = [...airtimeOrders, ...utilityOrders];
-    let successful = 0;
-    let failed = 0;
-    let pending = 0;
-    all.forEach((t) => {
-      if (t.statusLabel === 'Completed') successful += 1;
-      else if (t.statusLabel === 'Failed') failed += 1;
-      else pending += 1;
-    });
-
-    const summary = {
-      airtimeTransactions: airtimeOrders.length,
-      utilityTransactions: utilityOrders.length,
-      successful,
-      failed,
-      pending,
-      airtimeGhs: Math.round(airtimeOrders.reduce((sum, o) => sum + o.amount, 0) * 100) / 100,
-      utilityGhs: Math.round(utilityOrders.reduce((sum, o) => sum + o.amount, 0) * 100) / 100,
-    };
-
     return json({
       success: true,
-      agent: { id: user.id, email: user.email },
       airtime: airtimeOrders,
       utility: utilityOrders,
-      summary,
     });
-  } catch (err) {
-    console.error('agent-transactions error:', err);
-    const message = err instanceof Error ? err.message : 'Unable to load transactions.';
+  } catch (error) {
+    console.error('agent-transactions error:', error);
+    const message = error instanceof Error ? error.message : 'Unable to load transactions.';
     const status = /authentication is required|session is invalid/i.test(message)
       ? 401
-      : /agent account required/i.test(message)
-      ? 403
-      : 500;
+      : /agent account required|verified/i.test(message)
+        ? 403
+        : 500;
     return json({ error: message }, status);
   }
 });

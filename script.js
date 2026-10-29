@@ -882,6 +882,12 @@ async function loadStoredOrders() {
     const tableBody = document.getElementById('ordersTableBody');
     if (!tableBody) return;
 
+    const refreshBtn = document.getElementById('refreshOrdersBtn');
+    if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> Syncing with provider...';
+    }
+
     let savedOrders = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
     let instantDataReadError = '';
 
@@ -896,17 +902,16 @@ async function loadStoredOrders() {
             const txData = await fetchAgentTransactions();
 
             // Data bundle orders remain scoped via RLS to the authenticated agent.
+            // Retrieve up to 1000 records so historical orders are kept forever.
             const { data: dataOrders } = await supabase
                 .from('agent_data_orders')
                 .select('id, provider_reference, short_code, provider_order_id, network_type, phone, volume_mb, amount, status, created_at')
                 .eq('agent_id', user.id)
                 .order('created_at', { ascending: false })
-                .limit(50);
+                .limit(1000);
 
             // Instant Data (instantData.html) is a separate storefront that writes to
-            // public_data_orders, not agent_data_orders, so without this read the
-            // agent's instant data purchases never appeared on this page at all.
-            // The RLS policy scopes it to the caller's own rows.
+            // public_data_orders, not agent_data_orders. Retrieve all pages.
             const instantDataOrders = [];
             let instantDataError = null;
             for (let offset = 0; !instantDataError; offset += 500) {
@@ -928,16 +933,13 @@ async function loadStoredOrders() {
                 instantDataReadError = 'Instant Data history could not be refreshed. Please reload, or contact support if this continues.';
             }
 
-            // The new storefronts (data.html + instantData.html) buy through
-            // purchase-data-bundle, which writes to data_transactions, a third
-            // table. RLS scopes it to the caller's own rows; bundles() is embedded
-            // so the title can be shown instead of the raw bundle_key.
+            // Platform data orders (data.html + instantData.html)
             const { data: platformDataOrders } = await supabase
                 .from('data_transactions')
                 .select('reference, short_code, network_id, bundle_key, recipient_phone, amount, status, created_at, bundles(title, volume_mb)')
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
-                .limit(200);
+                .limit(1000);
 
             const remoteOrders = [];
             if (txData?.airtime) {
@@ -951,7 +953,8 @@ async function loadStoredOrders() {
                         package: `Airtime (GHS ${Number(o.amount).toFixed(2)})`,
                         status: o.statusLabel,
                         providerRef: o.providerReference || '',
-                        date: new Date(o.createdAt).toLocaleDateString()
+                        date: new Date(o.createdAt).toLocaleDateString(),
+                        rawDate: o.createdAt
                     });
                 });
             }
@@ -966,7 +969,8 @@ async function loadStoredOrders() {
                         package: `${o.packageName || o.billLabel} (GHS ${Number(o.amount).toFixed(2)}) • Acct ${o.accountMasked}`,
                         status: o.statusLabel,
                         providerRef: o.providerReference || '',
-                        date: new Date(o.createdAt).toLocaleDateString()
+                        date: new Date(o.createdAt).toLocaleDateString(),
+                        rawDate: o.createdAt
                     });
                 });
             }
@@ -981,7 +985,8 @@ async function loadStoredOrders() {
                         package: `${formatDataVolume(o.volume_mb)} (GHS ${Number(o.amount).toFixed(2)})`,
                         status: o.status,
                         providerRef: o.provider_order_id || o.provider_reference || '',
-                        date: new Date(o.created_at).toLocaleDateString()
+                        date: new Date(o.created_at).toLocaleDateString(),
+                        rawDate: o.created_at
                     });
                 });
             }
@@ -993,17 +998,14 @@ async function loadStoredOrders() {
                         type: 'instant_data',
                         network: (o.network_type || '').toUpperCase(),
                         phone: maskPhoneDisplay(o.customer_phone),
-                        // Instant data is always bought for a named walk-in customer,
-                        // so the name rides along in the details (and the search index).
                         package: `${o.customer_name || 'Customer'} · ${formatDataVolume(o.volume_mb)} (GHS ${Number(o.sale_amount).toFixed(2)})`,
                         status: o.status,
                         providerRef: o.provider_reference || '',
-                        date: new Date(o.created_at).toLocaleDateString()
+                        date: new Date(o.created_at).toLocaleDateString(),
+                        rawDate: o.created_at
                     });
                 });
             }
-            // Synchronize the new-platform instant data purchases into the same
-            // list so the Instant Data tab shows both generations of storefront.
             if (platformDataOrders) {
                 platformDataOrders.forEach(o => {
                     const bundle = Array.isArray(o.bundles) ? o.bundles[0] : o.bundles;
@@ -1017,18 +1019,29 @@ async function loadStoredOrders() {
                         package: `${title} (GHS ${Number(o.amount).toFixed(2)})`,
                         status: o.status === 'success' ? 'successful' : o.status,
                         providerRef: '',
-                        date: new Date(o.created_at).toLocaleDateString()
+                        date: new Date(o.created_at).toLocaleDateString(),
+                        rawDate: o.created_at
                     });
                 });
             }
 
             if (remoteOrders.length > 0) {
+                // Sort all orders chronologically descending
+                remoteOrders.sort((a, b) => new Date(b.rawDate || 0).getTime() - new Date(a.rawDate || 0).getTime());
                 const existingIds = new Set(remoteOrders.map(r => String(r.id).toUpperCase()));
                 savedOrders = [...remoteOrders, ...savedOrders.filter(s => !existingIds.has(String(s.id).toUpperCase()))];
+                try {
+                    localStorage.setItem('skaitechOrders', JSON.stringify(savedOrders));
+                } catch (_) {}
             }
         }
     } catch (e) {
         console.warn('Could not load remote agent orders:', e);
+    } finally {
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Refresh Live Status';
+        }
     }
 
     try {

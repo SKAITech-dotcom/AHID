@@ -91,8 +91,7 @@ Deno.serve(async (request) => {
       return json({ error: dispatch.failureReason || 'The bundle provider did not accept the order.', orderReference: reference, refunded: true, walletBalance: Number(balanceRefunded?.balance ?? 0) }, 502);
     }
 
-    // Provider accepted it, which is not delivery. Record the provider order id
-    // so it can be reconciled later and leave the order in 'processing'.
+    // Provider accepted the order. Record dispatch details.
     const { error: dispatchError } = await admin.rpc('record_agent_data_dispatch', {
       p_order_id: orderId,
       p_provider: dispatch.provider,
@@ -100,6 +99,26 @@ Deno.serve(async (request) => {
       p_provider_response: dispatch.payload,
     });
     if (dispatchError) throw dispatchError;
+
+    // Check if provider confirmed delivery immediately (synchronously)
+    const rawDispatchStatus = String(dispatch.status || '').trim().toLowerCase();
+    const isImmediatelyDelivered = ['delivered', 'successful', 'success', 'completed', 'true'].includes(rawDispatchStatus);
+    let finalStatus = 'processing';
+
+    if (isImmediatelyDelivered) {
+      const { error: settleErr } = await admin.rpc('settle_agent_data_order', {
+        p_order_id: orderId,
+        p_status: 'successful',
+        p_provider_response: {
+          ...dispatch.payload,
+          settledAt: new Date().toISOString(),
+          lastProviderStatus: dispatch.status || 'DELIVERED',
+        },
+      });
+      if (!settleErr) {
+        finalStatus = 'successful';
+      }
+    }
 
     // The 5-character code is what the agent reads out to the customer.
     const { data: dispatched } = await admin
@@ -114,8 +133,7 @@ Deno.serve(async (request) => {
       orderReference: reference,
       shortCode: dispatched?.short_code ?? null,
       providerReference: dispatch.orderId ?? null,
-      // Delivery is asynchronous; the dashboard reconciles this later.
-      status: 'processing',
+      status: finalStatus,
       amount: saleAmount,
       walletBalance: Number(wallet?.balance ?? 0),
     });

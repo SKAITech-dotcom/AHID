@@ -75,19 +75,36 @@ Deno.serve(async (request) => {
 
       if (upsertError) throw upsertError;
 
-      // Sync to store_products table for this agent's store
+      // Ensure store exists and sync to store_products table for this agent's store
       try {
+        let storeId: string | null = null;
         const { data: store } = await admin
           .from('agent_stores')
           .select('id')
           .eq('agent_id', user.id)
           .maybeSingle();
 
-        if (store && hasPrices) {
+        if (store?.id) {
+          storeId = store.id;
+        } else {
+          // Idempotently create store row for this agent
+          const { data: createdId } = await admin.rpc('ensure_agent_store', { p_agent_id: user.id });
+          if (createdId) storeId = createdId;
+          else {
+            const { data: freshStore } = await admin
+              .from('agent_stores')
+              .select('id')
+              .eq('agent_id', user.id)
+              .maybeSingle();
+            storeId = freshStore?.id || null;
+          }
+        }
+
+        if (storeId && hasPrices) {
           const storeProductRows = Object.entries(prices)
             .filter(([key, val]) => typeof key === 'string' && key.startsWith('price_') && Number.isFinite(Number(val)) && Number(val) > 0)
             .map(([key, val]) => ({
-              store_id: store.id,
+              store_id: storeId,
               product_type: 'data_bundle',
               product_ref: key.replace(/^price_/, '').replace(/_/g, '-'),
               price: Math.round(Number(val) * 100) / 100,

@@ -45,15 +45,24 @@ Deno.serve(async (request) => {
       if (!store) {
         const { data: agentByName } = await admin
           .from('agents')
-          .select('id')
+          .select('id, full_name')
           .ilike('full_name', spaced)
           .maybeSingle();
         if (agentByName) {
-          const { data: storeByName } = await admin
+          let { data: storeByName } = await admin
             .from('agent_stores')
             .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
             .eq('agent_id', agentByName.id)
             .maybeSingle();
+          if (!storeByName) {
+            await admin.rpc('ensure_agent_store', { p_agent_id: agentByName.id });
+            const { data: fresh } = await admin
+              .from('agent_stores')
+              .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
+              .eq('agent_id', agentByName.id)
+              .maybeSingle();
+            storeByName = fresh;
+          }
           if (storeByName) store = storeByName;
         }
       }
@@ -66,22 +75,40 @@ Deno.serve(async (request) => {
           .ilike('agent_code', inputParam)
           .maybeSingle();
         if (agentByCode) {
-          const { data: storeByAgent } = await admin
+          let { data: storeByAgent } = await admin
             .from('agent_stores')
             .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
             .eq('agent_id', agentByCode.id)
             .maybeSingle();
+          if (!storeByAgent) {
+            await admin.rpc('ensure_agent_store', { p_agent_id: agentByCode.id });
+            const { data: fresh } = await admin
+              .from('agent_stores')
+              .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
+              .eq('agent_id', agentByCode.id)
+              .maybeSingle();
+            storeByAgent = fresh;
+          }
           if (storeByAgent) store = storeByAgent;
         }
       }
 
       // 4. Match by agent UUID
       if (!store && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inputParam)) {
-        const { data: storeById } = await admin
+        let { data: storeById } = await admin
           .from('agent_stores')
           .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
           .eq('agent_id', inputParam)
           .maybeSingle();
+        if (!storeById) {
+          await admin.rpc('ensure_agent_store', { p_agent_id: inputParam });
+          const { data: fresh } = await admin
+            .from('agent_stores')
+            .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
+            .eq('agent_id', inputParam)
+            .maybeSingle();
+          storeById = fresh;
+        }
         if (storeById) store = storeById;
       }
     }
@@ -174,14 +201,15 @@ Deno.serve(async (request) => {
         const keyId = `price_${bId.replace(/[- ]+/g, '_')}`;
         const keyBare = bId;
 
+        // Give priority to custom prices configured by the agent
         const custom = (keyGb && customPrices.get(keyGb)) ||
                        customPrices.get(keyMb) ||
                        customPrices.get(keyId) ||
                        customPrices.get(keyBare);
 
-        const price = override?.price && override.price > 0
-          ? override.price
-          : (custom && custom > 0 ? custom : catalogPrice);
+        const price = (custom !== undefined && custom > 0)
+          ? custom
+          : (override?.price && override.price > 0 ? override.price : catalogPrice);
 
         return {
           bundleId: String(bundle.bundle_id),

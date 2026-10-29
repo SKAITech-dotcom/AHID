@@ -87,7 +87,20 @@ async function saveStorePrices() {
 
     let saved = false;
 
-    // 1. Direct database upsert into agent_pricing
+    // 1. Edge function synchronization (runs with service_role to ensure agent_stores and store_products)
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+        const { data: fnData, error: fnErr } = await supabase.functions.invoke('manage-agent-pricing', {
+            body: { prices },
+            headers
+        });
+        if (!fnErr && !fnData?.error) saved = true;
+    } catch (fnErr) {
+        console.warn('manage-agent-pricing edge function notice:', fnErr);
+    }
+
+    // 2. Direct database upsert into agent_pricing
     try {
         const { error: dbErr } = await supabase
             .from('agent_pricing')
@@ -97,7 +110,7 @@ async function saveStorePrices() {
         console.warn('Direct agent_pricing save error:', e);
     }
 
-    // 2. Direct database upsert into store_products for the agent's store
+    // 3. Direct database upsert into store_products for the agent's store
     try {
         const { data: store } = await supabase
             .from('agent_stores')
@@ -123,18 +136,8 @@ async function saveStorePrices() {
         console.warn('store_products sync warning:', spErr);
     }
 
-    // 3. Edge function synchronization
-    try {
-        const { error } = await supabase.functions.invoke('manage-agent-pricing', {
-            body: { prices }
-        });
-        if (!error) saved = true;
-    } catch (fnErr) {
-        console.warn('Edge function sync warning:', fnErr);
-    }
-
     if (saved) {
-        alert("✅ All custom prices securely updated and saved to your agent account and storefront!");
+        alert("✅ All custom prices securely updated and saved to your storefront! Any customer using your store link will now see these prices.");
     } else {
         alert("✅ Custom prices saved locally! (Backend sync will retry automatically)");
     }
@@ -304,13 +307,14 @@ async function loadStoreSettings() {
     }
 
     // 4. Safely construct dynamic storefront link incorporating agent name/slug
-    const effectiveSlug = store?.slug || currentAgentData?.agent_code?.toLowerCase() || (currentAgentData?.id ? 'store-' + currentAgentData.id.slice(0, 8) : '');
-    const agentParam = currentAgentData?.full_name
+    const effectiveSlug = store?.slug || (currentAgentData?.agent_code ? currentAgentData.agent_code.toLowerCase() : (currentAgentData?.id ? 'store-' + currentAgentData.id.slice(0, 8) : ''));
+    const agentParam = store?.slug || currentAgentData?.agent_code?.toLowerCase() || (currentAgentData?.full_name
         ? currentAgentData.full_name.trim().replace(/\s+/g, '_').toUpperCase()
-        : effectiveSlug;
+        : effectiveSlug);
 
     if (linkInput && agentParam) {
         linkInput.value = `${storeBaseUrl()}/store?agent=${encodeURIComponent(agentParam)}`;
+    }
     } else if (linkInput && !linkInput.value) {
         linkInput.placeholder = 'Store link will appear here once saved';
     }
