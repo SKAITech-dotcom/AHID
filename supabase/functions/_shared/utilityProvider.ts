@@ -123,8 +123,14 @@ function callbackUrl(): string | undefined {
 }
 
 function endpointQuery(action: 'verify' | 'status', payload: Record<string, unknown>): Record<string, string | undefined> {
+  const account = String(payload.accountNumber ?? payload.destination ?? '').trim();
   return {
-    destination: firstString(payload.accountNumber, payload.destination),
+    destination: account,
+    accountNumber: account,
+    accountnumber: account,
+    meter: account,
+    meternumber: account,
+    meterNumber: account,
     clientreference: firstString(payload.reference, payload.clientReference),
     transactionid: firstString(payload.providerReference, payload.transactionId),
   };
@@ -145,8 +151,11 @@ export async function callUtilityProvider(
   const authorization = authorizationHeader(apiKey);
   let response;
   if (action === 'purchase') {
+    const rawAccount = String(payload.accountNumber ?? payload.destination ?? '').trim();
     const body: JsonRecord = {
-      Destination: String(payload.accountNumber ?? '').trim(),
+      Destination: rawAccount,
+      AccountNumber: rawAccount,
+      MeterNumber: rawAccount,
       Amount: Number(Number(payload.amount).toFixed(2)),
       ClientReference: String(payload.reference ?? '').trim(),
     };

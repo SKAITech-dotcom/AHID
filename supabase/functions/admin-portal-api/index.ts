@@ -362,6 +362,36 @@ Deno.serve(async (request) => {
       return json({ success: true, bundleId, isAvailable });
     }
 
+    // ACTION: UPDATE DATA BUNDLE PRICE
+    if (action === 'update-bundle-price') {
+      const bundleId = String(body.bundleId || '').trim();
+      const newPrice = Number(body.newPrice);
+      const catalogType = String(body.catalogType || 'bundle_catalog').trim();
+
+      if (!bundleId) return json({ error: 'bundleId is required.' }, 400);
+      if (!Number.isFinite(newPrice) || newPrice <= 0) {
+        return json({ error: 'A valid positive price is required.' }, 400);
+      }
+
+      const formattedPrice = Math.round(newPrice * 100) / 100;
+
+      if (catalogType === 'bundle_catalog') {
+        const { error } = await admin
+          .from('bundle_catalog')
+          .update({ price: formattedPrice, updated_at: new Date().toISOString() })
+          .eq('bundle_id', bundleId);
+        if (error) throw error;
+      } else {
+        const { error } = await admin
+          .from('bundles')
+          .update({ price: formattedPrice, updated_at: new Date().toISOString() })
+          .eq('id', bundleId);
+        if (error) throw error;
+      }
+
+      return json({ success: true, bundleId, newPrice: formattedPrice, catalogType });
+    }
+
     // ACTION: DISPATCH AIRTIME (MTN, Telecel, AirtelTigo via Hubtel Commission Services)
     if (action === 'dispatch-airtime') {
       const phone = String(body.phone || '').trim();
@@ -467,7 +497,10 @@ Deno.serve(async (request) => {
 
     // ACTION: VERIFY UTILITY / METER / ACCOUNT (ECG, Water, TV)
     if (action === 'verify-utility-meter' || action === 'verify-utility-account') {
-      const accountNumber = String(body.accountNumber || '').trim();
+      let accountNumber = String(body.accountNumber || '').trim();
+      if (/^\+?233[A-Za-z]/.test(accountNumber)) {
+        accountNumber = accountNumber.replace(/^\+?233/, '');
+      }
       const rawService = String(body.service || 'ecg_prepaid').trim().toLowerCase();
       const service = rawService.startsWith('ecg') ? 'ecg' : rawService;
 
@@ -495,7 +528,10 @@ Deno.serve(async (request) => {
     // ACTION: DISPATCH UTILITY (ECG Prepaid, ECG Postpaid, Ghana Water, DStv, GOtv, StarTimes)
     if (action === 'dispatch-utility') {
       const rawService = String(body.service || 'ecg_prepaid').trim().toLowerCase();
-      const accountNumber = String(body.accountNumber || '').trim();
+      let accountNumber = String(body.accountNumber || '').trim();
+      if (/^\+?233[A-Za-z]/.test(accountNumber)) {
+        accountNumber = accountNumber.replace(/^\+?233/, '');
+      }
       const amount = Number(body.amount);
       const customerName = String(body.customerName || 'Customer').trim();
       const packageName = String(body.packageName || '').trim();

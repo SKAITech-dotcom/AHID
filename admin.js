@@ -677,7 +677,7 @@ function renderDataStock(instantBundles, standardCatalog) {
         <td><span>${escapeHtml(item.title)}</span></td>
         <td><span class="badge ${netClass}">${escapeHtml((item.network || '').toUpperCase())}</span></td>
         <td>${escapeHtml(item.volume)}</td>
-        <td><strong>${money(item.price)}</strong></td>
+        <td id="bundlePrice-${item.id}"><strong>${money(item.price)}</strong></td>
         <td>${item.cost !== '—' ? money(item.cost) : '—'}</td>
         <td><code>${escapeHtml(item.packageId)}</code></td>
         <td id="stockStatus-${item.id}">${statusText}</td>
@@ -686,6 +686,11 @@ function renderDataStock(instantBundles, standardCatalog) {
             <input type="checkbox" ${item.isAvailable ? 'checked' : ''} onchange="toggleStockAvailability('${item.id}', this.checked, '${item.catalogType}')">
             <span class="slider"></span>
           </label>
+        </td>
+        <td>
+          <button class="btn btn-secondary btn-sm" onclick="openEditBundlePriceModal('${item.id}', '${escapeHtml(item.title)}', '${item.network}', ${Number(item.price)}, '${item.catalogType}')">
+            <i class="fa-solid fa-pen-to-square"></i> Change Price
+          </button>
         </td>
       </tr>
     `;
@@ -944,7 +949,11 @@ function handleTvPackageChange() {
 }
 
 async function verifyUtilityAccount() {
-  const account = document.getElementById('utilityAccountInput').value.trim();
+  let account = document.getElementById('utilityAccountInput').value.trim();
+  if (/^\+?233[A-Za-z]/.test(account)) {
+    account = account.replace(/^\+?233/, '');
+    document.getElementById('utilityAccountInput').value = account;
+  }
   if (!account) {
     showToast('Enter account or meter number to verify.', 'error');
     return;
@@ -969,7 +978,11 @@ async function verifyUtilityAccount() {
 async function handleUtilityDispatch(event) {
   event.preventDefault();
   const btn = document.getElementById('btnDispatchUtility');
-  const accountNumber = document.getElementById('utilityAccountInput').value.trim();
+  let accountNumber = document.getElementById('utilityAccountInput').value.trim();
+  if (/^\+?233[A-Za-z]/.test(accountNumber)) {
+    accountNumber = accountNumber.replace(/^\+?233/, '');
+    document.getElementById('utilityAccountInput').value = accountNumber;
+  }
   const customerName = document.getElementById('utilityCustomerNameInput').value.trim();
   const meterType = document.getElementById('utilityMeterTypeSelect').value;
   const amount = parseFloat(document.getElementById('utilityAmountInput').value);
@@ -2533,3 +2546,72 @@ window.handleAdminLogout = handleAdminLogout;
 
 // Boot on DOM Ready
 document.addEventListener('DOMContentLoaded', initAdminPortal);
+
+
+function openEditBundlePriceModal(id, title, network, currentPrice, catalogType) {
+  document.getElementById('editPriceBundleId').value = id;
+  document.getElementById('editPriceCatalogType').value = catalogType;
+  document.getElementById('editPriceBundleTitle').textContent = title;
+  document.getElementById('editPriceNetwork').textContent = (network || '').toUpperCase();
+  document.getElementById('editPriceCurrent').textContent = money(currentPrice);
+  document.getElementById('editBundleNewPriceInput').value = Number(currentPrice).toFixed(2);
+
+  const modal = document.getElementById('editBundlePriceModal');
+  if (modal) {
+    modal.classList.add('active');
+    setTimeout(() => document.getElementById('editBundleNewPriceInput').focus(), 80);
+  }
+}
+
+function closeEditBundlePriceModal() {
+  const modal = document.getElementById('editBundlePriceModal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function submitEditBundlePrice() {
+  const bundleId = document.getElementById('editPriceBundleId').value;
+  const catalogType = document.getElementById('editPriceCatalogType').value;
+  const newPrice = parseFloat(document.getElementById('editBundleNewPriceInput').value);
+  const btn = document.getElementById('btnSaveBundlePrice');
+
+  if (isNaN(newPrice) || newPrice <= 0) {
+    showToast('Please enter a valid positive price.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await supabase.functions.invoke('admin-portal-api', {
+      body: { action: 'update-bundle-price', bundleId, newPrice, catalogType },
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    });
+
+    if (res.error || !res.data?.success) {
+      throw new Error(res.data?.error || res.error?.message || 'Failed to update bundle price.');
+    }
+
+    // Update DOM price cell immediately
+    const priceCell = document.getElementById(`bundlePrice-${bundleId}`);
+    if (priceCell) {
+      priceCell.innerHTML = `<strong>${money(newPrice)}</strong>`;
+    }
+
+    closeEditBundlePriceModal();
+    showToast(`Price updated successfully to ${money(newPrice)}!`, 'success');
+
+    await loadDataModuleData();
+  } catch (err) {
+    console.error('submitEditBundlePrice error:', err);
+    showToast(err.message || 'Error updating price.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-check"></i> Save New Price';
+  }
+}
+
+window.openEditBundlePriceModal = openEditBundlePriceModal;
+window.closeEditBundlePriceModal = closeEditBundlePriceModal;
+window.submitEditBundlePrice = submitEditBundlePrice;

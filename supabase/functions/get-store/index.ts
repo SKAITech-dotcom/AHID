@@ -33,41 +33,23 @@ Deno.serve(async (request) => {
       const dashed = slugRaw.replace(/[_ ]+/g, '-');
       const spaced = slugRaw.replace(/[-_]+/g, ' ');
 
-      // 1. Match by slug (e.g. ahidu-mobiri-seidu)
-      const { data: storeBySlug } = await admin
+      // 1. Match by slug (case-insensitive)
+      let { data: storeBySlug } = await admin
         .from('agent_stores')
         .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
-        .or(`slug.eq.${dashed},slug.eq.${slugRaw}`)
+        .ilike('slug', slugRaw)
         .maybeSingle();
+      if (!storeBySlug && dashed !== slugRaw) {
+        const { data: storeByDashed } = await admin
+          .from('agent_stores')
+          .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
+          .ilike('slug', dashed)
+          .maybeSingle();
+        storeBySlug = storeByDashed;
+      }
       if (storeBySlug) store = storeBySlug;
 
-      // 2. Match by agent full_name (e.g. AHIDU MOBIRI SEIDU or AHIDU_MOBIRI_SEIDU)
-      if (!store) {
-        const { data: agentByName } = await admin
-          .from('agents')
-          .select('id, full_name')
-          .ilike('full_name', spaced)
-          .maybeSingle();
-        if (agentByName) {
-          let { data: storeByName } = await admin
-            .from('agent_stores')
-            .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
-            .eq('agent_id', agentByName.id)
-            .maybeSingle();
-          if (!storeByName) {
-            await admin.rpc('ensure_agent_store', { p_agent_id: agentByName.id });
-            const { data: fresh } = await admin
-              .from('agent_stores')
-              .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
-              .eq('agent_id', agentByName.id)
-              .maybeSingle();
-            storeByName = fresh;
-          }
-          if (storeByName) store = storeByName;
-        }
-      }
-
-      // 3. Match by agent code (e.g. SKAIADMIN)
+      // 2. Match by agent code (e.g. SKAIADMIN, case-insensitive)
       if (!store) {
         const { data: agentByCode } = await admin
           .from('agents')
@@ -93,7 +75,7 @@ Deno.serve(async (request) => {
         }
       }
 
-      // 4. Match by agent UUID
+      // 3. Match by agent UUID
       if (!store && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inputParam)) {
         let { data: storeById } = await admin
           .from('agent_stores')
@@ -110,6 +92,48 @@ Deno.serve(async (request) => {
           storeById = fresh;
         }
         if (storeById) store = storeById;
+      }
+
+      // 4. Match by agent full_name (e.g. AHIDU MOBIRI SEIDU or AHIDU_MOBIRI_SEIDU)
+      if (!store) {
+        let { data: agentByName } = await admin
+          .from('agents')
+          .select('id, full_name')
+          .ilike('full_name', spaced)
+          .maybeSingle();
+
+        // If not found, try flexible matching on name parts
+        if (!agentByName) {
+          const parts = spaced.split(/\s+/).filter((p: string) => p.length >= 3);
+          if (parts.length > 0) {
+            let q = admin.from('agents').select('id, full_name');
+            for (const part of parts) {
+              q = q.ilike('full_name', `%${part}%`);
+            }
+            const { data: candidates } = await q.limit(2);
+            if (candidates && candidates.length === 1) {
+              agentByName = candidates[0];
+            }
+          }
+        }
+
+        if (agentByName) {
+          let { data: storeByName } = await admin
+            .from('agent_stores')
+            .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
+            .eq('agent_id', agentByName.id)
+            .maybeSingle();
+          if (!storeByName) {
+            await admin.rpc('ensure_agent_store', { p_agent_id: agentByName.id });
+            const { data: fresh } = await admin
+              .from('agent_stores')
+              .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
+              .eq('agent_id', agentByName.id)
+              .maybeSingle();
+            storeByName = fresh;
+          }
+          if (storeByName) store = storeByName;
+        }
       }
     }
 
@@ -192,20 +216,22 @@ Deno.serve(async (request) => {
         const catalogPrice = Number(bundle.price);
         const bId = String(bundle.bundle_id).toLowerCase();
 
-        const override = overrides.get(bId);
-        if (override && !override.enabled) return null;
-
         const gb = volumeInMB / 1024;
         const keyGb = Number.isInteger(gb) && gb > 0 ? `price_${network}_${gb}gb` : '';
         const keyMb = `price_${network}_${volumeInMB}mb`;
         const keyId = `price_${bId.replace(/[- ]+/g, '_')}`;
         const keyBare = bId;
+        const refDashed = keyGb ? keyGb.replace(/^price_/, '').replace(/_/g, '-') : '';
+
+        const override = overrides.get(bId) || (refDashed ? overrides.get(refDashed) : undefined) || overrides.get(bId.replace(/_/g, '-'));
+        if (override && !override.enabled) return null;
 
         // Give priority to custom prices configured by the agent
         const custom = (keyGb && customPrices.get(keyGb)) ||
                        customPrices.get(keyMb) ||
                        customPrices.get(keyId) ||
-                       customPrices.get(keyBare);
+                       customPrices.get(keyBare) ||
+                       (refDashed && customPrices.get(refDashed));
 
         const price = (custom !== undefined && custom > 0)
           ? custom

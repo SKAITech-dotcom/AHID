@@ -76,28 +76,29 @@ Deno.serve(async (request) => {
       if (upsertError) throw upsertError;
 
       // Ensure store exists and sync to store_products table for this agent's store
+      let storeSlug: string | null = null;
+      let storeId: string | null = null;
       try {
-        let storeId: string | null = null;
         const { data: store } = await admin
           .from('agent_stores')
-          .select('id')
+          .select('id, slug')
           .eq('agent_id', user.id)
           .maybeSingle();
 
         if (store?.id) {
           storeId = store.id;
+          storeSlug = store.slug;
         } else {
           // Idempotently create store row for this agent
           const { data: createdId } = await admin.rpc('ensure_agent_store', { p_agent_id: user.id });
           if (createdId) storeId = createdId;
-          else {
-            const { data: freshStore } = await admin
-              .from('agent_stores')
-              .select('id')
-              .eq('agent_id', user.id)
-              .maybeSingle();
-            storeId = freshStore?.id || null;
-          }
+          const { data: freshStore } = await admin
+            .from('agent_stores')
+            .select('id, slug')
+            .eq('agent_id', user.id)
+            .maybeSingle();
+          storeId = freshStore?.id || storeId;
+          storeSlug = freshStore?.slug || null;
         }
 
         if (storeId && hasPrices) {
@@ -122,7 +123,7 @@ Deno.serve(async (request) => {
         console.warn('store_products sync warning:', storeProdErr);
       }
 
-      return json({ success: true, count: rowsToUpsert.length });
+      return json({ success: true, count: rowsToUpsert.length, storeId, slug: storeSlug });
     }
 
     return json({ error: 'Method not allowed' }, 405);

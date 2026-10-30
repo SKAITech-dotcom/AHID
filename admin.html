@@ -1084,10 +1084,11 @@
                     <th>Package Key</th>
                     <th>Stock Status</th>
                     <th>Availability</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="dataStockTbody">
-                  <tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 16px;">Loading catalog stock…</td></tr>
+                  <tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 16px;">Loading catalog stock…</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1209,7 +1210,7 @@
               <div class="form-group">
                 <label class="form-label" id="utilityAccountLabel">Meter / Account Number</label>
                 <div style="display: flex; gap: 8px;">
-                  <input type="text" id="utilityAccountInput" class="form-input" placeholder="e.g. P12345678" required style="flex: 1;">
+                  <input type="text" id="utilityAccountInput" class="form-input" placeholder="e.g. P12345678" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" inputmode="text" data-lpignore="true" required style="flex: 1;">
                   <button type="button" class="btn btn-secondary btn-sm" onclick="verifyUtilityAccount()"><i class="fa-solid fa-check"></i> Verify</button>
                 </div>
               </div>
@@ -1930,6 +1931,39 @@
       <button type="button" class="btn btn-primary" id="btnSubmitCheckerUpload" onclick="submitCheckerPins()">
         <i class="fa-solid fa-upload"></i> Import PINs into Stock
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: EDIT DATA BUNDLE PRICE -->
+<div class="modal-overlay" id="editBundlePriceModal">
+  <div class="modal-card" style="max-width: 440px;">
+    <div class="modal-header">
+      <h3><i class="fa-solid fa-tags"></i> Update Data Bundle Price</h3>
+      <button type="button" class="modal-close" onclick="closeEditBundlePriceModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editPriceBundleId">
+      <input type="hidden" id="editPriceCatalogType">
+      <div style="background: var(--sidebar-bg); border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+        <div style="font-size: 0.82rem; color: var(--text-dim); margin-bottom: 2px;">Package</div>
+        <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);" id="editPriceBundleTitle">—</div>
+        <div style="display: flex; gap: 14px; margin-top: 6px; font-size: 0.8rem; color: var(--text-muted);">
+          <span>Network: <strong id="editPriceNetwork" style="color: var(--text-main);">—</strong></span>
+          <span>Current Price: <strong id="editPriceCurrent" style="color: #60a5fa;">GHS 0.00</strong></span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">New Selling Price (GHS) <span style="color: #ef4444;">*</span></label>
+        <input type="number" id="editBundleNewPriceInput" class="form-input" min="0.10" step="0.01" placeholder="e.g. 5.00" required>
+        <small style="color: var(--text-dim); font-size: 0.72rem; margin-top: 4px; display: block;">
+          Updating this price will immediately reflect in the database, customer purchases, and agent storefronts.
+        </small>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeEditBundlePriceModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="btnSaveBundlePrice" onclick="submitEditBundlePrice()"><i class="fa-solid fa-check"></i> Save New Price</button>
     </div>
   </div>
 </div>
