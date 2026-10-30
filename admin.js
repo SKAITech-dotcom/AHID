@@ -960,10 +960,11 @@ async function verifyUtilityAccount() {
   }
 
   showToast('Verifying account with provider…', 'success');
+  const phone = document.getElementById('utilityPhoneInput')?.value?.trim() || '';
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const res = await supabase.functions.invoke('admin-portal-api', {
-      body: { action: 'verify-utility-account', accountNumber: account, service: currentUtilityService },
+      body: { action: 'verify-utility-account', accountNumber: account, service: currentUtilityService, phone, mobile: phone },
       headers: { Authorization: `Bearer ${session?.access_token}` },
     });
 

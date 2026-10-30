@@ -219,9 +219,10 @@ export async function verifyAccount() {
   statusEl.style.display = 'block';
   const billType = currentService === 'ecg_prepaid' ? 'ecg' : currentService;
   const meterType = currentService === 'ecg_prepaid' ? $('meterType').value : null;
+  const phoneVal = $('customerPhone')?.value?.trim() || '';
   try {
     const { data, error } = await supabase.functions.invoke('verify-utility-account', {
-      body: { billType, accountNumber: accountVal, meterType },
+      body: { billType, accountNumber: accountVal, meterType, phone: phoneVal, customerPhone: phoneVal, mobile: phoneVal },
     });
     if (error || data?.verified !== true) {
       let errorMsg = data?.error;

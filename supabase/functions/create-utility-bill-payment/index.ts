@@ -74,7 +74,14 @@ Deno.serve(async (request) => {
     const feeAmount = 0;
     const grossAmount = netAmount;
 
-    const accountCheck = await callUtilityProvider('verify', { service: billType, accountNumber, meterType });
+    const accountCheck = await callUtilityProvider('verify', {
+      service: billType,
+      accountNumber,
+      meterType,
+      customerPhone,
+      phone: customerPhone,
+      mobile: customerPhone,
+    });
     if (!accountCheck.success || !accountCheck.verified) {
       return json({ error: accountCheck.message || 'The utility provider could not verify this account.' }, 422);
     }
@@ -119,6 +126,8 @@ Deno.serve(async (request) => {
       amount: netAmount,
       customerName: customerName || accountCheck.customerName || null,
       customerPhone,
+      phone: customerPhone,
+      mobile: customerPhone,
       customerEmail,
       reference,
     });

@@ -1,6 +1,25 @@
 # Utility provider connection
 
-The utility page now calls a server-side provider adapter. It no longer invents customer names or ECG tokens. Configure the provider endpoint and API key as Supabase Edge Function secrets before enabling utility payments:
+The utility page calls a server-side provider adapter (`supabase/functions/_shared/utilityProvider.ts`). It communicates with Hubtel Commission Services for ECG and Ghana Water (GWCL).
+
+### Ghana Water (GWCL) Configuration
+- **Disbursement Account Number**: `2027124`
+- **Service ID**: `6c1e8a8d2e84feeb8bfd6be2790d71d`
+- **API Endpoint Template**:
+  ```text
+  https://cs.hubtel.com/commissionservices/${disbursementAccountNumber}/${serviceId}?destination=${meterNumber}&mobile=${phoneNumber}
+  ```
+  Evaluates to:
+  ```text
+  https://cs.hubtel.com/commissionservices/2027124/6c1e8a8d2e84feeb8bfd6be2790d71d?destination=${meterNumber}&mobile=${phoneNumber}
+  ```
+- **Optional Env Secret Override**:
+  ```sh
+  supabase secrets set UTILITY_PROVIDER_API_URL_GHANA_WATER="https://cs.hubtel.com/commissionservices/2027124/6c1e8a8d2e84feeb8bfd6be2790d71d"
+  ```
+
+### General Configuration
+Configure the provider endpoint and API key as Supabase Edge Function secrets:
 
 ```sh
 supabase secrets set UTILITY_PROVIDER_API_URL="https://provider.example/api/utility" UTILITY_PROVIDER_API_KEY="replace-with-provider-key"

@@ -506,10 +506,14 @@ Deno.serve(async (request) => {
 
       if (!accountNumber) return json({ error: 'Account/meter number is required.' }, 400);
 
+      const phone = String(body.phone || body.customerPhone || '').trim();
+
       try {
         const verifyResult = await callUtilityProvider('verify', {
           service,
           accountNumber,
+          phone: phone || undefined,
+          mobile: phone || undefined,
           reference: `VRF-${Date.now()}`,
         });
 
@@ -594,6 +598,9 @@ Deno.serve(async (request) => {
         const payResult = await callUtilityProvider('purchase', {
           service: billType,
           accountNumber,
+          phone,
+          mobile: phone,
+          customerPhone: phone,
           amount,
           reference: clientRef,
         });

@@ -86,8 +86,51 @@ function customerNameFrom(payload: JsonRecord): string | undefined {
   );
 }
 
-function configuredServiceEndpoint(service: string): string {
+export const GHANA_WATER_CONFIG = {
+  serviceId: '6c1e8a8d2e84feeb8bfd6be2790d71d',
+  disbursementAccountNumber: '2027124',
+};
+
+function resolveGhanaWaterEndpoint(payload?: Record<string, unknown>): string {
+  const disbursementAccount = Deno.env.get('HUBTEL_DISBURSEMENT_ACCOUNT_NUMBER')?.trim()
+    || Deno.env.get('HUBTEL_WATER_DISBURSEMENT_ACCOUNT')?.trim()
+    || GHANA_WATER_CONFIG.disbursementAccountNumber;
+  const serviceId = Deno.env.get('HUBTEL_SERVICE_ID_GHANA_WATER')?.trim()
+    || Deno.env.get('HUBTEL_WATER_SERVICE_ID')?.trim()
+    || GHANA_WATER_CONFIG.serviceId;
+
+  const envEndpoint = Deno.env.get('UTILITY_PROVIDER_API_URL_GHANA_WATER')?.trim()
+    || Deno.env.get('UTILITY_PROVIDER_API_URL_WATER')?.trim();
+
+  let endpointTemplate = envEndpoint
+    || `https://cs.hubtel.com/commissionservices/${disbursementAccount}/${serviceId}`;
+
+  // Interpolate account and service id placeholders if present
+  endpointTemplate = endpointTemplate
+    .replace(/\$\{disbursementAccountNumber\}|\{disbursementAccountNumber\}/g, disbursementAccount)
+    .replace(/\$\{serviceId\}|\{serviceId\}|\{ServiceID\}/g, serviceId);
+
+  // If payload provided, interpolate meter number and mobile phone placeholders
+  if (payload) {
+    const account = String(payload.accountNumber ?? payload.destination ?? '').trim();
+    const phone = firstString(payload.mobile, payload.phone, payload.customerPhone, payload.phoneNumber) || '';
+    if (account) {
+      endpointTemplate = endpointTemplate.replace(/\$\{meterNumber\}|\{meterNumber\}|\$\{destination\}|\{destination\}/g, encodeURIComponent(account));
+    }
+    if (phone) {
+      endpointTemplate = endpointTemplate.replace(/\$\{phoneNumber\}|\{phoneNumber\}|\$\{mobile\}|\{mobile\}/g, encodeURIComponent(phone));
+    }
+  }
+
+  return endpointTemplate;
+}
+
+function configuredServiceEndpoint(service: string, payload?: Record<string, unknown>): string {
   const normalized = service.trim().toLowerCase();
+  if (normalized === 'ghana_water' || normalized === 'water') {
+    return resolveGhanaWaterEndpoint(payload);
+  }
+
   const suffix = normalized === 'ecg' || normalized === 'ecg_postpaid'
     ? 'ECG'
     : normalized.replace(/[^a-z0-9]+/g, '_').toUpperCase();
@@ -97,8 +140,8 @@ function configuredServiceEndpoint(service: string): string {
     throw new Error('Utility provider API is not configured. Contact support before making this payment.');
   }
 
-  // The supplied production mapping is ECG. Do not silently send water or TV
-  // purchases to the ECG service when their own mapping has not been supplied.
+  // The supplied production mappings are ECG and Ghana Water. Do not silently send other services
+  // to the ECG service when their own mapping has not been supplied.
   if (!serviceEndpoint && normalized !== 'ecg' && normalized !== 'ecg_postpaid') {
     throw new Error(`Utility service ${service} is not configured for Hubtel yet.`);
   }
@@ -122,8 +165,24 @@ function callbackUrl(): string | undefined {
   return projectUrl ? `${projectUrl}/functions/v1/hubtel-utility-webhook` : undefined;
 }
 
-function endpointQuery(action: 'verify' | 'status', payload: Record<string, unknown>): Record<string, string | undefined> {
+function endpointQuery(
+  action: 'verify' | 'purchase' | 'status',
+  payload: Record<string, unknown>,
+): Record<string, string | undefined> {
+  const service = String(payload.service ?? '').trim().toLowerCase();
   const account = String(payload.accountNumber ?? payload.destination ?? '').trim();
+  const phone = firstString(payload.mobile, payload.phone, payload.customerPhone, payload.phoneNumber);
+
+  // For Ghana Water (GWCL), query format strictly passes: ?destination=${meterNumber}&mobile=${phoneNumber}
+  if (service === 'ghana_water' || service === 'water') {
+    return {
+      destination: account,
+      mobile: phone || undefined,
+      clientreference: firstString(payload.reference, payload.clientReference),
+      transactionid: firstString(payload.providerReference, payload.transactionId),
+    };
+  }
+
   return {
     destination: account,
     accountNumber: account,
@@ -131,6 +190,7 @@ function endpointQuery(action: 'verify' | 'status', payload: Record<string, unkn
     meter: account,
     meternumber: account,
     meterNumber: account,
+    mobile: phone || undefined,
     clientreference: firstString(payload.reference, payload.clientReference),
     transactionid: firstString(payload.providerReference, payload.transactionId),
   };
@@ -142,7 +202,7 @@ export async function callUtilityProvider(
   payload: Record<string, unknown>,
 ): Promise<UtilityProviderReply> {
   const service = String(payload.service ?? '').trim().toLowerCase();
-  const endpoint = configuredServiceEndpoint(service);
+  const endpoint = configuredServiceEndpoint(service, payload);
   const apiKey = Deno.env.get('HUBTEL_CLIENT_SECRET')?.trim() || Deno.env.get('UTILITY_PROVIDER_API_KEY')?.trim();
   if (!apiKey) {
     throw new Error('Utility provider API is not configured. Contact support before making this payment.');
@@ -152,6 +212,7 @@ export async function callUtilityProvider(
   let response;
   if (action === 'purchase') {
     const rawAccount = String(payload.accountNumber ?? payload.destination ?? '').trim();
+    const phone = firstString(payload.mobile, payload.phone, payload.customerPhone, payload.phoneNumber);
     const body: JsonRecord = {
       Destination: rawAccount,
       AccountNumber: rawAccount,
@@ -159,9 +220,19 @@ export async function callUtilityProvider(
       Amount: Number(Number(payload.amount).toFixed(2)),
       ClientReference: String(payload.reference ?? '').trim(),
     };
+    if (phone) {
+      body.Mobile = phone;
+      body.PhoneNumber = phone;
+      body.CustomerPhone = phone;
+    }
     const callback = callbackUrl();
     if (callback) body.CallbackUrl = callback;
-    response = await hubtelRequest(endpoint, { method: 'POST', body, authorization });
+
+    const query = (service === 'ghana_water' || service === 'water')
+      ? endpointQuery(action, payload)
+      : undefined;
+
+    response = await hubtelRequest(endpoint, { method: 'POST', body, query, authorization });
   } else {
     response = await hubtelRequest(endpoint, {
       method: 'GET',

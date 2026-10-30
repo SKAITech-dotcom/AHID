@@ -7,7 +7,7 @@ Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   try {
-    const { admin } = await requireAgent(request);
+    const { admin, agent, user } = await requireAgent(request);
     void admin;
     const body = await request.json();
     const service = String(body.billType ?? '').trim().toLowerCase();
@@ -21,10 +21,14 @@ Deno.serve(async (request) => {
     if (!SERVICES.has(service) || accountNumber.length < 4 || accountNumber.length > 30) {
       return json({ error: 'Choose a service and enter a valid account or meter number.' }, 400);
     }
+    const phone = String(body.phone ?? body.customerPhone ?? body.mobile ?? agent?.phone ?? user?.phone ?? '').trim();
     const result = await callUtilityProvider('verify', {
       service,
       accountNumber,
       meterType: body.meterType ? String(body.meterType) : null,
+      phone: phone || undefined,
+      mobile: phone || undefined,
+      customerPhone: phone || undefined,
     });
     if (!result.success || !result.verified) {
       return json({ verified: false, error: result.message || 'The provider could not verify this account.' }, 422);
