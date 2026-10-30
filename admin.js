@@ -648,8 +648,10 @@ function filterDataOrders() {
 async function syncOrderStatus(orderType, orderId) {
   try {
     showToast('Querying live provider status (Swift / GrandTech)…', 'info');
+    const { data: { session } } = await supabase.auth.getSession();
     const { data, error } = await supabase.functions.invoke('admin-portal-api', {
-      body: { action: 'sync-order-status', orderType, orderId }
+      body: { action: 'sync-order-status', orderType, orderId },
+      headers: { Authorization: `Bearer ${session?.access_token}` },
     });
 
     if (error) throw error;
@@ -671,12 +673,14 @@ async function syncAllActiveDataOrders() {
   }
 
   showToast(`Checking live provider status for ${pendingOrders.length} active orders…`, 'info');
+  const { data: { session } } = await supabase.auth.getSession();
   let updatedCount = 0;
 
   for (const order of pendingOrders.slice(0, 15)) {
     try {
       const { data } = await supabase.functions.invoke('admin-portal-api', {
-        body: { action: 'sync-order-status', orderType: order.kind, orderId: order.id }
+        body: { action: 'sync-order-status', orderType: order.kind, orderId: order.id },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
       });
       if (data?.success) updatedCount++;
     } catch (_) { /* ignore individual failures */ }
@@ -756,18 +760,14 @@ function renderDataStock(instantBundles, standardCatalog) {
 
 async function toggleStockAvailability(bundleId, isAvailable, catalogType) {
   try {
-    if (catalogType === 'bundle_catalog') {
-      const { error } = await supabase
-        .from('bundle_catalog')
-        .update({ active: isAvailable, inactive_reason: isAvailable ? null : 'Toggled by admin' })
-        .eq('bundle_id', bundleId);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase
-        .from('bundles')
-        .update({ is_available: isAvailable, unavailable_reason: isAvailable ? null : 'Toggled by admin' })
-        .eq('id', bundleId);
-      if (error) throw error;
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await supabase.functions.invoke('admin-portal-api', {
+      body: { action: 'toggle-data-stock', bundleId, isAvailable, catalogType },
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    });
+
+    if (res.error || !res.data?.success) {
+      throw new Error(res.error?.message || res.data?.error || 'Stock toggle failed');
     }
 
     const statusEl = document.getElementById(`stockStatus-${bundleId}`);
@@ -786,21 +786,14 @@ async function toggleStockAvailability(bundleId, isAvailable, catalogType) {
 
 async function retryDataOrder(orderId, orderType) {
   try {
-    if (orderType === 'Instant Data') {
-      await supabase
-        .from('data_transactions')
-        .update({ status: 'pending', failure_reason: 'Admin triggered retry' })
-        .eq('id', orderId);
-    } else if (orderType.includes('Agent')) {
-      await supabase
-        .from('agent_data_orders')
-        .update({ status: 'processing' })
-        .eq('id', orderId);
-    } else {
-      await supabase
-        .from('public_data_orders')
-        .update({ status: 'processing' })
-        .eq('id', orderId);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await supabase.functions.invoke('admin-portal-api', {
+      body: { action: 'retry-data-order', orderId, orderType },
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    });
+
+    if (res.error || !res.data?.success) {
+      throw new Error(res.error?.message || res.data?.error || 'Retry failed');
     }
 
     showToast('Order successfully marked for redelivery.', 'success');
@@ -2131,8 +2124,10 @@ async function submitCheckerPins() {
       return { pin: parts[0], serial: parts[1] || null };
     }).filter(p => p.pin);
 
+    const { data: { session } } = await supabase.auth.getSession();
     const { data, error } = await supabase.functions.invoke('admin-portal-api', {
-      body: { action: 'upload-result-checkers', examType, pins }
+      body: { action: 'upload-result-checkers', examType, pins },
+      headers: { Authorization: `Bearer ${session?.access_token}` },
     });
 
     if (error) throw error;
