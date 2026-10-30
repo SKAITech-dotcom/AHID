@@ -6,26 +6,43 @@ let currentAgentData = null;
 // Simple tab switching function
 function switchTab(tabName) {
     const tabs = ['overview', 'store', 'pricing', 'withdrawals'];
+    const active = tabs.includes(tabName) ? tabName : 'pricing';
+
     tabs.forEach(t => {
         const contentEl = document.getElementById('content-' + t);
         const tabEl = document.getElementById('tab-' + t);
 
         if (contentEl) {
-            contentEl.style.display = (t === tabName) ? 'block' : 'none';
+            contentEl.style.display = (t === active) ? 'block' : 'none';
         }
 
         if (tabEl) {
-            if (t === tabName) {
+            if (t === active) {
+                tabEl.classList.add('active');
                 tabEl.style.color = '#2563eb';
                 tabEl.style.fontWeight = '600';
                 tabEl.style.borderBottom = '2px solid #2563eb';
             } else {
+                tabEl.classList.remove('active');
                 tabEl.style.color = '#4b5563';
                 tabEl.style.fontWeight = '500';
                 tabEl.style.borderBottom = 'none';
             }
         }
     });
+
+    // Dynamically trigger fresh data loading for the requested tab
+    try {
+        if (active === 'overview') {
+            loadStoreOverview().catch(e => console.warn('Overview tab load notice:', e));
+        } else if (active === 'store') {
+            loadStoreSettings().catch(e => console.warn('Store tab load notice:', e));
+        } else if (active === 'withdrawals') {
+            loadPayouts().catch(e => console.warn('Withdrawals tab load notice:', e));
+        }
+    } catch (tabErr) {
+        console.warn('Tab switch callback notice:', tabErr);
+    }
 }
 
 // Copy link function
@@ -138,6 +155,7 @@ async function saveStorePrices() {
 
     if (saved) {
         alert("✅ All custom prices securely updated and saved to your storefront! Any customer using your store link will now see these prices.");
+        await loadStoreSettings();
     } else {
         alert("✅ Custom prices saved locally! (Backend sync will retry automatically)");
     }
@@ -158,6 +176,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const authResult = await requireVerifiedAgent({ redirectOnFail: true });
     if (!authResult) return;
     currentAgentData = authResult.agent;
+
+    // Check URL hash for initial tab selection
+    const initialHash = (window.location.hash || '').replace('#', '').toLowerCase();
+    if (['overview', 'store', 'pricing', 'withdrawals'].includes(initialHash)) {
+        switchTab(initialHash);
+    }
 
     // 2. Load cached prices first
     priceKeys.forEach(key => {
@@ -207,9 +231,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // 5. Load the owner's store profile + shareable link, store metrics, and payouts.
-    loadStoreSettings();
-    loadStoreOverview();
-    loadPayouts();
+    await loadStoreSettings();
+    await loadStoreOverview();
+    await loadPayouts();
+});
+
+// Listen for hash changes
+window.addEventListener('hashchange', () => {
+    const hash = (window.location.hash || '').replace('#', '').toLowerCase();
+    if (['overview', 'store', 'pricing', 'withdrawals'].includes(hash)) {
+        switchTab(hash);
+    }
 });
 
 const PUBLIC_STORE_ORIGIN = 'https://skaitechgh.wasmer.app';
@@ -251,6 +283,7 @@ async function loadStoreSettings() {
 
             if (!dbError && dbStore) {
                 store = {
+                    id: dbStore.id,
                     slug: dbStore.slug,
                     displayName: dbStore.display_name,
                     description: dbStore.description || '',
@@ -290,6 +323,7 @@ async function loadStoreSettings() {
                 .maybeSingle();
             if (freshStore) {
                 store = {
+                    id: freshStore.id,
                     slug: freshStore.slug,
                     displayName: freshStore.display_name,
                     description: freshStore.description || '',
@@ -314,7 +348,6 @@ async function loadStoreSettings() {
 
     if (linkInput && agentParam) {
         linkInput.value = `${storeBaseUrl()}/store?agent=${encodeURIComponent(agentParam)}`;
-    }
     } else if (linkInput && !linkInput.value) {
         linkInput.placeholder = 'Store link will appear here once saved';
     }
@@ -407,8 +440,9 @@ async function loadStoreOverview() {
     try {
         const { data, error } = await supabase
             .from('store_orders')
-            .select('sale_amount, agent_earning, fulfilment_status, payment_status')
-            .eq('agent_id', currentAgentData.id);
+            .select('id, reference, recipient, bundle_title, sale_amount, agent_earning, fulfilment_status, payment_status, created_at')
+            .eq('agent_id', currentAgentData.id)
+            .order('created_at', { ascending: false });
         if (error) throw error;
         const rows = data || [];
         const delivered = rows.filter((r) => r.fulfilment_status === 'successful').length;
@@ -420,6 +454,32 @@ async function loadStoreOverview() {
         setText('statDelivered', String(delivered));
         setText('statSales', `GHS ${sales.toFixed(2)}`);
         setText('statEarnings', `GHS ${earnings.toFixed(2)}`);
+
+        // Render recent customer orders in Overview
+        const ordersListEl = document.getElementById('overviewOrdersList');
+        if (ordersListEl) {
+            if (rows.length === 0) {
+                ordersListEl.innerHTML = '<div class="store-list-item" style="padding: 12px; color: #6b7280; text-align: center;"><span>No customer orders yet. Share your store link to start receiving orders!</span></div>';
+            } else {
+                ordersListEl.innerHTML = rows.slice(0, 15).map(o => {
+                    const date = o.created_at ? new Date(o.created_at).toLocaleDateString() : '';
+                    const status = String(o.fulfilment_status || o.payment_status || 'pending').toUpperCase();
+                    const statusColor = status === 'SUCCESSFUL' || status === 'PAID' ? '#10b981' : '#f59e0b';
+                    return `
+                        <div class="store-list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                            <div>
+                                <strong style="color: #1f2937;">${o.bundle_title || 'Data Bundle'}</strong> <span style="color: #6b7280;">(${o.recipient || 'N/A'})</span><br>
+                                <small style="color: #9ca3af;">Ref: <code>${o.reference || o.id}</code> | ${date}</small>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: 700; color: #111827;">GHS ${Number(o.sale_amount || 0).toFixed(2)}</div>
+                                <span style="font-size: 11px; font-weight: 600; color: ${statusColor};">${status}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
     } catch (err) {
         console.warn('Could not load store overview:', err);
     }
@@ -438,43 +498,82 @@ function renderPayoutHistory(payouts) {
     const list = document.getElementById('payoutHistory');
     if (!list) return;
     if (!payouts.length) {
-        list.innerHTML = '<div class="store-list-item"><span>No payout requests yet.</span></div>';
+        list.innerHTML = '<div class="store-list-item" style="padding: 12px; color: #6b7280; text-align: center;"><span>No payout requests yet.</span></div>';
         return;
     }
     list.innerHTML = payouts.map((payout) => {
         const date = payout.requested_at ? new Date(payout.requested_at).toLocaleDateString() : '';
         const status = String(payout.status || '').toUpperCase();
-        return `<div class="store-list-item">
-            <span class="amt">GHS ${Number(payout.amount || 0).toFixed(2)}</span>
-            <span>${date}</span>
-            <span class="store-pill">${status}</span>
+        return `<div class="store-list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+            <span class="amt" style="font-weight: 600;">GHS ${Number(payout.amount || 0).toFixed(2)}</span>
+            <span style="color: #6b7280; font-size: 13px;">${date}</span>
+            <span class="store-pill" style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #eff6ff; color: #2563eb;">${status}</span>
         </div>`;
     }).join('');
 }
 
 async function loadPayouts() {
+    let payoutsLoaded = false;
+
+    // 1. Try edge function first
     try {
         const { data, error } = await supabase.functions.invoke('manage-agent-payout');
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
+        if (!error && !data?.error) {
+            const balance = data?.balance || {};
+            const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+            setText('payoutAvailable', `GHS ${Number(balance.available || 0).toFixed(2)}`);
+            setText('payoutCommitted', `GHS ${Number(balance.committed || 0).toFixed(2)}`);
 
-        const balance = data?.balance || {};
-        const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-        setText('payoutAvailable', `GHS ${Number(balance.available || 0).toFixed(2)}`);
-        setText('payoutCommitted', `GHS ${Number(balance.committed || 0).toFixed(2)}`);
-
-        if (data?.account) {
-            const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ''; };
-            set('payoutMethod', data.account.method || 'momo');
-            set('payoutAccountName', data.account.account_name);
-            set('payoutAccountNumber', data.account.account_number);
-            if (data.account.momo_network) set('payoutMomoNetwork', data.account.momo_network);
-            set('payoutBankName', data.account.bank_name);
+            if (data?.account) {
+                const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ''; };
+                set('payoutMethod', data.account.method || 'momo');
+                set('payoutAccountName', data.account.account_name);
+                set('payoutAccountNumber', data.account.account_number);
+                if (data.account.momo_network) set('payoutMomoNetwork', data.account.momo_network);
+                set('payoutBankName', data.account.bank_name);
+            }
+            togglePayoutMethod();
+            renderPayoutHistory(data?.payouts || []);
+            payoutsLoaded = true;
         }
-        togglePayoutMethod();
-        renderPayoutHistory(data?.payouts || []);
     } catch (err) {
-        console.warn('Could not load payouts:', err);
+        console.warn('manage-agent-payout edge function notice:', err);
+    }
+
+    // 2. Direct database query fallback
+    if (!payoutsLoaded && currentAgentData?.id) {
+        try {
+            const [accountRes, payoutsRes, ordersRes] = await Promise.all([
+                supabase.from('agent_payout_accounts').select('*').eq('agent_id', currentAgentData.id).maybeSingle(),
+                supabase.from('agent_payouts').select('*').eq('agent_id', currentAgentData.id).order('requested_at', { ascending: false }).limit(30),
+                supabase.from('store_orders').select('agent_earning').eq('agent_id', currentAgentData.id).eq('payment_status', 'paid')
+            ]);
+
+            const totalEarnings = (ordersRes.data || []).reduce((sum, r) => sum + Number(r.agent_earning || 0), 0);
+            const payoutList = payoutsRes.data || [];
+            const committed = payoutList
+                .filter(p => ['requested', 'approved', 'processing', 'paid'].includes(String(p.status).toLowerCase()))
+                .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+            const available = Math.max(0, totalEarnings - committed);
+
+            const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+            setText('payoutAvailable', `GHS ${available.toFixed(2)}`);
+            setText('payoutCommitted', `GHS ${committed.toFixed(2)}`);
+
+            if (accountRes.data) {
+                const acc = accountRes.data;
+                const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ''; };
+                set('payoutMethod', acc.method || 'momo');
+                set('payoutAccountName', acc.account_name || '');
+                set('payoutAccountNumber', acc.account_number || '');
+                if (acc.momo_network) set('payoutMomoNetwork', acc.momo_network);
+                set('payoutBankName', acc.bank_name || '');
+            }
+            togglePayoutMethod();
+            renderPayoutHistory(payoutList);
+        } catch (dbErr) {
+            console.warn('Direct database payout query notice:', dbErr);
+        }
     }
 }
 
@@ -488,14 +587,43 @@ async function savePayoutAccount() {
         momoNetwork: value('payoutMomoNetwork'),
         bankName: value('payoutBankName'),
     };
+
+    let saved = false;
+
     try {
         const { data, error } = await supabase.functions.invoke('manage-agent-payout', { body: payload });
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-        alert('✅ Payout account saved.');
-        loadPayouts();
+        if (!error && !data?.error) {
+            saved = true;
+        }
     } catch (err) {
-        alert(err.message || 'Unable to save the payout account.');
+        console.warn('manage-agent-payout save notice:', err);
+    }
+
+    // Direct database upsert fallback
+    if (!saved && currentAgentData?.id) {
+        try {
+            const { error: dbErr } = await supabase
+                .from('agent_payout_accounts')
+                .upsert({
+                    agent_id: currentAgentData.id,
+                    method: payload.method,
+                    account_name: payload.accountName,
+                    account_number: payload.accountNumber,
+                    momo_network: payload.momoNetwork || null,
+                    bank_name: payload.bankName || null,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'agent_id' });
+            if (!dbErr) saved = true;
+        } catch (dbEx) {
+            console.warn('Direct payout account save failed:', dbEx);
+        }
+    }
+
+    if (saved) {
+        alert('✅ Payout account saved.');
+        await loadPayouts();
+    } else {
+        alert('Unable to save the payout account.');
     }
 }
 
@@ -514,7 +642,7 @@ async function requestPayout() {
         if (data?.error) throw new Error(data.error);
         alert(`✅ Payout request submitted (${data.reference || ''}).`);
         if (amountEl) amountEl.value = '';
-        loadPayouts();
+        await loadPayouts();
     } catch (err) {
         alert(err.message || 'Unable to submit the payout request.');
     }

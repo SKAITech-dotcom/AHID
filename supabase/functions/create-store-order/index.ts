@@ -51,12 +51,43 @@ Deno.serve(async (request) => {
         .maybeSingle();
       if (storeBySlug) store = storeBySlug;
 
-      // 2. By agent code
+      // 2. By store- prefix with hex or UUID
+      if (!store && rawSlug.toLowerCase().startsWith('store-')) {
+        const hex = rawSlug.toLowerCase().replace(/^store-/, '').replace(/[^a-f0-9]/gi, '');
+        if (hex.length >= 6) {
+          const { data: matchedAgents } = await admin
+            .from('agents')
+            .select('id')
+            .ilike('id::text', `${hex}%`)
+            .limit(1);
+          if (matchedAgents && matchedAgents.length > 0) {
+            const agentId = matchedAgents[0].id;
+            let { data: storeByHex } = await admin
+              .from('agent_stores')
+              .select('id, agent_id, slug, is_active')
+              .eq('agent_id', agentId)
+              .maybeSingle();
+            if (!storeByHex) {
+              await admin.rpc('ensure_agent_store', { p_agent_id: agentId });
+              const { data: fresh } = await admin
+                .from('agent_stores')
+                .select('id, agent_id, slug, is_active')
+                .eq('agent_id', agentId)
+                .maybeSingle();
+              storeByHex = fresh;
+            }
+            if (storeByHex) store = storeByHex;
+          }
+        }
+      }
+
+      // 3. By agent code
       if (!store) {
+        const codeClean = rawSlug.replace(/[^a-zA-Z0-9]/g, '');
         const { data: agentByCode } = await admin
           .from('agents')
           .select('id')
-          .ilike('agent_code', rawSlug)
+          .or(`agent_code.ilike.${rawSlug},agent_code.ilike.${codeClean}`)
           .maybeSingle();
         if (agentByCode) {
           let { data: storeByAgent } = await admin
@@ -77,7 +108,7 @@ Deno.serve(async (request) => {
         }
       }
 
-      // 3. By agent id UUID
+      // 4. By agent id UUID
       if (!store && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawSlug)) {
         let { data: storeByAgentId } = await admin
           .from('agent_stores')
@@ -96,7 +127,7 @@ Deno.serve(async (request) => {
         if (storeByAgentId) store = storeByAgentId;
       }
 
-      // 4. By agent full name (e.g. AHIDU_MOBIRI_SEIDU -> AHIDU MOBIRI SEIDU)
+      // 5. By agent full name (e.g. AHIDU_MOBIRI_SEIDU -> AHIDU MOBIRI SEIDU)
       if (!store) {
         const cleanedName = rawSlug.replace(/[_-]+/g, ' ').trim();
         const { data: agentByName } = await admin
@@ -124,8 +155,8 @@ Deno.serve(async (request) => {
       }
     }
 
-    // Fallback to active store if slug wasn't found
-    if (!store || !store.is_active) {
+    // Fallback to active store if no parameter was provided
+    if (!store && !rawSlug) {
       const { data: fallbackStore } = await admin
         .from('agent_stores')
         .select('id, agent_id, slug, is_active')
@@ -136,7 +167,11 @@ Deno.serve(async (request) => {
       if (fallbackStore) store = fallbackStore;
     }
 
-    if (!store || !store.is_active) {
+    if (!store) {
+      return json({ error: `Store not found for agent '${rawSlug}'.`, code: 'store_not_found' }, 404);
+    }
+
+    if (!store.is_active) {
       return json({ error: 'This store is currently not available.', code: 'store_unavailable' }, 404);
     }
 

@@ -49,12 +49,43 @@ Deno.serve(async (request) => {
       }
       if (storeBySlug) store = storeBySlug;
 
-      // 2. Match by agent code (e.g. SKAIADMIN, case-insensitive)
+      // 2. Match by store- prefix with hex or UUID
+      if (!store && slugRaw.startsWith('store-')) {
+        const hex = slugRaw.replace(/^store-/, '').replace(/[^a-f0-9]/gi, '');
+        if (hex.length >= 6) {
+          const { data: matchedAgents } = await admin
+            .from('agents')
+            .select('id')
+            .ilike('id::text', `${hex}%`)
+            .limit(1);
+          if (matchedAgents && matchedAgents.length > 0) {
+            const agentId = matchedAgents[0].id;
+            let { data: storeByHex } = await admin
+              .from('agent_stores')
+              .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
+              .eq('agent_id', agentId)
+              .maybeSingle();
+            if (!storeByHex) {
+              await admin.rpc('ensure_agent_store', { p_agent_id: agentId });
+              const { data: fresh } = await admin
+                .from('agent_stores')
+                .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
+                .eq('agent_id', agentId)
+                .maybeSingle();
+              storeByHex = fresh;
+            }
+            if (storeByHex) store = storeByHex;
+          }
+        }
+      }
+
+      // 3. Match by agent code (e.g. SKAIADMIN, case-insensitive)
       if (!store) {
+        const codeClean = inputParam.replace(/[^a-zA-Z0-9]/g, '');
         const { data: agentByCode } = await admin
           .from('agents')
           .select('id')
-          .ilike('agent_code', inputParam)
+          .or(`agent_code.ilike.${inputParam},agent_code.ilike.${codeClean}`)
           .maybeSingle();
         if (agentByCode) {
           let { data: storeByAgent } = await admin
@@ -75,7 +106,7 @@ Deno.serve(async (request) => {
         }
       }
 
-      // 3. Match by agent UUID
+      // 4. Match by agent UUID
       if (!store && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inputParam)) {
         let { data: storeById } = await admin
           .from('agent_stores')
@@ -94,7 +125,7 @@ Deno.serve(async (request) => {
         if (storeById) store = storeById;
       }
 
-      // 4. Match by agent full_name (e.g. AHIDU MOBIRI SEIDU or AHIDU_MOBIRI_SEIDU)
+      // 5. Match by agent full_name (e.g. AHIDU MOBIRI SEIDU or AHIDU_MOBIRI_SEIDU)
       if (!store) {
         let { data: agentByName } = await admin
           .from('agents')
@@ -137,8 +168,8 @@ Deno.serve(async (request) => {
       }
     }
 
-    // Fallback: If no match or parameter empty, select the primary active store
-    if (!store || !store.is_active) {
+    // Fallback: If no match and parameter was empty, select the primary active store
+    if (!store && !inputParam) {
       const { data: fallbackStore } = await admin
         .from('agent_stores')
         .select('id, agent_id, slug, display_name, description, logo_url, brand_color, tagline, whatsapp, contact_phone, is_active')
@@ -149,8 +180,8 @@ Deno.serve(async (request) => {
       if (fallbackStore) store = fallbackStore;
     }
 
-    if (!store || !store.is_active) {
-      return json({ error: 'This store is not available.', code: 'store_unavailable' }, 404);
+    if (!store) {
+      return json({ error: `Store not found for agent '${inputParam}'. Please check the store link.`, code: 'store_not_found' }, 404);
     }
 
     const ownerId = String(store.agent_id);
