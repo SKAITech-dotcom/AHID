@@ -19,10 +19,15 @@ export async function chargeWallet(
   description = 'Service purchase',
   meta: Record<string, unknown> = {},
 ): Promise<number> {
+  // Always pass the absolute value so the DB function can never add to balance
+  const safeAmount = Math.abs(amount);
+  if (safeAmount <= 0) {
+    throw new WalletError('Payment amount must be greater than zero.');
+  }
   const { data, error } = await adminClient().rpc('charge_agent_wallet', {
     p_agent_id: agentId,
     p_reference: reference,
-    p_amount: amount,
+    p_amount: safeAmount,
     p_description: description,
     p_meta: meta,
   });
@@ -45,10 +50,14 @@ export async function refundWallet(
   amount: number,
   reason = 'Refund for failed service',
 ): Promise<number> {
+  const safeAmount = Math.abs(amount);
+  if (safeAmount <= 0) {
+    throw new WalletError('Refund amount must be greater than zero.');
+  }
   const { data, error } = await adminClient().rpc('refund_agent_wallet', {
     p_agent_id: agentId,
     p_debit_reference: debitReference,
-    p_amount: amount,
+    p_amount: safeAmount,
     p_reason: reason,
   });
   if (error) {
@@ -68,46 +77,26 @@ export async function creditWallet(
   description = 'Store profit commission',
   meta: Record<string, unknown> = {},
 ): Promise<number> {
-  if (amount <= 0) {
+  const safeAmount = Math.abs(amount);
+  if (safeAmount <= 0) {
     return await getWalletBalance(agentId);
   }
   const admin = adminClient();
   const { data, error } = await admin.rpc('credit_agent_wallet', {
     p_agent_id: agentId,
     p_reference: reference,
-    p_amount: amount,
+    p_amount: safeAmount,
     p_description: description,
     p_meta: meta,
   });
 
   if (error) {
-    // Resilient fallback if RPC is not present
-    const { data: wallet } = await admin
-      .from('wallets')
-      .select('balance')
-      .eq('id', agentId)
-      .maybeSingle();
-    const current = Number(wallet?.balance || 0);
-    const balanceAfter = Math.round((current + amount) * 100) / 100;
-
-    await admin.from('wallets').upsert({
-      id: agentId,
-      balance: balanceAfter,
-      updated_at: new Date().toISOString(),
-    });
-
-    await admin.from('wallet_transactions').insert({
-      agent_id: agentId,
-      reference,
-      type: 'credit',
-      description,
-      amount,
-      balance_after: balanceAfter,
-      status: 'settled',
-      meta,
-    });
-
-    return balanceAfter;
+    // RPC not available — this should not happen in production.
+    // Do NOT fall back to inline arithmetic; log and throw instead.
+    console.error('credit_agent_wallet RPC failed:', error.message);
+    throw new WalletError(
+      `Failed to credit wallet: ${error.message || 'RPC unavailable'}. Contact support.`,
+    );
   }
   return Number(data);
 }

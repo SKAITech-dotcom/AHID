@@ -544,7 +544,8 @@ async function handlePlaceAgentOrder() {
   const bundleSelect = document.getElementById('orderBundleSelect');
   const selectedOpt = bundleSelect?.options[bundleSelect.selectedIndex];
   const bundleSize = selectedOpt?.value || '1GB';
-  const orderTotal = parseFloat(selectedOpt?.getAttribute('data-price') || 4.30);
+  // Always use absolute value so a negative price can never credit the wallet
+  const orderTotal = Math.abs(parseFloat(selectedOpt?.getAttribute('data-price') || 4.30));
   const recipient = document.getElementById('orderRecipientInput')?.value.trim() || '';
 
   // 1. Recipient validation
