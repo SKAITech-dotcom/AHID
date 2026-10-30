@@ -197,6 +197,19 @@ create table if not exists public.agent_payouts (
   updated_at timestamptz not null default now()
 );
 
+-- Ensure columns exist if agent_payouts was created by an earlier migration without them
+alter table public.agent_payouts
+  add column if not exists status text not null default 'requested',
+  add column if not exists method text default 'momo',
+  add column if not exists account_snapshot jsonb,
+  add column if not exists reference text,
+  add column if not exists admin_note text,
+  add column if not exists requested_at timestamptz not null default now(),
+  add column if not exists reviewed_at timestamptz,
+  add column if not exists paid_at timestamptz,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
+
 create or replace view public.withdrawals as
 select
   id,
