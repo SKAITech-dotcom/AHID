@@ -174,6 +174,8 @@ async function saveStorePrices() {
     }
 
     // 3. Direct database upsert into store_products for the agent's store
+    //    (best-effort – failures here do not block the agent_prices write below)
+    let storeForSlug = null;
     try {
         const { data: store } = await supabase
             .from('agent_stores')
@@ -182,6 +184,7 @@ async function saveStorePrices() {
             .maybeSingle();
 
         if (store?.id) {
+            storeForSlug = store;
             const storeProductsRows = agentPricingRows.map(r => ({
                 store_id: store.id,
                 product_type: 'data_bundle',
@@ -195,8 +198,16 @@ async function saveStorePrices() {
                 .from('store_products')
                 .upsert(storeProductsRows, { onConflict: 'store_id,product_type,product_ref' });
         }
+    } catch (spErr) {
+        console.warn('store_products sync warning:', spErr);
+    }
 
-        // 4. Direct database upsert into agent_prices table (agent custom pricing table)
+    // 4. Direct database upsert into agent_prices table.
+    //    This block is intentionally separate from the store_products block so
+    //    that a store lookup failure (step 3) cannot prevent prices from being
+    //    written to agent_prices — which is the primary source read by the
+    //    public storefront when rendering custom package prices.
+    try {
         const agentPricesRows = [];
         priceKeys.forEach(key => {
             const inputEl = document.getElementById(key);
@@ -223,14 +234,17 @@ async function saveStorePrices() {
                 .upsert(agentPricesRows, { onConflict: 'agent_id,network,package_id' });
             if (!apErr) saved = true;
 
-            // Also mirror with store slug if available
-            if (store?.slug && store.slug !== user.id) {
-                const slugRows = agentPricesRows.map(r => ({ ...r, agent_id: store.slug }));
-                await supabase.from('agent_prices').upsert(slugRows, { onConflict: 'agent_id,network,package_id' }).catch(() => {});
+            // Also mirror rows keyed by store slug for slug-based storefront lookups
+            if (storeForSlug?.slug && storeForSlug.slug !== user.id) {
+                const slugRows = agentPricesRows.map(r => ({ ...r, agent_id: storeForSlug.slug }));
+                await supabase
+                    .from('agent_prices')
+                    .upsert(slugRows, { onConflict: 'agent_id,network,package_id' })
+                    .catch(() => {});
             }
         }
-    } catch (spErr) {
-        console.warn('store_products/agent_prices sync warning:', spErr);
+    } catch (apErr) {
+        console.warn('agent_prices sync warning:', apErr);
     }
 
     if (saved) {

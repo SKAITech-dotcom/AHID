@@ -186,13 +186,18 @@ Deno.serve(async (request) => {
 
     const ownerId = String(store.agent_id);
 
-    // Fetch agent full name, catalog, store products, and agent custom pricing
+    // Build the full list of identifiers we might have stored agent_prices under.
+    // agent_prices.agent_id is TEXT and may hold:
+    //   • the agent UUID (primary write path)
+    //   • the store slug  (mirrored by manage-agent-pricing for slug-based lookups)
+    //   • the agent code  (mirrored by manage-agent-pricing when code differs from slug)
+    //   • the raw inputParam the visitor used to reach this store
     const agentIdentifiers = [ownerId];
     if (store.slug) agentIdentifiers.push(String(store.slug));
     if (inputParam && !agentIdentifiers.includes(inputParam)) agentIdentifiers.push(inputParam);
 
     const [ownerResult, catalogResult, productsResult, pricingResult, agentPricesResult] = await Promise.all([
-      admin.from('agents').select('full_name').eq('id', ownerId).maybeSingle(),
+      admin.from('agents').select('full_name, agent_code').eq('id', ownerId).maybeSingle(),
       admin.from('bundle_catalog')
         .select('bundle_id, network, title, validity, volume_mb, price')
         .eq('active', true)
@@ -209,6 +214,18 @@ Deno.serve(async (request) => {
         .in('agent_id', agentIdentifiers),
     ]);
 
+    // Add agent_code to identifiers after we have the agent row, then re-query
+    // agent_prices for the code-keyed rows if the code was not already included.
+    const agentCode = ownerResult.data?.agent_code ? String(ownerResult.data.agent_code) : null;
+    let extraAgentPrices: { agent_id: string; network: string; package_id: string; custom_price: number }[] = [];
+    if (agentCode && !agentIdentifiers.includes(agentCode)) {
+      const { data: codePrices } = await admin
+        .from('agent_prices')
+        .select('agent_id, network, package_id, custom_price')
+        .eq('agent_id', agentCode);
+      extraAgentPrices = (codePrices ?? []) as typeof extraAgentPrices;
+    }
+
     if (catalogResult.error) throw catalogResult.error;
 
     // Load owner custom prices from agent_pricing table
@@ -220,12 +237,20 @@ Deno.serve(async (request) => {
       }
     }
 
-    // Load custom prices from agent_prices table
-    for (const row of (agentPricesResult.data ?? []) as { agent_id: string; network: string; package_id: string; custom_price: number }[]) {
+    // Load custom prices from agent_prices table (includes UUID-keyed + slug-keyed rows)
+    // Also merge any extra rows found via agent_code lookup.
+    const allAgentPriceRows = [
+      ...(agentPricesResult.data ?? []),
+      ...extraAgentPrices,
+    ] as { agent_id: string; network: string; package_id: string; custom_price: number }[];
+
+    for (const row of allAgentPriceRows) {
       const value = Number(row.custom_price);
       if (Number.isFinite(value) && value > 0) {
-        const net = String(row.network).toLowerCase();
-        const pkg = String(row.package_id).toLowerCase();
+        // Store under multiple key formats so the bundle-mapping lookup finds it
+        // regardless of whether it uses keyGb ('price_mtn_1gb'), keyMb, or keyId.
+        const net = String(row.network).toLowerCase();    // e.g. 'mtn', 'telecel', 'airteltigo'
+        const pkg = String(row.package_id).toLowerCase(); // e.g. '1gb', '5gb'
         customPrices.set(`price_${net}_${pkg}`, value);
         customPrices.set(`${net}_${pkg}`, value);
         customPrices.set(`${net}-${pkg}`, value);

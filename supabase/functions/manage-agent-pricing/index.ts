@@ -95,7 +95,9 @@ Deno.serve(async (request) => {
 
       if (upsertError) throw upsertError;
 
-      // Ensure store exists and sync to store_products table for this agent's store
+      // Ensure store exists and sync to store_products table for this agent's store.
+      // This block is best-effort: a failure here must not prevent agent_prices
+      // from being written (which is handled in the separate block below).
       let storeSlug: string | null = null;
       let storeId: string | null = null;
       try {
@@ -139,19 +141,27 @@ Deno.serve(async (request) => {
               .upsert(storeProductRows, { onConflict: 'store_id,product_type,product_ref' });
           }
         }
+      } catch (storeProdErr) {
+        console.warn('store_products sync warning:', storeProdErr);
+      }
 
-        // Also sync to agent_prices table
-        if (hasPrices) {
+      // Sync to agent_prices table (primary table read by the public storefront).
+      // Intentionally OUTSIDE the store-lookup try/catch above so that a store
+      // provisioning error never prevents custom prices from reaching the storefront.
+      if (hasPrices) {
+        try {
           const agentPricesRows = Object.entries(prices)
             .filter(([key, val]) => typeof key === 'string' && key.startsWith('price_') && Number.isFinite(Number(val)) && Number(val) >= 0)
             .map(([key, val]) => {
               const match = key.match(/^price_([a-z]+)_(.+)$/i);
               if (!match) return null;
               let net = match[1].toLowerCase();
+              // Normalize to the canonical network casing stored in agent_prices
               if (net === 'mtn') net = 'MTN';
               else if (net === 'telecel') net = 'Telecel';
               else if (net === 'airteltigo') net = 'AirtelTigo';
               else net = net.toUpperCase();
+              // Package IDs are stored uppercase (e.g. '1GB', '5GB')
               const pkg = match[2].toUpperCase();
               return {
                 agent_id: user.id,
@@ -164,21 +174,31 @@ Deno.serve(async (request) => {
             .filter((row): row is NonNullable<typeof row> => row !== null);
 
           if (agentPricesRows.length > 0) {
-            await admin
+            const { error: apUpsertErr } = await admin
               .from('agent_prices')
               .upsert(agentPricesRows, { onConflict: 'agent_id,network,package_id' });
 
+            if (apUpsertErr) {
+              console.error('agent_prices upsert error (by UUID):', apUpsertErr);
+            }
+
+            // Mirror rows keyed by store slug so that slug-based storefront
+            // lookups (where the visitor arrives via ?agent=my-slug) also find
+            // the custom prices in agent_prices.
             if (storeSlug) {
-              const slugRows = agentPricesRows.map(r => ({ ...r, agent_id: storeSlug }));
-              await admin
+              const slugRows = agentPricesRows.map(r => ({ ...r, agent_id: storeSlug as string }));
+              const { error: slugErr } = await admin
                 .from('agent_prices')
-                .upsert(slugRows, { onConflict: 'agent_id,network,package_id' })
-                .catch(() => {});
+                .upsert(slugRows, { onConflict: 'agent_id,network,package_id' });
+              if (slugErr) {
+                console.warn('agent_prices upsert error (by slug):', slugErr);
+              }
             }
           }
+        } catch (agentPricesErr) {
+          // Non-fatal – log and continue so the HTTP response is always 200
+          console.error('agent_prices sync error:', agentPricesErr);
         }
-      } catch (storeProdErr) {
-        console.warn('store_products/agent_prices sync warning:', storeProdErr);
       }
 
       return json({ success: true, count: rowsToUpsert.length, storeId, slug: storeSlug });

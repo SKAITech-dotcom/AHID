@@ -772,135 +772,250 @@ Deno.serve(async (request) => {
 
     // ACTION: SYNC ORDER STATUS WITH PROVIDER (SWIFT / GRANDTECH)
     if (action === 'sync-order-status') {
-      const orderType = String(body.orderType || 'data').trim().toLowerCase();
-      const orderId = String(body.orderId || '').trim();
-      if (!orderId) return json({ error: 'Order ID is required' }, 400);
+      // Wrap the entire sync action in its own try/catch so that any provider
+      // error (missing API key, network timeout, unexpected payload) is caught
+      // here and returned as HTTP 200 with success:false rather than bubbling
+      // up to the outer catch which would emit an HTTP 500 and cause the
+      // Supabase client to surface "Edge Function returned a non-2xx status code".
+      try {
+        const orderType = String(body.orderType || 'data').trim().toLowerCase();
+        const orderId = String(body.orderId || '').trim();
+        if (!orderId) return json({ error: 'Order ID is required', success: false }, 400);
 
-      if (orderType === 'data' || orderType === 'agent_data_orders') {
-        const { data: order, error: fetchErr } = await admin
-          .from('agent_data_orders')
-          .select('id, agent_id, provider_name, provider_order_id, provider_reference, network_type, volume_mb, status, amount, provider_response')
-          .or(`id.eq.${orderId},provider_reference.eq.${orderId},short_code.eq.${orderId}`)
-          .maybeSingle();
+        if (orderType === 'data' || orderType === 'agent_data_orders') {
+          // Use individual eq filters instead of .or() to avoid PostgREST
+          // injection issues when orderId contains special characters.
+          let order: Record<string, unknown> | null = null;
+          let fetchErr: unknown = null;
 
-        if (fetchErr) throw fetchErr;
-        if (!order) return json({ error: 'Data order not found' }, 404);
+          // Try by UUID id first, then by provider_reference, then by short_code
+          const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (uuidPattern.test(orderId)) {
+            const res = await admin
+              .from('agent_data_orders')
+              .select('id, agent_id, provider_name, provider_order_id, provider_reference, network_type, volume_mb, status, amount, provider_response')
+              .eq('id', orderId)
+              .maybeSingle();
+            order = res.data as Record<string, unknown> | null;
+            fetchErr = res.error;
+          }
+          if (!order && !fetchErr) {
+            const res = await admin
+              .from('agent_data_orders')
+              .select('id, agent_id, provider_name, provider_order_id, provider_reference, network_type, volume_mb, status, amount, provider_response')
+              .eq('provider_reference', orderId)
+              .maybeSingle();
+            order = res.data as Record<string, unknown> | null;
+            fetchErr = fetchErr || res.error;
+          }
+          if (!order && !fetchErr) {
+            const res = await admin
+              .from('agent_data_orders')
+              .select('id, agent_id, provider_name, provider_order_id, provider_reference, network_type, volume_mb, status, amount, provider_response')
+              .eq('short_code', orderId)
+              .maybeSingle();
+            order = res.data as Record<string, unknown> | null;
+            fetchErr = fetchErr || res.error;
+          }
 
-        const provider = String(order.provider_name || activeDataProvider(order.network_type, Number(order.volume_mb)));
-        const providerOrderId = String(order.provider_order_id || '');
-        const ref = String(order.provider_reference || '');
+          if (fetchErr) {
+            const msg = fetchErr instanceof Error ? fetchErr.message : String((fetchErr as { message?: string }).message || fetchErr);
+            return json({ success: false, error: `Database lookup failed: ${msg}` });
+          }
+          if (!order) return json({ success: false, error: 'Data order not found' }, 404);
 
-        const live = await fetchDataOrderStatus(provider as 'grandtech' | 'swift', providerOrderId, ref).catch((err) => {
-          console.error('Data status check failed:', err);
-          return null;
-        });
+          const providerName = String(order.provider_name || activeDataProvider(
+            order.network_type as string,
+            Number(order.volume_mb),
+          ));
+          const providerOrderId = String(order.provider_order_id || '');
+          const ref = String(order.provider_reference || '');
 
-        if (!live) {
-          return json({
-            success: false,
-            message: `Provider (${provider}) did not return a definitive status. Order remains in current state.`,
-            status: order.status,
-            provider,
-          });
-        }
+          // Fetch live status – catch any error (missing API key, network
+          // failure) and return a graceful 200 rather than propagating a 500.
+          let live: { state: string; status: string; payload?: Record<string, unknown> } | null = null;
+          let providerError: string | null = null;
+          try {
+            live = await fetchDataOrderStatus(providerName as 'grandtech' | 'swift', providerOrderId, ref);
+          } catch (provErr) {
+            providerError = provErr instanceof Error ? provErr.message : String(provErr);
+            console.error('Provider status fetch error:', providerError);
+          }
 
-        const stored = (order.provider_response && typeof order.provider_response === 'object') ? order.provider_response : {};
-        const updatedResponse = {
-          ...stored,
-          lastProviderStatus: live.status,
-          livePayload: live.payload || null,
-          syncedAt: new Date().toISOString(),
-        };
-
-        if (live.state === 'successful' || live.state === 'failed' || live.state === 'cancelled') {
-          await admin.from('agent_data_orders').update({
-            status: live.state,
-            provider_response: updatedResponse,
-            completed_at: new Date().toISOString(),
-          }).eq('id', order.id);
-
-          // If failed/cancelled and previous status was not failed/cancelled, refund
-          if ((live.state === 'failed' || live.state === 'cancelled') && !['failed', 'cancelled'].includes(order.status) && order.agent_id) {
-            await admin.rpc('admin_adjust_wallet', {
-              p_user_id: order.agent_id,
-              p_amount: order.amount,
-              p_type: 'credit',
-              p_reason: `Refund: Order ${ref} failed with provider (${live.status})`,
-              p_admin_id: caller.id,
+          if (!live) {
+            return json({
+              success: false,
+              message: providerError
+                ? `Provider (${providerName}) API error: ${providerError}`
+                : `Provider (${providerName}) did not return a definitive status. Order remains in current state.`,
+              status: order.status,
+              provider: providerName,
+              providerError,
             });
           }
-        } else {
-          await admin.from('agent_data_orders').update({
-            provider_response: updatedResponse,
-          }).eq('id', order.id);
-        }
 
-        return json({
-          success: true,
-          provider,
-          providerStatus: live.status,
-          orderState: live.state,
-          message: `Synchronized with ${provider}: Status is ${live.status} (${live.state})`,
-        });
-      }
+          const stored = (order.provider_response && typeof order.provider_response === 'object')
+            ? order.provider_response as Record<string, unknown>
+            : {};
+          const updatedResponse = {
+            ...stored,
+            lastProviderStatus: live.status,
+            livePayload: live.payload || null,
+            syncedAt: new Date().toISOString(),
+          };
 
-      if (orderType === 'instant_data' || orderType === 'data_transactions') {
-        const { data: order, error: fetchErr } = await admin
-          .from('data_transactions')
-          .select('id, user_id, provider, reference, network_id, amount, status, metadata')
-          .or(`id.eq.${orderId},reference.eq.${orderId},short_code.eq.${orderId}`)
-          .maybeSingle();
+          // Map provider states to our internal status values
+          // DELIVERED/SUCCESSFUL/SUCCESS → successful
+          // PENDING/PROCESSING → processing (no change)
+          // FAILED → failed
+          const terminalState = live.state === 'successful' || live.state === 'failed' || live.state === 'cancelled';
+          if (terminalState) {
+            await admin.from('agent_data_orders').update({
+              status: live.state,
+              provider_response: updatedResponse,
+              completed_at: new Date().toISOString(),
+            }).eq('id', order.id);
 
-        if (fetchErr) throw fetchErr;
-        if (!order) return json({ error: 'Instant data transaction not found' }, 404);
+            // Refund wallet when provider explicitly reports failure or cancellation
+            if (
+              (live.state === 'failed' || live.state === 'cancelled') &&
+              !['failed', 'cancelled'].includes(String(order.status)) &&
+              order.agent_id
+            ) {
+              await admin.rpc('admin_adjust_wallet', {
+                p_user_id: order.agent_id,
+                p_amount: order.amount,
+                p_type: 'credit',
+                p_reason: `Refund: Order ${ref} failed with provider (${live.status})`,
+                p_admin_id: caller.id,
+              }).catch((refundErr: unknown) => {
+                console.error('Wallet refund after provider failure failed:', refundErr);
+              });
+            }
+          } else {
+            // Still processing – update the response timestamp so we know the check ran
+            await admin.from('agent_data_orders').update({
+              provider_response: updatedResponse,
+            }).eq('id', order.id);
+          }
 
-        const provider = String(order.provider || 'swift');
-        const ref = String(order.reference || '');
-
-        const live = await fetchDataOrderStatus(provider as 'grandtech' | 'swift', '', ref).catch(() => null);
-
-        if (!live) {
           return json({
-            success: false,
-            message: `Provider (${provider}) did not return status for ${ref}.`,
-            status: order.status,
+            success: true,
+            provider: providerName,
+            providerStatus: live.status,
+            orderState: live.state,
+            message: `Synchronized with ${providerName}: Status is ${live.status} (${live.state})`,
           });
         }
 
-        const meta = (order.metadata && typeof order.metadata === 'object') ? order.metadata : {};
-        const updatedMeta = {
-          ...meta,
-          lastProviderStatus: live.status,
-          syncedAt: new Date().toISOString(),
-        };
+        if (orderType === 'instant_data' || orderType === 'data_transactions') {
+          // Use individual eq filters instead of .or() to avoid PostgREST
+          // injection issues when orderId contains special characters.
+          let order: Record<string, unknown> | null = null;
+          let fetchErr: unknown = null;
 
-        const nextStatus = live.state === 'successful' ? 'completed' : live.state === 'failed' ? 'failed' : order.status;
-        await admin.from('data_transactions').update({
-          status: nextStatus,
-          metadata: updatedMeta,
-          updated_at: new Date().toISOString(),
-        }).eq('id', order.id);
+          const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (uuidPattern.test(orderId)) {
+            const res = await admin
+              .from('data_transactions')
+              .select('id, user_id, provider, reference, network_id, amount, status, metadata')
+              .eq('id', orderId)
+              .maybeSingle();
+            order = res.data as Record<string, unknown> | null;
+            fetchErr = res.error;
+          }
+          if (!order && !fetchErr) {
+            const res = await admin
+              .from('data_transactions')
+              .select('id, user_id, provider, reference, network_id, amount, status, metadata')
+              .eq('reference', orderId)
+              .maybeSingle();
+            order = res.data as Record<string, unknown> | null;
+            fetchErr = fetchErr || res.error;
+          }
 
-        if (nextStatus === 'failed' && order.status !== 'failed' && order.user_id) {
-          await admin.rpc('admin_adjust_wallet', {
-            p_user_id: order.user_id,
-            p_amount: order.amount,
-            p_type: 'credit',
-            p_reason: `Refund: Instant data ${ref} failed with provider (${live.status})`,
-            p_admin_id: caller.id,
+          if (fetchErr) {
+            const msg = fetchErr instanceof Error ? fetchErr.message : String((fetchErr as { message?: string }).message || fetchErr);
+            return json({ success: false, error: `Database lookup failed: ${msg}` });
+          }
+          if (!order) return json({ success: false, error: 'Instant data transaction not found' }, 404);
+
+          const provider = String(order.provider || 'swift');
+          const ref = String(order.reference || '');
+
+          let live: { state: string; status: string; payload?: Record<string, unknown> } | null = null;
+          let providerError: string | null = null;
+          try {
+            live = await fetchDataOrderStatus(provider as 'grandtech' | 'swift', '', ref);
+          } catch (provErr) {
+            providerError = provErr instanceof Error ? provErr.message : String(provErr);
+            console.error('Instant data provider status fetch error:', providerError);
+          }
+
+          if (!live) {
+            return json({
+              success: false,
+              message: providerError
+                ? `Provider (${provider}) API error: ${providerError}`
+                : `Provider (${provider}) did not return status for ${ref}.`,
+              status: order.status,
+              providerError,
+            });
+          }
+
+          const meta = (order.metadata && typeof order.metadata === 'object')
+            ? order.metadata as Record<string, unknown>
+            : {};
+          const updatedMeta = {
+            ...meta,
+            lastProviderStatus: live.status,
+            syncedAt: new Date().toISOString(),
+          };
+
+          const nextStatus = live.state === 'successful' ? 'completed'
+            : live.state === 'failed' ? 'failed'
+            : String(order.status);
+
+          await admin.from('data_transactions').update({
+            status: nextStatus,
+            metadata: updatedMeta,
+            updated_at: new Date().toISOString(),
+          }).eq('id', order.id);
+
+          if (nextStatus === 'failed' && order.status !== 'failed' && order.user_id) {
+            await admin.rpc('admin_adjust_wallet', {
+              p_user_id: order.user_id,
+              p_amount: order.amount,
+              p_type: 'credit',
+              p_reason: `Refund: Instant data ${ref} failed with provider (${live.status})`,
+              p_admin_id: caller.id,
+            }).catch((refundErr: unknown) => {
+              console.error('Instant data refund after failure failed:', refundErr);
+            });
+          }
+
+          return json({
+            success: true,
+            provider,
+            providerStatus: live.status,
+            orderState: nextStatus,
+            message: `Instant data synchronized with ${provider}: ${live.status}`,
           });
         }
 
+        return json({ success: false, error: `Unsupported sync order type: ${orderType}` }, 400);
+      } catch (syncErr: unknown) {
+        // Catch any unexpected error from within the sync block and return
+        // HTTP 200 with success:false so the Supabase client does not surface
+        // "Edge Function returned a non-2xx status code" to the frontend.
+        const errMsg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+        console.error('sync-order-status unexpected error:', errMsg);
         return json({
-          success: true,
-          provider,
-          providerStatus: live.status,
-          orderState: nextStatus,
-          message: `Instant data synchronized with ${provider}: ${live.status}`,
+          success: false,
+          error: errMsg,
+          message: `Provider sync failed: ${errMsg}`,
         });
       }
-
-      return json({ error: `Unsupported sync order type: ${orderType}` }, 400);
     }
 
     // ACTION: CANCEL ORDER (Pending/Processing across services)
