@@ -170,7 +170,12 @@ function endpointQuery(
   payload: Record<string, unknown>,
 ): Record<string, string | undefined> {
   const service = String(payload.service ?? '').trim().toLowerCase();
-  const account = String(payload.accountNumber ?? payload.destination ?? '').trim();
+  let account = String(payload.accountNumber ?? payload.meterNumber ?? payload.destination ?? '').trim();
+  if (/^\+?233([A-Za-z].*)$/.test(account)) {
+    account = account.replace(/^\+?233/, '');
+  } else if (/^\+?233(\d{8,16})$/.test(account)) {
+    account = account.replace(/^\+?233/, '');
+  }
   const phone = firstString(payload.mobile, payload.phone, payload.customerPhone, payload.phoneNumber);
 
   // For Ghana Water (GWCL), query format strictly passes: ?destination=${meterNumber}&mobile=${phoneNumber}
@@ -211,7 +216,12 @@ export async function callUtilityProvider(
   const authorization = authorizationHeader(apiKey);
   let response;
   if (action === 'purchase') {
-    const rawAccount = String(payload.accountNumber ?? payload.destination ?? '').trim();
+    let rawAccount = String(payload.accountNumber ?? payload.meterNumber ?? payload.destination ?? '').trim();
+    if (/^\+?233([A-Za-z].*)$/.test(rawAccount)) {
+      rawAccount = rawAccount.replace(/^\+?233/, '');
+    } else if (/^\+?233(\d{8,16})$/.test(rawAccount)) {
+      rawAccount = rawAccount.replace(/^\+?233/, '');
+    }
     const phone = firstString(payload.mobile, payload.phone, payload.customerPhone, payload.phoneNumber);
     const body: JsonRecord = {
       Destination: rawAccount,

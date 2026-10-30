@@ -3,6 +3,52 @@ import { requireVerifiedAgent } from './agentAuthGuard.js';
 
 let currentAgentData = null;
 
+// ============================================================================
+// DECOUPLED STATE FOR AGENT ORDERS
+// Submitting or editing forms (prices, settings, payouts) never resets orders.
+// ============================================================================
+let agentOrders = [];
+let isOrdersLoading = false;
+const CACHE_ORDERS_KEY = 'skaitech_agent_orders_cache';
+
+function getCachedAgentOrders() {
+    try {
+        const cached = sessionStorage.getItem(CACHE_ORDERS_KEY);
+        return cached ? JSON.parse(cached) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function setCachedAgentOrders(orders) {
+    try {
+        sessionStorage.setItem(CACHE_ORDERS_KEY, JSON.stringify(orders || []));
+    } catch (_) {}
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function parsePriceKey(key) {
+    const match = String(key).match(/^price_([a-z]+)_(.+)$/i);
+    if (!match) return null;
+    let net = match[1].toLowerCase();
+    if (net === 'mtn') net = 'MTN';
+    else if (net === 'telecel') net = 'Telecel';
+    else if (net === 'airteltigo') net = 'AirtelTigo';
+    else net = net.toUpperCase();
+
+    const pkg = match[2].toUpperCase();
+    return { network: net, packageId: pkg };
+}
+
 // Simple tab switching function
 function switchTab(tabName) {
     const tabs = ['overview', 'store', 'pricing', 'withdrawals'];
@@ -131,7 +177,7 @@ async function saveStorePrices() {
     try {
         const { data: store } = await supabase
             .from('agent_stores')
-            .select('id')
+            .select('id, slug')
             .eq('agent_id', user.id)
             .maybeSingle();
 
@@ -149,8 +195,42 @@ async function saveStorePrices() {
                 .from('store_products')
                 .upsert(storeProductsRows, { onConflict: 'store_id,product_type,product_ref' });
         }
+
+        // 4. Direct database upsert into agent_prices table (agent custom pricing table)
+        const agentPricesRows = [];
+        priceKeys.forEach(key => {
+            const inputEl = document.getElementById(key);
+            if (inputEl && inputEl.value !== '') {
+                const val = parseFloat(inputEl.value);
+                if (!isNaN(val) && val >= 0) {
+                    const parsed = parsePriceKey(key);
+                    if (parsed) {
+                        agentPricesRows.push({
+                            agent_id: user.id,
+                            network: parsed.network,
+                            package_id: parsed.packageId,
+                            custom_price: Math.round(val * 100) / 100,
+                            updated_at: new Date().toISOString()
+                        });
+                    }
+                }
+            }
+        });
+
+        if (agentPricesRows.length > 0) {
+            const { error: apErr } = await supabase
+                .from('agent_prices')
+                .upsert(agentPricesRows, { onConflict: 'agent_id,network,package_id' });
+            if (!apErr) saved = true;
+
+            // Also mirror with store slug if available
+            if (store?.slug && store.slug !== user.id) {
+                const slugRows = agentPricesRows.map(r => ({ ...r, agent_id: store.slug }));
+                await supabase.from('agent_prices').upsert(slugRows, { onConflict: 'agent_id,network,package_id' }).catch(() => {});
+            }
+        }
     } catch (spErr) {
-        console.warn('store_products sync warning:', spErr);
+        console.warn('store_products/agent_prices sync warning:', spErr);
     }
 
     if (saved) {
@@ -206,6 +286,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (inputEl) {
                         inputEl.value = Number(row.price).toFixed(2);
                         localStorage.setItem(row.pricing_key, inputEl.value);
+                    }
+                });
+            }
+
+            // Also load from agent_prices table
+            const { data: apPrices } = await supabase
+                .from('agent_prices')
+                .select('network, package_id, custom_price')
+                .eq('agent_id', currentAgentData.id);
+
+            if (apPrices && apPrices.length > 0) {
+                apPrices.forEach(row => {
+                    const netKey = String(row.network).toLowerCase();
+                    const pkgKey = String(row.package_id).toLowerCase();
+                    const key = `price_${netKey}_${pkgKey}`;
+                    const inputEl = document.getElementById(key);
+                    if (inputEl && (!inputEl.value || inputEl.value === '')) {
+                        inputEl.value = Number(row.custom_price).toFixed(2);
+                        localStorage.setItem(key, inputEl.value);
                     }
                 });
             }
@@ -435,53 +534,113 @@ async function saveStoreSettings() {
     }
 }
 
+function updateOverviewStats(rows) {
+    const list = rows || [];
+    const delivered = list.filter((r) => ['successful', 'delivered', 'completed'].includes(String(r.fulfilment_status).toLowerCase())).length;
+    const paid = list.filter((r) => String(r.payment_status).toLowerCase() === 'paid');
+    const sales = paid.reduce((sum, r) => sum + Number(r.sale_amount || 0), 0);
+    const earnings = paid.reduce((sum, r) => sum + Number(r.agent_earning || 0), 0);
+
+    const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    setText('statOrders', String(list.length));
+    setText('statDelivered', String(delivered));
+    setText('statSales', `GHS ${sales.toFixed(2)}`);
+    setText('statEarnings', `GHS ${earnings.toFixed(2)}`);
+}
+
+function renderAgentOrdersTable() {
+    const ordersListEl = document.getElementById('overviewOrdersList');
+    if (!ordersListEl) return;
+
+    if (isOrdersLoading && agentOrders.length === 0) {
+        ordersListEl.innerHTML = `
+            <div style="padding: 16px 0; border-bottom: 1px solid #e5e7eb; opacity: 0.6;">
+                <div style="height: 14px; width: 60%; background: #e2e8f0; border-radius: 4px; margin-bottom: 6px;"></div>
+                <div style="height: 10px; width: 40%; background: #f1f5f9; border-radius: 4px;"></div>
+            </div>
+            <div style="padding: 16px 0; border-bottom: 1px solid #e5e7eb; opacity: 0.4;">
+                <div style="height: 14px; width: 50%; background: #e2e8f0; border-radius: 4px; margin-bottom: 6px;"></div>
+                <div style="height: 10px; width: 35%; background: #f1f5f9; border-radius: 4px;"></div>
+            </div>
+        `;
+        return;
+    }
+
+    if (!isOrdersLoading && agentOrders.length === 0) {
+        ordersListEl.innerHTML = `
+            <div class="store-list-item" style="padding: 24px 16px; color: #6b7280; text-align: center; background: #f9fafb; border-radius: 8px; border: 1px dashed #d1d5db; margin: 10px 0;">
+                <i class="fa-solid fa-box-open" style="font-size: 26px; color: #9ca3af; margin-bottom: 8px; display: block;"></i>
+                <strong style="color: #374151; display: block; margin-bottom: 4px;">No customer orders found yet</strong>
+                <span style="font-size: 13px;">Share your public store link with customers to start receiving orders directly!</span>
+            </div>
+        `;
+        return;
+    }
+
+    ordersListEl.innerHTML = agentOrders.slice(0, 25).map(o => {
+        const date = o.created_at ? new Date(o.created_at).toLocaleString() : '';
+        const rawStatus = String(o.fulfilment_status || o.payment_status || 'pending').toLowerCase();
+        const isSuccess = ['successful', 'completed', 'delivered', 'paid'].includes(rawStatus);
+        const isFailed = rawStatus === 'failed';
+        const statusLabel = isSuccess ? 'SUCCESSFUL' : (isFailed ? 'FAILED' : 'PROCESSING');
+        const statusColor = isSuccess ? '#10b981' : (isFailed ? '#ef4444' : '#f59e0b');
+        const statusBg = isSuccess ? '#ecfdf5' : (isFailed ? '#fef2f2' : '#fffbeb');
+
+        return `
+            <div class="store-list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                <div>
+                    <div style="font-weight: 600; color: #1f2937;">
+                        ${escapeHtml(o.bundle_title || 'Data Bundle')} 
+                        <span style="color: #6b7280; font-weight: normal; font-size: 13px;">(${escapeHtml(o.recipient || 'N/A')})</span>
+                    </div>
+                    <small style="color: #9ca3af; font-family: monospace;">Ref: <code>${escapeHtml(o.reference || o.id)}</code> &bull; ${escapeHtml(date)}</small>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-weight: 700; color: #111827;">GHS ${Number(o.sale_amount || 0).toFixed(2)}</div>
+                    <span style="font-size: 11px; font-weight: 700; color: ${statusColor}; background: ${statusBg}; padding: 2px 7px; border-radius: 9999px;">
+                        ${statusLabel}
+                    </span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
 async function loadStoreOverview() {
     if (!currentAgentData?.id) return;
+
+    // Restore cached orders immediately so table is never blank
+    if (agentOrders.length === 0) {
+        agentOrders = getCachedAgentOrders();
+        if (agentOrders.length > 0) {
+            updateOverviewStats(agentOrders);
+            renderAgentOrdersTable();
+        }
+    }
+
+    isOrdersLoading = true;
+    if (agentOrders.length === 0) {
+        renderAgentOrdersTable();
+    }
+
     try {
         const { data, error } = await supabase
             .from('store_orders')
             .select('id, reference, recipient, bundle_title, sale_amount, agent_earning, fulfilment_status, payment_status, created_at')
             .eq('agent_id', currentAgentData.id)
             .order('created_at', { ascending: false });
-        if (error) throw error;
-        const rows = data || [];
-        const delivered = rows.filter((r) => r.fulfilment_status === 'successful').length;
-        const paid = rows.filter((r) => r.payment_status === 'paid');
-        const sales = paid.reduce((sum, r) => sum + Number(r.sale_amount || 0), 0);
-        const earnings = paid.reduce((sum, r) => sum + Number(r.agent_earning || 0), 0);
-        const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-        setText('statOrders', String(rows.length));
-        setText('statDelivered', String(delivered));
-        setText('statSales', `GHS ${sales.toFixed(2)}`);
-        setText('statEarnings', `GHS ${earnings.toFixed(2)}`);
 
-        // Render recent customer orders in Overview
-        const ordersListEl = document.getElementById('overviewOrdersList');
-        if (ordersListEl) {
-            if (rows.length === 0) {
-                ordersListEl.innerHTML = '<div class="store-list-item" style="padding: 12px; color: #6b7280; text-align: center;"><span>No customer orders yet. Share your store link to start receiving orders!</span></div>';
-            } else {
-                ordersListEl.innerHTML = rows.slice(0, 15).map(o => {
-                    const date = o.created_at ? new Date(o.created_at).toLocaleDateString() : '';
-                    const status = String(o.fulfilment_status || o.payment_status || 'pending').toUpperCase();
-                    const statusColor = status === 'SUCCESSFUL' || status === 'PAID' ? '#10b981' : '#f59e0b';
-                    return `
-                        <div class="store-list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
-                            <div>
-                                <strong style="color: #1f2937;">${o.bundle_title || 'Data Bundle'}</strong> <span style="color: #6b7280;">(${o.recipient || 'N/A'})</span><br>
-                                <small style="color: #9ca3af;">Ref: <code>${o.reference || o.id}</code> | ${date}</small>
-                            </div>
-                            <div style="text-align: right;">
-                                <div style="font-weight: 700; color: #111827;">GHS ${Number(o.sale_amount || 0).toFixed(2)}</div>
-                                <span style="font-size: 11px; font-weight: 600; color: ${statusColor};">${status}</span>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            }
-        }
+        if (error) throw error;
+
+        // Immutable state update
+        agentOrders = Array.isArray(data) ? [...data] : [];
+        setCachedAgentOrders(agentOrders);
+        updateOverviewStats(agentOrders);
     } catch (err) {
         console.warn('Could not load store overview:', err);
+    } finally {
+        isOrdersLoading = false;
+        renderAgentOrdersTable();
     }
 }
 
@@ -658,3 +817,5 @@ window.savePayoutAccount = savePayoutAccount;
 window.requestPayout = requestPayout;
 window.withdrawCredit = withdrawCredit;
 window.transferToBalance = transferToBalance;
+window.loadStoreOverview = loadStoreOverview;
+window.renderAgentOrdersTable = renderAgentOrdersTable;

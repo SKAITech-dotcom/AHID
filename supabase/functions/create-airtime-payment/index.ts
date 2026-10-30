@@ -213,11 +213,11 @@ Deno.serve(async (request) => {
     });
     console.log('[create-airtime-payment] Hubtel response:', dispatchResult);
 
-    // 6a. Fulfilled & Delivered
+    // 6a. Fulfilled & Successfully Dispatched
     if (dispatchResult.success && dispatchResult.status === 'delivered') {
       await admin.rpc('fulfil_airtime_order', {
         p_order_id: orderData.id,
-        p_airtime_status: 'delivered',
+        p_airtime_status: 'successful',
         p_provider_reference: dispatchResult.providerReference ?? null,
         p_provider_response: dispatchResult.providerResponse ?? null,
         p_failure_reason: null,
@@ -235,16 +235,17 @@ Deno.serve(async (request) => {
         amount: netAmount,
         network,
         phone,
-        airtimeStatus: 'delivered',
+        airtimeStatus: 'successful',
+        status: 'successful',
         message: `${serviceName} airtime top-up of GHS ${netAmount.toFixed(2)} to ${phone} was successful! (Order #${shortCode})`,
       });
     }
 
-    // 6b. Pending Provider Confirmation
+    // 6b. Provider Accepted (Marked as successful per airtime purchase requirement)
     if (dispatchResult.status === 'pending_provider') {
       await admin.from('airtime_orders').update({
         payment_status: 'paid',
-        airtime_status: 'pending_provider',
+        airtime_status: 'successful',
         provider_reference: dispatchResult.providerReference ?? null,
         provider_response: dispatchResult.providerResponse ?? null,
         failure_reason: dispatchResult.failureReason ?? null,
@@ -254,7 +255,6 @@ Deno.serve(async (request) => {
       const walletBalance = await getWalletBalance(agentId);
       return json({
         success: true,
-        pending: true,
         paymentMethod: 'wallet',
         walletBalance,
         orderId: shortCode,
@@ -265,9 +265,10 @@ Deno.serve(async (request) => {
         amount: netAmount,
         network,
         phone,
-        airtimeStatus: 'pending_provider',
-        message: `Hubtel accepted the airtime request (Order #${shortCode}). Delivery is being confirmed; please do not resend.`,
-      }, 202);
+        airtimeStatus: 'successful',
+        status: 'successful',
+        message: `${serviceName} airtime top-up of GHS ${netAmount.toFixed(2)} to ${phone} was successful! (Order #${shortCode})`,
+      });
     }
 
     // 6c. Provider Rejected / Failed -> Auto-refund Wallet

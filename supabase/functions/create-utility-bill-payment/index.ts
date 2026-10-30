@@ -31,8 +31,10 @@ Deno.serve(async (request) => {
     const body = await request.json();
     const billType = String(body.billType ?? '').trim().toLowerCase();
     // Meter numbers are strictly alphanumeric strings (e.g. "P241759005") and must not have country codes prepended
-    let accountNumber = String(body.accountNumber ?? '').trim();
-    if (/^\+?233[A-Za-z]/.test(accountNumber)) {
+    let accountNumber = String(body.accountNumber ?? body.meterNumber ?? '').trim();
+    if (/^\+?233([A-Za-z].*)$/.test(accountNumber)) {
+      accountNumber = accountNumber.replace(/^\+?233/, '');
+    } else if (/^\+?233(\d{8,16})$/.test(accountNumber)) {
       accountNumber = accountNumber.replace(/^\+?233/, '');
     }
     const meterType = body.meterType ? String(body.meterType).trim() : null;

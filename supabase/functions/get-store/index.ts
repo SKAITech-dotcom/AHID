@@ -187,7 +187,11 @@ Deno.serve(async (request) => {
     const ownerId = String(store.agent_id);
 
     // Fetch agent full name, catalog, store products, and agent custom pricing
-    const [ownerResult, catalogResult, productsResult, pricingResult] = await Promise.all([
+    const agentIdentifiers = [ownerId];
+    if (store.slug) agentIdentifiers.push(String(store.slug));
+    if (inputParam && !agentIdentifiers.includes(inputParam)) agentIdentifiers.push(inputParam);
+
+    const [ownerResult, catalogResult, productsResult, pricingResult, agentPricesResult] = await Promise.all([
       admin.from('agents').select('full_name').eq('id', ownerId).maybeSingle(),
       admin.from('bundle_catalog')
         .select('bundle_id, network, title, validity, volume_mb, price')
@@ -200,6 +204,9 @@ Deno.serve(async (request) => {
       admin.from('agent_pricing')
         .select('pricing_key, price')
         .eq('agent_id', ownerId),
+      admin.from('agent_prices')
+        .select('agent_id, network, package_id, custom_price')
+        .in('agent_id', agentIdentifiers),
     ]);
 
     if (catalogResult.error) throw catalogResult.error;
@@ -210,6 +217,19 @@ Deno.serve(async (request) => {
       const value = Number(row.price);
       if (Number.isFinite(value) && value > 0) {
         customPrices.set(String(row.pricing_key).toLowerCase(), value);
+      }
+    }
+
+    // Load custom prices from agent_prices table
+    for (const row of (agentPricesResult.data ?? []) as { agent_id: string; network: string; package_id: string; custom_price: number }[]) {
+      const value = Number(row.custom_price);
+      if (Number.isFinite(value) && value > 0) {
+        const net = String(row.network).toLowerCase();
+        const pkg = String(row.package_id).toLowerCase();
+        customPrices.set(`price_${net}_${pkg}`, value);
+        customPrices.set(`${net}_${pkg}`, value);
+        customPrices.set(`${net}-${pkg}`, value);
+        customPrices.set(pkg, value);
       }
     }
 

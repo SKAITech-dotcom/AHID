@@ -27,6 +27,26 @@ Deno.serve(async (request) => {
           prices[row.pricing_key] = Number(row.price);
         }
       });
+
+      // Also merge any prices from agent_prices table
+      try {
+        const { data: apData } = await admin
+          .from('agent_prices')
+          .select('network, package_id, custom_price')
+          .eq('agent_id', user.id);
+
+        (apData || []).forEach((row: { network: string; package_id: string; custom_price: number }) => {
+          const net = String(row.network).toLowerCase();
+          const pkg = String(row.package_id).toLowerCase();
+          const key = `price_${net}_${pkg}`;
+          if (prices[key] === undefined) {
+            prices[key] = Number(row.custom_price);
+          }
+        });
+      } catch (apErr) {
+        console.warn('agent_prices merge notice:', apErr);
+      }
+
       return json({ prices, discountPercent });
     }
 
@@ -119,8 +139,46 @@ Deno.serve(async (request) => {
               .upsert(storeProductRows, { onConflict: 'store_id,product_type,product_ref' });
           }
         }
+
+        // Also sync to agent_prices table
+        if (hasPrices) {
+          const agentPricesRows = Object.entries(prices)
+            .filter(([key, val]) => typeof key === 'string' && key.startsWith('price_') && Number.isFinite(Number(val)) && Number(val) >= 0)
+            .map(([key, val]) => {
+              const match = key.match(/^price_([a-z]+)_(.+)$/i);
+              if (!match) return null;
+              let net = match[1].toLowerCase();
+              if (net === 'mtn') net = 'MTN';
+              else if (net === 'telecel') net = 'Telecel';
+              else if (net === 'airteltigo') net = 'AirtelTigo';
+              else net = net.toUpperCase();
+              const pkg = match[2].toUpperCase();
+              return {
+                agent_id: user.id,
+                network: net,
+                package_id: pkg,
+                custom_price: Math.round(Number(val) * 100) / 100,
+                updated_at: new Date().toISOString(),
+              };
+            })
+            .filter((row): row is NonNullable<typeof row> => row !== null);
+
+          if (agentPricesRows.length > 0) {
+            await admin
+              .from('agent_prices')
+              .upsert(agentPricesRows, { onConflict: 'agent_id,network,package_id' });
+
+            if (storeSlug) {
+              const slugRows = agentPricesRows.map(r => ({ ...r, agent_id: storeSlug }));
+              await admin
+                .from('agent_prices')
+                .upsert(slugRows, { onConflict: 'agent_id,network,package_id' })
+                .catch(() => {});
+            }
+          }
+        }
       } catch (storeProdErr) {
-        console.warn('store_products sync warning:', storeProdErr);
+        console.warn('store_products/agent_prices sync warning:', storeProdErr);
       }
 
       return json({ success: true, count: rowsToUpsert.length, storeId, slug: storeSlug });

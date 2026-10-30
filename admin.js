@@ -415,6 +415,37 @@ function switchDataSubTab(tab) {
   });
 }
 
+function formatVolumeInGb(details, volumeMb) {
+  const mb = Number(volumeMb);
+  if (Number.isFinite(mb) && mb > 0) {
+    if (mb >= 1024 && mb % 1024 === 0) return `${mb / 1024}GB`;
+    if (mb >= 1024) return `${(mb / 1024).toFixed(1)}GB`;
+    return `${mb}MB`;
+  }
+  if (details) {
+    const str = String(details).trim();
+    const gbMatch = str.match(/(\d+(?:\.\d+)?)\s*gb/i);
+    if (gbMatch) return `${gbMatch[1]}GB`;
+    const mbMatch = str.match(/(\d+)\s*mb/i);
+    if (mbMatch) {
+      const val = Number(mbMatch[1]);
+      if (val >= 1024 && val % 1024 === 0) return `${val / 1024}GB`;
+      if (val >= 1024) return `${(val / 1024).toFixed(1)}GB`;
+      return `${val}MB`;
+    }
+    const numMatch = str.match(/_(\d+)gb/i);
+    if (numMatch) return `${numMatch[1]}GB`;
+    const numMbMatch = str.match(/_(\d+)(?:mb)?$/i);
+    if (numMbMatch) {
+      const val = Number(numMbMatch[1]);
+      if (val >= 1024 && val % 1024 === 0) return `${val / 1024}GB`;
+      if (val >= 1024) return `${(val / 1024).toFixed(1)}GB`;
+      if (val > 0 && val <= 100) return `${val}GB`;
+    }
+  }
+  return details || '1GB';
+}
+
 async function loadDataModuleData() {
   try {
     const [instantOrdersRes, agentOrdersRes, publicOrdersRes, bundlesRes, catalogRes] = await Promise.all([
@@ -428,66 +459,78 @@ async function loadDataModuleData() {
     const instantOrders = (instantOrdersRes.data || []).map((o) => {
       const meta = (o.metadata && typeof o.metadata === 'object') ? o.metadata : {};
       const provider = String(o.provider || 'Swift');
-      const providerStatus = meta.lastProviderStatus || meta.status || '';
+      const providerStatus = meta.lastProviderStatus || meta.status || o.status || '';
+      const isCancelled = o.status === 'cancelled' || meta.cancelled === true;
+      const orderId = o.short_code ? `#${o.short_code}` : (o.reference || o.id.slice(0, 8));
       return {
         id: o.id,
+        orderId,
         kind: 'instant_data',
         reference: o.reference,
         shortCode: o.short_code,
         phone: o.recipient_phone,
         network: o.network_id,
         amount: Number(o.amount || 0),
-        status: o.status,
+        status: isCancelled ? 'cancelled' : o.status,
         provider,
         providerStatus,
+        isCancelled,
         failureReason: o.failure_reason,
         createdAt: o.created_at,
         type: 'Instant Data',
-        details: o.bundle_key || '',
+        packageSize: formatVolumeInGb(o.bundle_key),
       };
     });
 
     const agentOrders = (agentOrdersRes.data || []).map((o) => {
       const resp = (o.provider_response && typeof o.provider_response === 'object') ? o.provider_response : {};
       const provider = String(o.provider_name || ((o.network_type === 'mtn' && o.volume_mb === 1024) || (o.network_type === 'telecel' && o.volume_mb === 5120) ? 'GrandTech' : 'Swift'));
-      const providerStatus = resp.lastProviderStatus || resp.status || '';
+      const providerStatus = resp.lastProviderStatus || resp.status || o.status || '';
+      const isCancelled = o.status === 'cancelled' || resp.cancelled === true;
+      const orderId = o.provider_order_id ? `#${o.provider_order_id}` : (o.provider_reference || o.id.slice(0, 8));
       return {
         id: o.id,
+        orderId,
         kind: 'data',
         reference: o.provider_reference,
         shortCode: '',
         phone: o.phone,
         network: o.network_type,
         amount: Number(o.amount || 0),
-        status: o.status,
+        status: isCancelled ? 'cancelled' : o.status,
         provider,
         providerStatus,
+        isCancelled,
         failureReason: o.failure_reason,
         createdAt: o.created_at,
         type: 'Standard Bundle (Agent)',
-        details: `${o.volume_mb}MB`,
+        packageSize: formatVolumeInGb(`${o.volume_mb}MB`, o.volume_mb),
       };
     });
 
     const publicOrders = (publicOrdersRes.data || []).map((o) => {
       const resp = (o.provider_response && typeof o.provider_response === 'object') ? o.provider_response : {};
       const provider = String(resp.provider || 'Swift');
-      const providerStatus = resp.lastProviderStatus || resp.status || '';
+      const providerStatus = resp.lastProviderStatus || resp.status || o.status || '';
+      const isCancelled = o.status === 'cancelled' || resp.cancelled === true;
+      const orderId = o.payment_reference ? `#${o.payment_reference.slice(-6).toUpperCase()}` : o.id.slice(0, 8);
       return {
         id: o.id,
+        orderId,
         kind: 'data',
         reference: o.payment_reference,
         shortCode: '',
         phone: o.customer_phone,
         network: o.network_type,
         amount: Number(o.sale_amount || 0),
-        status: o.status,
+        status: isCancelled ? 'cancelled' : o.status,
         provider,
         providerStatus,
+        isCancelled,
         failureReason: '',
         createdAt: o.created_at,
         type: 'Standard Bundle (Public)',
-        details: `${o.volume_mb}MB (${o.customer_name || 'Customer'})`,
+        packageSize: formatVolumeInGb(`${o.volume_mb}MB`, o.volume_mb),
       };
     });
 
@@ -509,32 +552,36 @@ function renderDataOrders(orders) {
   if (!tbody) return;
 
   if (!orders.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 16px;">No data orders found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 16px;">No data orders found.</td></tr>';
     return;
   }
 
   tbody.innerHTML = orders.map((o) => {
     const netClass = o.network === 'mtn' ? 'badge-mtn' : o.network === 'telecel' ? 'badge-telecel' : 'badge-at';
-    const isSuccess = o.status === 'success' || o.status === 'successful' || o.status === 'completed' || o.status === 'delivered';
-    const isFailed = o.status === 'failed';
-    const isCancelled = o.status === 'cancelled';
+    const rawStatus = String(o.status || '').toLowerCase();
+    const isCancelled = rawStatus === 'cancelled' || o.isCancelled;
+    const isSuccess = ['success', 'successful', 'completed', 'delivered'].includes(rawStatus);
+    const isFailed = rawStatus === 'failed';
     const isPending = !isSuccess && !isFailed && !isCancelled;
 
     let statusBadge = '';
-    if (isSuccess) {
-      statusBadge = `<span class="badge badge-success"><i class="fa-solid fa-check"></i> ${escapeHtml(o.providerStatus || 'Delivered')}</span>`;
-    } else if (isFailed) {
-      statusBadge = `<span class="badge badge-failed"><i class="fa-solid fa-xmark"></i> ${escapeHtml(o.providerStatus || 'Failed')}</span>`;
-    } else if (isCancelled) {
+    if (isCancelled) {
       statusBadge = `<span class="badge badge-failed"><i class="fa-solid fa-ban"></i> Cancelled</span>`;
+    } else if (isSuccess) {
+      statusBadge = `<span class="badge badge-success"><i class="fa-solid fa-check"></i> ${escapeHtml((o.providerStatus || 'Delivered').toUpperCase())}</span>`;
+    } else if (isFailed) {
+      statusBadge = `<span class="badge badge-failed"><i class="fa-solid fa-xmark"></i> ${escapeHtml((o.providerStatus || 'Failed').toUpperCase())}</span>`;
     } else {
-      statusBadge = `<span class="badge badge-pending"><i class="fa-solid fa-clock"></i> ${escapeHtml(o.providerStatus || 'Processing')}</span>`;
+      const provSt = o.providerStatus ? o.providerStatus.toUpperCase() : 'PENDING';
+      statusBadge = `<span class="badge badge-pending"><i class="fa-solid fa-clock"></i> ${escapeHtml(provSt)}</span>`;
     }
 
     const providerBadge = `<span class="badge ${String(o.provider || '').toLowerCase().includes('grand') ? 'badge-primary' : 'badge-network'}">${escapeHtml(o.provider || 'Swift')}</span>`;
 
     let actions = '';
-    if (isPending) {
+    if (isCancelled) {
+      actions = `<span class="badge badge-failed" style="opacity: 0.8;"><i class="fa-solid fa-ban"></i> Cancelled</span>`;
+    } else if (isPending) {
       actions = `
         <div style="display: flex; gap: 4px;">
           <button class="btn btn-secondary btn-sm" onclick="syncOrderStatus('${o.kind}', '${o.id}')" title="Sync live status with provider">
@@ -546,18 +593,28 @@ function renderDataOrders(orders) {
         </div>
       `;
     } else if (isFailed) {
-      actions = `<button class="btn btn-secondary btn-sm" onclick="retryDataOrder('${o.id}', '${o.type}')"><i class="fa-solid fa-arrows-rotate"></i> Retry</button>`;
+      actions = `
+        <div style="display: flex; gap: 4px;">
+          <button class="btn btn-secondary btn-sm" onclick="retryDataOrder('${o.id}', '${o.type}')"><i class="fa-solid fa-arrows-rotate"></i> Retry</button>
+          <button class="btn btn-danger btn-sm" onclick="openCancelOrderModal('${o.kind}', '${o.id}', '${escapeHtml(o.reference)}', ${o.amount})" title="Cancel & Refund">
+            <i class="fa-solid fa-ban"></i> Cancel
+          </button>
+        </div>
+      `;
     } else {
-      actions = '<span style="color: var(--text-dim); font-size: 0.75rem;">—</span>';
+      actions = `
+        <button class="btn btn-secondary btn-sm" onclick="syncOrderStatus('${o.kind}', '${o.id}')" title="Re-check provider status">
+          <i class="fa-solid fa-arrows-rotate"></i> Sync
+        </button>
+      `;
     }
 
     return `
       <tr>
-        <td><span class="badge badge-network">${escapeHtml(o.type)}</span></td>
-        <td><span style="font-family: monospace; font-size: 0.76rem;">${escapeHtml(o.reference)}</span></td>
+        <td><strong style="color: var(--primary); font-family: monospace;">${escapeHtml(o.orderId || o.reference)}</strong></td>
         <td>${escapeHtml(o.phone)}</td>
         <td><span class="badge ${netClass}">${escapeHtml((o.network || '').toUpperCase())}</span></td>
-        <td>${escapeHtml(o.details)}</td>
+        <td><span class="badge badge-network" style="font-weight: 700;">${escapeHtml(o.packageSize)}</span></td>
         <td><strong>${money(o.amount)}</strong></td>
         <td>${providerBadge}</td>
         <td>${statusBadge}</td>
@@ -951,7 +1008,10 @@ function handleTvPackageChange() {
 
 async function verifyUtilityAccount() {
   let account = document.getElementById('utilityAccountInput').value.trim();
-  if (/^\+?233[A-Za-z]/.test(account)) {
+  if (/^\+?233([A-Za-z].*)$/.test(account)) {
+    account = account.replace(/^\+?233/, '');
+    document.getElementById('utilityAccountInput').value = account;
+  } else if (/^\+?233(\d{8,16})$/.test(account)) {
     account = account.replace(/^\+?233/, '');
     document.getElementById('utilityAccountInput').value = account;
   }
@@ -981,7 +1041,10 @@ async function handleUtilityDispatch(event) {
   event.preventDefault();
   const btn = document.getElementById('btnDispatchUtility');
   let accountNumber = document.getElementById('utilityAccountInput').value.trim();
-  if (/^\+?233[A-Za-z]/.test(accountNumber)) {
+  if (/^\+?233([A-Za-z].*)$/.test(accountNumber)) {
+    accountNumber = accountNumber.replace(/^\+?233/, '');
+    document.getElementById('utilityAccountInput').value = accountNumber;
+  } else if (/^\+?233(\d{8,16})$/.test(accountNumber)) {
     accountNumber = accountNumber.replace(/^\+?233/, '');
     document.getElementById('utilityAccountInput').value = accountNumber;
   }

@@ -431,7 +431,7 @@ export async function handleAirtimeSubmit(event) {
       network: data.network || selectedNetwork,
       amount: Number(data.amount || netAmount),
       paymentMethod: 'wallet',
-      airtimeStatus: data.airtimeStatus || 'delivered',
+      airtimeStatus: data.airtimeStatus || 'successful',
       createdAt: new Date().toISOString(),
     });
 
@@ -630,11 +630,11 @@ export async function openAirtimeHistory() {
   }
 
   container.innerHTML = allOrders.map(order => {
-    const isDelivered = order.airtimeStatus === 'delivered';
-    const isPending = ['pending_provider', 'pending'].includes(order.airtimeStatus);
-    const statusColor = isDelivered ? '#15803d' : (isPending ? '#b45309' : '#b91c1c');
-    const statusBg = isDelivered ? '#dcfce7' : (isPending ? '#fef3c7' : '#fee2e2');
-    const statusLabel = isDelivered ? 'Delivered' : (isPending ? 'Queued' : 'Failed');
+    const isSuccess = ['successful', 'delivered', 'completed'].includes(order.airtimeStatus);
+    const isPending = ['pending_provider', 'pending', 'processing'].includes(order.airtimeStatus);
+    const statusColor = isSuccess ? '#15803d' : (isPending ? '#b45309' : '#b91c1c');
+    const statusBg = isSuccess ? '#dcfce7' : (isPending ? '#fef3c7' : '#fee2e2');
+    const statusLabel = isSuccess ? 'Successful' : (isPending ? 'Queued' : 'Failed');
     const dateStr = order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'Recent';
 
     return `

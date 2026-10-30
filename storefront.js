@@ -169,14 +169,20 @@ async function loadStore() {
 
     const ownerId = store.agent_id;
     if (!agent) {
-      const { data: ownerAgent } = await supabase.from('agents').select('full_name').eq('id', ownerId).maybeSingle();
+      const { data: ownerAgent } = await supabase.from('agents').select('full_name, agent_code').eq('id', ownerId).maybeSingle();
       agent = ownerAgent;
     }
 
-    // Fetch catalog, store_products, and agent custom pricing
-    const [catalogRes, pricingRes, productsRes] = await Promise.all([
+    // Fetch catalog, store_products, and agent custom pricing from both agent_prices and agent_pricing
+    const agentIdentifiers = [ownerId];
+    if (store.slug) agentIdentifiers.push(store.slug);
+    if (agent?.agent_code) agentIdentifiers.push(agent.agent_code);
+    if (agentParam && !agentIdentifiers.includes(agentParam)) agentIdentifiers.push(agentParam);
+
+    const [catalogRes, pricingRes, agentPricesRes, productsRes] = await Promise.all([
       supabase.from('bundle_catalog').select('*').eq('active', true).order('sort_order', { ascending: true }),
       supabase.from('agent_pricing').select('pricing_key, price').eq('agent_id', ownerId),
+      supabase.from('agent_prices').select('agent_id, network, package_id, custom_price').in('agent_id', agentIdentifiers),
       supabase.from('store_products').select('product_ref, price, is_enabled').eq('store_id', store.id).eq('product_type', 'data_bundle')
     ]);
 
@@ -184,6 +190,18 @@ async function loadStore() {
     (pricingRes.data || []).forEach(r => {
       const val = Number(r.price);
       if (val > 0) customPrices.set(String(r.pricing_key).toLowerCase(), val);
+    });
+
+    (agentPricesRes.data || []).forEach(r => {
+      const val = Number(r.custom_price);
+      if (val > 0) {
+        const net = String(r.network).toLowerCase();
+        const pkg = String(r.package_id).toLowerCase();
+        customPrices.set(`price_${net}_${pkg}`, val);
+        customPrices.set(`${net}_${pkg}`, val);
+        customPrices.set(`${net}-${pkg}`, val);
+        customPrices.set(pkg, val);
+      }
     });
 
     const overrides = new Map();

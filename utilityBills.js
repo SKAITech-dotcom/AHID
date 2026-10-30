@@ -193,10 +193,14 @@ function clearVerification() {
 }
 
 function sanitizeMeterNumber(val) {
-  let clean = String(val || '').trim();
-  // Ensure meter number is treated strictly as an alphanumeric string without phone formatting.
-  // If a browser autofill or user mistakenly prepended "+233" or "233" to an alphanumeric meter, strip it.
-  if (/^\+?233[A-Za-z]/.test(clean)) {
+  if (!val) return '';
+  let clean = String(val).trim();
+  // Ensure the meter number field is treated strictly as an alphanumeric string
+  // and is kept completely separate from any phone number formatting, country-code appending,
+  // or prefix logic. If a browser autofill or client prepends "+233" or "233", strip it.
+  if (/^\+?233([A-Za-z].*)$/.test(clean)) {
+    clean = clean.replace(/^\+?233/, '');
+  } else if (/^\+?233(\d{8,16})$/.test(clean)) {
     clean = clean.replace(/^\+?233/, '');
   }
   return clean;
@@ -222,7 +226,7 @@ export async function verifyAccount() {
   const phoneVal = $('customerPhone')?.value?.trim() || '';
   try {
     const { data, error } = await supabase.functions.invoke('verify-utility-account', {
-      body: { billType, accountNumber: accountVal, meterType, phone: phoneVal, customerPhone: phoneVal, mobile: phoneVal },
+      body: { billType, accountNumber: accountVal, meterNumber: accountVal, meterType, phone: phoneVal, customerPhone: phoneVal, mobile: phoneVal },
     });
     if (error || data?.verified !== true) {
       let errorMsg = data?.error;

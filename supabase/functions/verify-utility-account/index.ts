@@ -13,9 +13,11 @@ Deno.serve(async (request) => {
     const service = String(body.billType ?? '').trim().toLowerCase();
     // Meter numbers and account numbers are strictly alphanumeric strings (e.g. "P241759005").
     // Do NOT prepend country code "233" or format as a phone number. If a client or browser autofill
-    // erroneously prepended "233" to an alphanumeric meter, strip the spurious prefix.
-    let accountNumber = String(body.accountNumber ?? '').trim();
-    if (/^\+?233[A-Za-z]/.test(accountNumber)) {
+    // erroneously prepended "233" to a meter, strip the spurious prefix.
+    let accountNumber = String(body.accountNumber ?? body.meterNumber ?? '').trim();
+    if (/^\+?233([A-Za-z].*)$/.test(accountNumber)) {
+      accountNumber = accountNumber.replace(/^\+?233/, '');
+    } else if (/^\+?233(\d{8,16})$/.test(accountNumber)) {
       accountNumber = accountNumber.replace(/^\+?233/, '');
     }
     if (!SERVICES.has(service) || accountNumber.length < 4 || accountNumber.length > 30) {

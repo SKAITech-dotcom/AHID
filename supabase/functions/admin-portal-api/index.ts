@@ -497,8 +497,10 @@ Deno.serve(async (request) => {
 
     // ACTION: VERIFY UTILITY / METER / ACCOUNT (ECG, Water, TV)
     if (action === 'verify-utility-meter' || action === 'verify-utility-account') {
-      let accountNumber = String(body.accountNumber || '').trim();
-      if (/^\+?233[A-Za-z]/.test(accountNumber)) {
+      let accountNumber = String(body.accountNumber || body.meterNumber || '').trim();
+      if (/^\+?233([A-Za-z].*)$/.test(accountNumber)) {
+        accountNumber = accountNumber.replace(/^\+?233/, '');
+      } else if (/^\+?233(\d{8,16})$/.test(accountNumber)) {
         accountNumber = accountNumber.replace(/^\+?233/, '');
       }
       const rawService = String(body.service || 'ecg_prepaid').trim().toLowerCase();
@@ -532,8 +534,10 @@ Deno.serve(async (request) => {
     // ACTION: DISPATCH UTILITY (ECG Prepaid, ECG Postpaid, Ghana Water, DStv, GOtv, StarTimes)
     if (action === 'dispatch-utility') {
       const rawService = String(body.service || 'ecg_prepaid').trim().toLowerCase();
-      let accountNumber = String(body.accountNumber || '').trim();
-      if (/^\+?233[A-Za-z]/.test(accountNumber)) {
+      let accountNumber = String(body.accountNumber || body.meterNumber || '').trim();
+      if (/^\+?233([A-Za-z].*)$/.test(accountNumber)) {
+        accountNumber = accountNumber.replace(/^\+?233/, '');
+      } else if (/^\+?233(\d{8,16})$/.test(accountNumber)) {
         accountNumber = accountNumber.replace(/^\+?233/, '');
       }
       const amount = Number(body.amount);
