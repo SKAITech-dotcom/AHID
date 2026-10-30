@@ -5,6 +5,16 @@ import { friendlyProviderMessage } from '../_shared/providerMessages.ts';
 
 const VALID_NETWORKS = new Set(['mtn', 'telecel', 'at']);
 
+function generateShortCode(): string {
+  const chars = 'ABCDEFGHJKMNPQRSTVWXYZ0123456789';
+  let code = '';
+  const bytes = crypto.getRandomValues(new Uint8Array(5));
+  for (let i = 0; i < 5; i++) {
+    code += chars[bytes[i] % chars.length];
+  }
+  return code;
+}
+
 async function findIdempotentOrder(admin: ReturnType<typeof adminClient>, key: string, agentId: string) {
   if (!key) return null;
   const { data } = await admin
@@ -120,18 +130,22 @@ Deno.serve(async (request) => {
       const existing = await findIdempotentOrder(admin, clientRequestId, agentId);
       if (existing && existing.payment_method === 'wallet') {
         console.log('[create-airtime-payment] Found existing order for clientRequestId:', clientRequestId);
+        const code = existing.short_code || generateShortCode();
         return json({
           success: true,
           idempotent: true,
           paymentMethod: 'wallet',
-          reference: existing.payment_reference,
+          orderId: code,
+          shortCode: code,
+          reference: code,
+          paymentReference: existing.payment_reference,
           amount: existing.amount,
           network: existing.network,
           phone: existing.recipient_phone,
           airtimeStatus: existing.airtime_status,
           message: existing.airtime_status === 'failed'
-            ? 'This airtime attempt already failed and was refunded.'
-            : 'This airtime purchase was already submitted. No duplicate charge was made.',
+            ? `This airtime attempt already failed and was refunded. (Order #${code})`
+            : `This airtime purchase was already submitted. No duplicate charge was made. (Order #${code})`,
         });
       }
     }
@@ -172,6 +186,23 @@ Deno.serve(async (request) => {
       await admin.from('airtime_orders').update({ idempotency_key: clientRequestId }).eq('id', orderData.id);
     }
 
+    // Resolve the 5-character order ID
+    let shortCode = (orderData as Record<string, unknown>)?.short_code as string | undefined;
+    if (!shortCode && orderData?.id) {
+      const { data: row } = await admin
+        .from('airtime_orders')
+        .select('short_code')
+        .eq('id', orderData.id)
+        .maybeSingle();
+      shortCode = row?.short_code;
+    }
+    if (!shortCode || shortCode.length !== 5) {
+      shortCode = generateShortCode();
+      if (orderData?.id) {
+        await admin.from('airtime_orders').update({ short_code: shortCode }).eq('id', orderData.id);
+      }
+    }
+
     // 5. Dispatch Airtime to Hubtel Provider
     console.log('[create-airtime-payment] Dispatching airtime to Hubtel:', { phone, network, amount: netAmount, reference });
     const dispatchResult = await dispatchAirtimeTopup({
@@ -196,12 +227,16 @@ Deno.serve(async (request) => {
         success: true,
         paymentMethod: 'wallet',
         walletBalance,
-        reference,
+        orderId: shortCode,
+        shortCode,
+        reference: shortCode,
+        orderReference: reference,
+        paymentReference: reference,
         amount: netAmount,
         network,
         phone,
         airtimeStatus: 'delivered',
-        message: `${serviceName} airtime top-up of GHS ${netAmount.toFixed(2)} to ${phone} was successful!`,
+        message: `${serviceName} airtime top-up of GHS ${netAmount.toFixed(2)} to ${phone} was successful! (Order #${shortCode})`,
       });
     }
 
@@ -222,12 +257,16 @@ Deno.serve(async (request) => {
         pending: true,
         paymentMethod: 'wallet',
         walletBalance,
-        reference,
+        orderId: shortCode,
+        shortCode,
+        reference: shortCode,
+        orderReference: reference,
+        paymentReference: reference,
         amount: netAmount,
         network,
         phone,
         airtimeStatus: 'pending_provider',
-        message: 'Hubtel accepted the airtime request. Delivery is being confirmed; please do not resend.',
+        message: `Hubtel accepted the airtime request (Order #${shortCode}). Delivery is being confirmed; please do not resend.`,
       }, 202);
     }
 
@@ -247,13 +286,17 @@ Deno.serve(async (request) => {
 
     const walletBalance = await refundWallet(agentId, reference, netAmount, `${serviceName} airtime provider failed`);
 
-    const userFacingMsg = `Airtime delivery failed: ${failureReason}. Your wallet has been refunded.`;
+    const userFacingMsg = `Airtime delivery failed: ${failureReason}. Your wallet has been refunded. (Order #${shortCode})`;
     return json({
       success: false,
       refunded: true,
       paymentMethod: 'wallet',
       walletBalance,
-      reference,
+      orderId: shortCode,
+      shortCode,
+      reference: shortCode,
+      orderReference: reference,
+      paymentReference: reference,
       amount: netAmount,
       network,
       phone,

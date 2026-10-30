@@ -760,7 +760,7 @@ async function loadAirtimeData() {
   try {
     const { data: airtimeOrders, error } = await supabase
       .from('airtime_orders')
-      .select('id, payment_reference, recipient_phone, network, amount, fee_amount, gross_amount, payment_method, payment_status, airtime_status, provider_reference, failure_reason, customer_name, customer_email, created_at')
+      .select('id, payment_reference, short_code, recipient_phone, network, amount, fee_amount, gross_amount, payment_method, payment_status, airtime_status, provider_reference, failure_reason, customer_name, customer_email, created_at')
       .order('created_at', { ascending: false })
       .limit(100);
 
@@ -801,9 +801,10 @@ function renderAirtimeOrders(orders) {
       ? `<button class="btn btn-secondary btn-sm" onclick="retryAirtimeOrder('${o.id}')"><i class="fa-solid fa-arrows-rotate"></i> Retry</button>`
       : '<span style="color: var(--text-dim); font-size: 0.75rem;">—</span>';
 
+    const orderDisplayId = o.short_code ? '#' + o.short_code : escapeHtml(o.payment_reference);
     return `
       <tr>
-        <td><span>${escapeHtml(o.payment_reference)}</span></td>
+        <td><strong style="color: var(--primary);">${orderDisplayId}</strong></td>
         <td>${escapeHtml(o.recipient_phone)}</td>
         <td><span class="badge ${netClass}">${escapeHtml((o.network || '').toUpperCase())}</span></td>
         <td><strong>${money(o.amount)}</strong></td>

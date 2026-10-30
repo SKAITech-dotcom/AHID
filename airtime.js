@@ -421,8 +421,12 @@ export async function handleAirtimeSubmit(event) {
       applyWalletBalance(agentWalletBalance);
     }
 
+    const orderCode = data.shortCode || data.orderId || (data.reference && data.reference.length === 5 ? data.reference : data.reference?.slice(-5)?.toUpperCase() || 'AIRTM');
     saveOrderToLocalHistory({
-      reference: data.reference,
+      reference: orderCode,
+      orderId: orderCode,
+      shortCode: orderCode,
+      orderReference: data.paymentReference || data.reference,
       phone: data.phone || phone,
       network: data.network || selectedNetwork,
       amount: Number(data.amount || netAmount),
@@ -433,7 +437,7 @@ export async function handleAirtimeSubmit(event) {
 
     const brand = NETWORK_INFO[selectedNetwork] || NETWORK_INFO.mtn;
     closeAirtimeFlow();
-    showResultNotice(data.message || `${brand.title} top-up of GHS ${netAmount.toFixed(2)} sent to ${phone}.`);
+    showResultNotice(data.message || `${brand.title} top-up of GHS ${netAmount.toFixed(2)} sent to ${phone}. Order ID: #${orderCode}`);
   } catch (err) {
     hideProcessing();
     showNotice(err.message || 'Error completing request.', true);

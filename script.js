@@ -1048,9 +1048,12 @@ async function loadStoredOrders() {
         const localAirtime = JSON.parse(localStorage.getItem('skaitech_airtime_orders') || '[]');
         const existingIds = new Set(savedOrders.map(s => String(s.id).toUpperCase()));
         localAirtime.forEach(o => {
-            if (o.reference && !existingIds.has(String(o.reference).toUpperCase())) {
+            const rawRef = o.reference || o.orderId || o.shortCode;
+            if (rawRef && !existingIds.has(String(rawRef).toUpperCase())) {
+                const code5 = o.shortCode || o.orderId || (o.reference && o.reference.length === 5 ? o.reference : o.reference?.slice(-5)?.toUpperCase()) || 'AIRTM';
                 savedOrders.push({
-                    id: o.reference,
+                    id: code5,
+                    shortId: code5,
                     type: 'airtime',
                     network: (o.network || 'AIRTIME').toUpperCase(),
                     phone: maskPhoneDisplay(o.phone),
