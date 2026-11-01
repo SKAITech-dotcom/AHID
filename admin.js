@@ -298,8 +298,18 @@ async function loadOverviewData() {
     document.getElementById('kpiAgentStoreSales').textContent = money(storeSalesTotal);
 
     // Live Disbursement Float [Account 2027124]
-    // Uses instant live float estimation from wallet balances or fallback
-    const disbursementBalance = 15420.50; // Hubtel 2027124 float balance
+    // Fetch live balance from the edge function (Hubtel commission services)
+    let disbursementBalance = 0;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await supabase.functions.invoke('admin-portal-api', {
+        body: { section: 'overview' },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (res.data?.disbursement?.balance !== undefined) {
+        disbursementBalance = Number(res.data.disbursement.balance) || 0;
+      }
+    } catch (_) { /* edge function will return 0/unconfigured if Hubtel creds are not set */ }
     document.getElementById('kpiDisbursementBalance').textContent = money(disbursementBalance);
     document.getElementById('topbarDisbursementBal').textContent = money(disbursementBalance);
 
@@ -1248,16 +1258,15 @@ function renderStoresList(stores) {
 
 async function toggleStoreStatus(storeId, isActive) {
   try {
-    const { error } = await supabase
-      .from('agent_stores')
-      .update({
-        is_active: isActive,
-        suspended_reason: isActive ? null : 'Paused by Admin',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', storeId);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await supabase.functions.invoke('admin-portal-api', {
+      body: { action: 'toggle-store-status', storeId, isActive },
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    });
 
-    if (error) throw error;
+    if (res.error || !res.data?.success) {
+      throw new Error(res.data?.error || res.error?.message || 'Failed to toggle store status');
+    }
     showToast(`Store ${isActive ? 're-opened' : 'paused'} successfully!`, 'success');
     loadStoresData();
   } catch (err) {
@@ -1272,17 +1281,15 @@ async function saveCommissionRates() {
   const hubtelShare = parseFloat(document.getElementById('hubtelShareInput').value);
 
   try {
-    const { error } = await supabase
-      .from('service_commission_rates')
-      .upsert({
-        service_name: serviceName,
-        commission_percent: commissionPercent,
-        merchant_share_percent: merchantShare,
-        hubtel_share_percent: hubtelShare,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'service_name' });
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await supabase.functions.invoke('admin-portal-api', {
+      body: { action: 'update-commission-rates', serviceName, commissionPercent, merchantShare, hubtelShare },
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    });
 
-    if (error) throw error;
+    if (res.error || !res.data?.success) {
+      throw new Error(res.data?.error || res.error?.message || 'Failed to save commission rates');
+    }
     showToast('Commission configuration saved successfully!', 'success');
   } catch (err) {
     showToast(err.message, 'error');
@@ -1534,7 +1541,7 @@ async function loadAdminsData() {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const res = await supabase.functions.invoke('manage-admins', {
-      method: 'GET',
+      body: {},
       headers: { Authorization: `Bearer ${session?.access_token}` },
     });
 
@@ -1891,10 +1898,15 @@ async function submitEditAfaFee() {
   }
 
   try {
-    const { error } = await supabase.from('service_pricing')
-      .upsert({ service: 'afa', price: fee, description: 'AFA Registration Fee' }, { onConflict: 'service' });
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await supabase.functions.invoke('admin-portal-api', {
+      body: { action: 'update-afa-fee', fee },
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    });
 
-    if (error) throw error;
+    if (res.error || !res.data?.success) {
+      throw new Error(res.data?.error || res.error?.message || 'Failed to update AFA fee.');
+    }
     showToast(`AFA fee updated to ${money(fee)} successfully.`, 'success');
     closeEditAfaFeeModal();
     document.getElementById('afaFeeDisplay').textContent = money(fee);
@@ -2618,14 +2630,14 @@ function openEditBundlePriceModal(id, title, network, currentPrice, catalogType)
 
   const modal = document.getElementById('editBundlePriceModal');
   if (modal) {
-    modal.classList.add('active');
+    modal.classList.add('open');
     setTimeout(() => document.getElementById('editBundleNewPriceInput').focus(), 80);
   }
 }
 
 function closeEditBundlePriceModal() {
   const modal = document.getElementById('editBundlePriceModal');
-  if (modal) modal.classList.remove('active');
+  if (modal) modal.classList.remove('open');
 }
 
 async function submitEditBundlePrice() {

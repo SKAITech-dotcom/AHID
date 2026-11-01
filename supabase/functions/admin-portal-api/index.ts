@@ -882,15 +882,17 @@ Deno.serve(async (request) => {
               !['failed', 'cancelled'].includes(String(order.status)) &&
               order.agent_id
             ) {
-              await admin.rpc('admin_adjust_wallet', {
-                p_user_id: order.agent_id,
-                p_amount: order.amount,
-                p_type: 'credit',
-                p_reason: `Refund: Order ${ref} failed with provider (${live.status})`,
-                p_admin_id: caller.id,
-              }).catch((refundErr: unknown) => {
+              try {
+                await admin.rpc('admin_adjust_wallet', {
+                  p_user_id: order.agent_id,
+                  p_amount: order.amount,
+                  p_type: 'credit',
+                  p_reason: `Refund: Order ${ref} failed with provider (${live.status})`,
+                  p_admin_id: caller.id,
+                });
+              } catch (refundErr) {
                 console.error('Wallet refund after provider failure failed:', refundErr);
-              });
+              }
             }
           } else {
             // Still processing – update the response timestamp so we know the check ran
@@ -983,15 +985,17 @@ Deno.serve(async (request) => {
           }).eq('id', order.id);
 
           if (nextStatus === 'failed' && order.status !== 'failed' && order.user_id) {
-            await admin.rpc('admin_adjust_wallet', {
-              p_user_id: order.user_id,
-              p_amount: order.amount,
-              p_type: 'credit',
-              p_reason: `Refund: Instant data ${ref} failed with provider (${live.status})`,
-              p_admin_id: caller.id,
-            }).catch((refundErr: unknown) => {
+            try {
+              await admin.rpc('admin_adjust_wallet', {
+                p_user_id: order.user_id,
+                p_amount: order.amount,
+                p_type: 'credit',
+                p_reason: `Refund: Instant data ${ref} failed with provider (${live.status})`,
+                p_admin_id: caller.id,
+              });
+            } catch (refundErr) {
               console.error('Instant data refund after failure failed:', refundErr);
-            });
+            }
           }
 
           return json({
