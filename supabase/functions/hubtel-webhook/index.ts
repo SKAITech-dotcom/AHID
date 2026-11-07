@@ -41,20 +41,30 @@ Deno.serve(async (request) => {
     }
 
     const payload = await readJson(request);
-    // Online Checkout callbacks use a flat root payload. Keep the fallback
-    // camelCase names for status probes/replayed legacy callbacks, but do not
-    // require a nested Data object to settle a wallet top-up.
-    const responseCode = String(payload.ResponseCode ?? payload.responseCode ?? '').trim();
-    const status = String(payload.Status ?? payload.status ?? '').trim().toUpperCase();
-    const reference = String(payload.ClientReference ?? payload.clientReference ?? '').trim();
+    // Hubtel's current Online Checkout callback puts transaction fields inside
+    // PascalCase `Data`. Keep root-level and camelCase fallbacks for older or
+    // replayed payloads, but prefer the documented callback shape.
+    const callbackData = payload.Data && typeof payload.Data === 'object'
+      ? payload.Data as Record<string, unknown>
+      : payload.data && typeof payload.data === 'object'
+        ? payload.data as Record<string, unknown>
+        : {};
+    const responseCode = String(
+      payload.ResponseCode ?? payload.responseCode ?? callbackData.ResponseCode ?? callbackData.responseCode ?? ''
+    ).trim();
+    const status = String(payload.Status ?? payload.status ?? callbackData.Status ?? callbackData.status ?? '').trim().toUpperCase();
+    const reference = String(payload.ClientReference ?? payload.clientReference ?? callbackData.ClientReference ?? callbackData.clientReference ?? '').trim();
     const orderId = String(
       payload.CheckoutId ?? payload.checkoutId ?? payload.SalesInvoiceId
-      ?? payload.salesInvoiceId ?? payload.OrderId ?? payload.orderId ?? ''
+      ?? payload.salesInvoiceId ?? payload.OrderId ?? payload.orderId
+      ?? callbackData.CheckoutId ?? callbackData.checkoutId ?? callbackData.SalesInvoiceId
+      ?? callbackData.salesInvoiceId ?? callbackData.OrderId ?? callbackData.orderId ?? ''
     ).trim();
-    const amount = Number(payload.Amount ?? payload.amount);
+    const amount = Number(payload.Amount ?? payload.amount ?? callbackData.Amount ?? callbackData.amount);
     const isSuccessfulCallback = responseCode === '0000' && status === 'SUCCESS';
     const isFailedCallback = responseCode === '2001' || ['FAILED', 'DECLINED', 'CANCELLED', 'CANCELED'].includes(status);
 
+    console.log('--- INCOMING HUBTEL CALLBACK ---', JSON.stringify(payload, null, 2));
     console.log('[Hubtel wallet callback]', JSON.stringify({
       responseCode,
       status,
