@@ -92,13 +92,13 @@ async function startCheckout() {
   showMessage('Preparing your secure payment…', 'info');
   try {
     const { data, error } = await supabase.functions.invoke('create-public-data-checkout', {
-      body: { bundleId: selectedBundle.bundleId, phone },
+      body: { bundleId: selectedBundle.bundleId, phone, paymentProvider: 'hubtel' },
     });
     if (error) {
       const details = await readFunctionError(error);
       throw new Error(details.message || 'Unable to start checkout.');
     }
-    if (!data?.authorizationUrl || !data.reference || !data.accessToken) throw new Error(data?.error || 'Paystack did not return a checkout link.');
+    if (!data?.authorizationUrl || !data.reference || !data.accessToken) throw new Error(data?.error || 'Hubtel did not return a checkout link.');
     sessionStorage.setItem('skaitech_guest_data_payment', JSON.stringify({
       reference: data.reference,
       accessToken: data.accessToken,
@@ -159,7 +159,7 @@ async function showPaymentResult() {
         return;
       }
       if (state === 'failed' || state === 'cancelled') {
-        $('statusText').textContent = 'This bundle could not be delivered. Your Paystack payment has been sent for refund.';
+        $('statusText').textContent = 'This bundle could not be delivered. Please contact support about the Hubtel payment refund.';
         $('statusText').style.color = '#991b1b';
         return;
       }

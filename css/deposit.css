@@ -1,0 +1,84 @@
+/* Agent deposit page: presentation only. Payment calls remain in agentDeposit.js. */
+.deposit-page { min-height: 100vh; background: #f6f8fb; color: #10213b; }
+.deposit-main { width: min(1080px, calc(100% - 32px)); margin: 0 auto; padding: 42px 0 72px; }
+.deposit-intro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(290px, 390px); align-items: end; gap: 28px; margin-bottom: 28px; }
+.deposit-eyebrow { margin: 0 0 10px; color: #149b70; font-size: .74rem; font-weight: 900; letter-spacing: .14em; }
+.deposit-intro h1 { margin: 0; color: #10213b; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.04; letter-spacing: -.055em; }
+.deposit-subtitle { max-width: 610px; margin: 14px 0 0; color: #607089; font-size: 1rem; line-height: 1.65; }
+.deposit-balance-card { display: flex; align-items: center; gap: 14px; min-height: 112px; padding: 20px 22px; border-radius: 24px; color: #fff; background: linear-gradient(135deg, #159c72 0%, #087a68 100%); box-shadow: 0 18px 36px rgba(8, 122, 104, .22); }
+.deposit-balance-icon { display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 48px; border-radius: 16px; background: rgba(255, 255, 255, .18); font-size: 1.25rem; }
+.deposit-balance-label { display: block; margin-bottom: 4px; color: rgba(255, 255, 255, .76); font-size: .78rem; font-weight: 700; }
+.deposit-balance-card strong { display: block; font-size: 1.16rem; letter-spacing: -.02em; }
+.deposit-balance-trend { margin-left: auto; align-self: flex-start; color: rgba(255, 255, 255, .78); }
+.deposit-action-card { display: flex; align-items: center; gap: 18px; padding: 24px; border: 1px solid #e1e8f0; border-radius: 24px; background: #fff; box-shadow: 0 12px 30px rgba(16, 33, 59, .06); }
+.deposit-action-icon { display: grid; place-items: center; width: 54px; height: 54px; flex: 0 0 54px; border-radius: 18px; color: #087a68; background: #dcf8eb; font-size: 1.2rem; }
+.deposit-action-copy { flex: 1; }
+.deposit-action-copy h2 { margin: 0 0 4px; font-size: 1.15rem; }
+.deposit-action-copy p { margin: 0; color: #738198; font-size: .91rem; line-height: 1.5; }
+.load-wallet-btn, .wallet-pay-btn, .wallet-cancel-btn, .gateway-option, .quick-amount, .wallet-modal-close { font: inherit; }
+.load-wallet-btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-width: 150px; padding: 13px 18px; border: 0; border-radius: 13px; color: #fff; background: #10213b; font-size: .92rem; font-weight: 850; cursor: pointer; transition: transform .2s ease, box-shadow .2s ease, background .2s ease; }
+.load-wallet-btn:hover { background: #193454; box-shadow: 0 8px 18px rgba(16, 33, 59, .18); transform: translateY(-1px); }
+.wallet-payment-status { margin-top: 18px; padding: 13px 16px; border: 1px solid #b9d8ff; border-radius: 14px; color: #173d74; background: #eef6ff; font-size: .9rem; }
+.wallet-modal-open { overflow: hidden; }
+.wallet-modal[hidden] { display: none; }
+.wallet-modal { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 18px; }
+.wallet-modal-backdrop { position: absolute; inset: 0; background: rgba(8, 19, 36, .54); backdrop-filter: blur(5px); }
+.wallet-modal-card { position: relative; width: min(100%, 500px); max-height: min(760px, calc(100vh - 36px)); overflow-y: auto; padding: 25px; border: 1px solid #e3e9f0; border-radius: 27px; background: #fff; box-shadow: 0 28px 80px rgba(8, 19, 36, .25); animation: walletModalIn .22s ease-out; }
+@keyframes walletModalIn { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.wallet-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 26px; }
+.wallet-modal-title-wrap { display: flex; align-items: center; gap: 13px; }
+.wallet-modal-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 15px; color: #087a68; background: #dcf8eb; font-size: 1.1rem; }
+.wallet-modal-header h2 { margin: 0; color: #10213b; font-size: 1.35rem; letter-spacing: -.025em; }
+.wallet-modal-header p { margin: 3px 0 0; color: #7a879a; font-size: .82rem; }
+.wallet-modal-close { width: 34px; height: 34px; border: 0; border-radius: 50%; color: #7a879a; background: #f4f6f8; font-size: 1.55rem; line-height: 1; cursor: pointer; }
+.wallet-modal-close:hover { color: #10213b; background: #e9eef3; }
+.wallet-field-label, .gateway-fieldset legend { display: block; margin-bottom: 9px; color: #31445f; font-size: .82rem; font-weight: 850; }
+.wallet-amount-input-wrap { position: relative; }
+.wallet-amount-input-wrap > span { position: absolute; top: 50%; left: 16px; color: #718098; font-size: 1.06rem; font-weight: 900; transform: translateY(-50%); }
+.wallet-amount-input-wrap input { width: 100%; padding: 15px 16px 15px 40px; border: 1px solid #d7e0e9; border-radius: 14px; outline: none; color: #10213b; background: #fbfcfd; font: inherit; font-size: 1.02rem; font-weight: 750; transition: border-color .2s ease, box-shadow .2s ease; }
+.wallet-amount-input-wrap input:focus { border-color: #159c72; box-shadow: 0 0 0 4px rgba(21, 156, 114, .12); }
+.quick-amounts { display: flex; flex-wrap: wrap; gap: 9px; margin: 13px 0 25px; }
+.quick-amount { padding: 8px 13px; border: 1px solid #d8e2eb; border-radius: 999px; color: #334864; background: #fff; font-size: .82rem; font-weight: 800; cursor: pointer; transition: .2s ease; }
+.quick-amount:hover, .quick-amount.is-selected { border-color: #159c72; color: #087a68; background: #e9faf1; }
+.gateway-fieldset { padding: 0; border: 0; }
+.gateway-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.gateway-option { position: relative; display: flex; align-items: center; gap: 10px; min-height: 73px; padding: 12px; border: 1.5px solid #dce4ec; border-radius: 15px; color: #263b55; background: #fff; text-align: left; cursor: pointer; transition: border-color .2s ease, background .2s ease, box-shadow .2s ease; }
+.gateway-option.is-selected { border-color: #159c72; background: #f1fcf6; box-shadow: 0 0 0 3px rgba(21, 156, 114, .09); }
+.gateway-logo { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 11px; font-size: .9rem; }
+.gateway-logo-paystack { color: #1d4ed8; background: #e6efff; }
+.gateway-logo-skaipay { color: #087a68; background: #dcf8eb; }
+.gateway-option strong, .gateway-option small { display: block; }
+.gateway-option strong { font-size: .82rem; }
+.gateway-option small { margin-top: 3px; color: #7a879a; font-size: .68rem; }
+.gateway-check { display: none; position: absolute; top: 9px; right: 9px; color: #159c72; font-size: .78rem; }
+.gateway-option.is-selected .gateway-check { display: block; }
+.wallet-modal-actions { display: grid; grid-template-columns: 1.35fr .65fr; gap: 10px; margin-top: 28px; }
+.wallet-pay-btn, .wallet-cancel-btn { min-height: 48px; border-radius: 13px; font-size: .9rem; font-weight: 850; cursor: pointer; }
+.wallet-pay-btn { border: 0; color: #fff; background: #10213b; }
+.wallet-pay-btn:hover { background: #193454; }
+.wallet-pay-btn:disabled { cursor: wait; opacity: .65; }
+.wallet-cancel-btn { border: 1px solid #dbe3eb; color: #52647e; background: #fff; }
+.wallet-cancel-btn:hover { background: #f5f7f9; }
+.wallet-modal-footer { margin: 22px 0 0; color: #9aa6b6; font-size: .74rem; text-align: center; }
+html.dark .deposit-page { background: #1f242a; color: #f1f5f9; }
+html.dark .deposit-intro h1 { color: #f8fafc; }
+html.dark .deposit-subtitle, html.dark .deposit-action-copy p { color: #b8c2ce; }
+html.dark .deposit-action-card, html.dark .wallet-modal-card { border-color: #4d555e; background: #2b3036; }
+html.dark .deposit-action-copy h2, html.dark .wallet-modal-header h2, html.dark .wallet-field-label, html.dark .gateway-fieldset legend { color: #f1f5f9; }
+html.dark .wallet-amount-input-wrap input, html.dark .gateway-option, html.dark .wallet-cancel-btn, html.dark .quick-amount { border-color: #56616d; color: #f1f5f9; background: #343a41; }
+html.dark .wallet-amount-input-wrap input::placeholder { color: #a5afba; }
+html.dark .gateway-option.is-selected, html.dark .quick-amount.is-selected { border-color: #39c58b; background: #263d38; }
+html.dark .gateway-option small, html.dark .wallet-modal-header p { color: #aeb9c5; }
+html.dark .wallet-modal-close, html.dark .wallet-cancel-btn { color: #cbd5e1; background: #3a4149; }
+@media (max-width: 720px) {
+  .deposit-main { width: min(100% - 24px, 560px); padding-top: 26px; }
+  .deposit-intro { grid-template-columns: 1fr; gap: 18px; }
+  .deposit-balance-card { min-height: 98px; }
+  .deposit-action-card { align-items: flex-start; flex-wrap: wrap; padding: 20px; }
+  .deposit-action-copy { min-width: calc(100% - 76px); }
+  .load-wallet-btn { width: 100%; }
+}
+@media (max-width: 430px) {
+  .wallet-modal-card { padding: 21px 18px; border-radius: 22px; }
+  .gateway-options, .wallet-modal-actions { grid-template-columns: 1fr; }
+}

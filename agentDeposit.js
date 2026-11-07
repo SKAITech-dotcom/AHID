@@ -1,9 +1,12 @@
 import { supabase, readFunctionError } from './supabaseClient.js';
 
+let selectedWalletProvider = 'paystack';
+
 // Load and display current wallet balance on page load
 document.addEventListener('DOMContentLoaded', () => {
     updateWalletDisplay();
     handlePaymentReturn();
+    initializeWalletModal();
 });
 
 async function updateWalletDisplay() {
@@ -26,8 +29,83 @@ async function updateWalletDisplay() {
 
     const balanceDisplay = document.getElementById('walletHeaderDisplay');
     if (balanceDisplay) {
-        balanceDisplay.innerText = `Wallet Balance: GHS ${balance.toFixed(2)}`;
+        balanceDisplay.innerText = `Available Balance: GHS ${balance.toFixed(2)}`;
     }
+}
+
+function walletAmount() {
+    const value = Number.parseFloat(document.getElementById('expressAmount')?.value || '0');
+    return Number.isFinite(value) ? value : 0;
+}
+
+function updateWalletPayButton() {
+    const button = document.getElementById('loadWalletPayBtn');
+    if (!button || button.disabled) return;
+    const amount = walletAmount();
+    button.textContent = amount > 0
+        ? `Pay GH₵ ${amount.toFixed(2)}`
+        : 'Enter Amount';
+}
+
+function closeLoadWalletModal() {
+    const modal = document.getElementById('loadWalletModal');
+    if (!modal) return;
+    modal.hidden = true;
+    document.body.classList.remove('wallet-modal-open');
+}
+
+function openLoadWalletModal() {
+    const modal = document.getElementById('loadWalletModal');
+    if (!modal) return;
+    modal.hidden = false;
+    document.body.classList.add('wallet-modal-open');
+    updateWalletPayButton();
+    window.setTimeout(() => document.getElementById('expressAmount')?.focus(), 50);
+}
+
+function selectWalletProvider(provider) {
+    selectedWalletProvider = String(provider).toLowerCase() === 'hubtel' ? 'hubtel' : 'paystack';
+    document.querySelectorAll('.gateway-option[data-provider]').forEach((option) => {
+        const isSelected = option.dataset.provider === selectedWalletProvider;
+        option.classList.toggle('is-selected', isSelected);
+        option.setAttribute('aria-pressed', String(isSelected));
+    });
+}
+
+function chooseWalletAmount(amount) {
+    const input = document.getElementById('expressAmount');
+    if (!input) return;
+    input.value = amount;
+    document.querySelectorAll('.quick-amount[data-amount]').forEach((chip) => {
+        chip.classList.toggle('is-selected', Number(chip.dataset.amount) === Number(amount));
+    });
+    updateWalletPayButton();
+}
+
+function initializeWalletModal() {
+    document.getElementById('loadWalletBtn')?.addEventListener('click', openLoadWalletModal);
+    document.getElementById('closeLoadWalletBtn')?.addEventListener('click', closeLoadWalletModal);
+    document.getElementById('cancelLoadWalletBtn')?.addEventListener('click', closeLoadWalletModal);
+    document.querySelector('[data-close-wallet-modal]')?.addEventListener('click', closeLoadWalletModal);
+    document.getElementById('expressAmount')?.addEventListener('input', () => {
+        document.querySelectorAll('.quick-amount[data-amount]').forEach((chip) => {
+            chip.classList.toggle('is-selected', Number(chip.dataset.amount) === walletAmount());
+        });
+        updateWalletPayButton();
+    });
+    document.querySelectorAll('.quick-amount[data-amount]').forEach((chip) => {
+        chip.addEventListener('click', () => chooseWalletAmount(chip.dataset.amount));
+    });
+    document.querySelectorAll('.gateway-option[data-provider]').forEach((option) => {
+        option.addEventListener('click', () => selectWalletProvider(option.dataset.provider));
+    });
+    document.getElementById('loadWalletForm')?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        payWithExpressPay(selectedWalletProvider);
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !document.getElementById('loadWalletModal')?.hidden) closeLoadWalletModal();
+    });
 }
 
 async function verifyWalletTopup(reference) {
@@ -136,8 +214,8 @@ async function payWithExpressPay(provider = 'paystack') {
         return;
     }
 
-    const button = document.getElementById(`${selectedProvider}PayBtn`);
-    const providerLabel = selectedProvider === 'hubtel' ? 'Hubtel' : 'Paystack';
+    const button = document.getElementById('loadWalletPayBtn');
+    const providerLabel = selectedProvider === 'hubtel' ? 'Skaipay' : 'Paystack';
     if (button) {
         button.disabled = true;
         button.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Opening ${providerLabel} checkout…`;
@@ -160,7 +238,7 @@ async function payWithExpressPay(provider = 'paystack') {
         alert(error.message || `Unable to start ${providerLabel} payment. Please try again.`);
         if (button) {
             button.disabled = false;
-            button.innerHTML = `<i class="fa-solid fa-lock"></i> Pay with ${providerLabel}`;
+            updateWalletPayButton();
         }
     }
 }
@@ -168,3 +246,5 @@ async function payWithExpressPay(provider = 'paystack') {
 // Bind functions to window for HTML onclick attributes
 window.payWithExpressPay = payWithExpressPay;
 window.updateWalletDisplay = updateWalletDisplay;
+window.openLoadWalletModal = openLoadWalletModal;
+window.closeLoadWalletModal = closeLoadWalletModal;

@@ -74,6 +74,37 @@ Deno.serve(async (request) => {
       checkoutId: orderId,
     }, null, 2));
 
+    // Guest/non-agent data checkouts use the same authenticated Hubtel callback
+    // endpoint, but they must never touch wallet_topups. The browser return
+    // flow consumes this persisted callback through verify-public-data-payment.
+    if (/^PUB-GUEST-/i.test(reference)) {
+      const admin = adminClient();
+      const { data: publicOrder, error: publicOrderError } = await admin
+        .from('public_data_orders')
+        .select('id, status')
+        .eq('payment_reference', reference)
+        .maybeSingle();
+      if (publicOrderError) {
+        console.error('[Hubtel guest callback] Order lookup failed', publicOrderError);
+        return json({ received: true, settled: false }, 200);
+      }
+      if (!publicOrder) {
+        console.error('[Hubtel guest callback] No matching public data order', { reference, orderId });
+        return json({ received: true, settled: false }, 200);
+      }
+      const publicUpdate: Record<string, unknown> = { provider_response: payload };
+      if (isFailedCallback && ['pending_payment', 'processing'].includes(String(publicOrder.status))) {
+        publicUpdate.status = 'failed';
+        publicUpdate.completed_at = new Date().toISOString();
+      }
+      const { error: publicSaveError } = await admin
+        .from('public_data_orders')
+        .update(publicUpdate)
+        .eq('id', publicOrder.id);
+      if (publicSaveError) console.error('[Hubtel guest callback] Callback persistence failed', publicSaveError);
+      return json({ received: true, settled: false }, 200);
+    }
+
     if (!reference && !orderId) {
       console.error('[Hubtel wallet callback] Missing ClientReference and CheckoutId', payload);
       return json({ received: true, settled: false });

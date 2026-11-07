@@ -1,5 +1,7 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
 import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
+import { hubtelPaymentsVerifyConfigured, verifyHubtelCollection } from '../_shared/hubtelPayments.ts';
+import { hubtelWalletAmountMatches, normalizeHubtel } from '../_shared/paymentGateway.ts';
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -19,20 +21,21 @@ async function refundPaystack(reference: string) {
 
 async function currentOrder(admin: ReturnType<typeof adminClient>, reference: string) {
   const { data, error } = await admin.from('public_data_orders')
-    .select('id, payment_reference, public_access_token, short_code, customer_phone, network_type, volume_mb, sale_amount, status, provider_response, created_at')
+    .select('id, payment_reference, public_access_token, short_code, customer_phone, network_type, volume_mb, sale_amount, status, provider_response, payment_provider, payment_gross_amount, created_at')
     .eq('payment_reference', reference)
     .maybeSingle();
   if (error) throw error;
   return data;
 }
 
-/** Verifies a guest Paystack payment and dispatches the same provider path used by webhooks. */
+/** Verifies a guest Hubtel payment and dispatches the same provider path used by the return flow. */
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   const admin = adminClient();
   let reference = '';
+  let paymentProvider = 'paystack';
   try {
     const body = await request.json().catch(() => ({}));
     reference = String(body.reference || '').trim();
@@ -40,21 +43,49 @@ Deno.serve(async (request) => {
 
     const order = await currentOrder(admin, reference);
     if (!order) return json({ error: 'Order not found.' }, 404);
+    paymentProvider = String(order.payment_provider || 'paystack').toLowerCase();
     if (['successful', 'failed', 'cancelled'].includes(String(order.status))) {
       return json({ success: order.status === 'successful', status: order.status, order });
     }
 
-    const secret = Deno.env.get('PAYSTACK_SECRET_KEY')?.trim();
-    if (!secret) return json({ error: 'Payment verification is not configured.' }, 503);
-    const verified = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-      headers: { Authorization: `Bearer ${secret}` },
-    });
-    const transaction = await verified.json().catch(() => ({}));
-    const feeRateValue = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.0195');
-    const feeRate = Number.isFinite(feeRateValue) && feeRateValue >= 0 && feeRateValue < 1 ? feeRateValue : 0.0195;
-    const expectedGross = Math.round(roundMoney(Number(order.sale_amount) * (1 + feeRate)) * 100);
-    if (!verified.ok || transaction.data?.status !== 'success' || transaction.data.amount !== expectedGross || transaction.data.currency !== 'GHS') {
-      return json({ success: false, status: 'pending_payment', message: 'Payment is not confirmed yet. Please wait a moment and try again.' });
+    if (paymentProvider === 'hubtel') {
+      const callbackPayload = order.provider_response && typeof order.provider_response === 'object'
+        ? normalizeHubtel(order.provider_response)
+        : null;
+      const callbackAmount = callbackPayload?.amountGhs;
+      const callbackSuccess = callbackPayload?.state === 'success'
+        && callbackAmount !== undefined
+        && hubtelWalletAmountMatches(callbackAmount, Number(order.sale_amount), Number(order.payment_gross_amount));
+      if (callbackSuccess) {
+        // The authenticated Hubtel callback is sufficient. The status endpoint
+        // is only a recovery path for a callback that has not arrived yet.
+      } else if (callbackPayload?.state === 'failed') {
+        return json({ success: false, status: 'failed', message: 'Hubtel payment was not successful.' });
+      } else {
+        const verified = hubtelPaymentsVerifyConfigured()
+          ? await verifyHubtelCollection(reference)
+          : null;
+        if (!verified || verified.state === 'pending') {
+          return json({ success: false, status: 'pending_payment', message: 'Payment is not confirmed yet. Please wait a moment and try again.' });
+        }
+        if (verified.state === 'failed' || verified.amountGhs === undefined
+          || !hubtelWalletAmountMatches(verified.amountGhs, Number(order.sale_amount), Number(order.payment_gross_amount))) {
+          return json({ success: false, status: 'pending_payment', message: 'Payment is still being confirmed.' });
+        }
+      }
+    } else {
+      const secret = Deno.env.get('PAYSTACK_SECRET_KEY')?.trim();
+      if (!secret) return json({ error: 'Payment verification is not configured.' }, 503);
+      const verified = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+        headers: { Authorization: `Bearer ${secret}` },
+      });
+      const transaction = await verified.json().catch(() => ({}));
+      const feeRateValue = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.0195');
+      const feeRate = Number.isFinite(feeRateValue) && feeRateValue >= 0 && feeRateValue < 1 ? feeRateValue : 0.0195;
+      const expectedGross = Math.round(roundMoney(Number(order.sale_amount) * (1 + feeRate)) * 100);
+      if (!verified.ok || transaction.data?.status !== 'success' || transaction.data.amount !== expectedGross || transaction.data.currency !== 'GHS') {
+        return json({ success: false, status: 'pending_payment', message: 'Payment is not confirmed yet. Please wait a moment and try again.' });
+      }
     }
 
     const { data: claimed, error: claimError } = await admin.rpc('claim_public_data_order', { p_order_id: order.id });
@@ -120,7 +151,9 @@ Deno.serve(async (request) => {
       return json({ success: true, status: 'processing', orderReference: reference, orderCode: order.short_code });
     }
 
-    const refund = await refundPaystack(reference);
+    const refund = paymentProvider === 'paystack'
+      ? await refundPaystack(reference)
+      : { requested: false, ok: false };
     await admin.rpc('mark_public_data_order', {
       p_order_id: order.id,
       p_status: 'failed',
@@ -128,16 +161,21 @@ Deno.serve(async (request) => {
       p_provider_reference: providerReference,
       p_provider_response: { ...providerPayload, refundRequested: refund.requested, refundSucceeded: refund.ok },
     });
-    await admin.from('public_data_orders').update({
+    const paymentUpdate: Record<string, unknown> = {
       provider_name: dataPackage.provider,
       provider_package_id: dataPackage.id,
-      paystack_refund_status: refund.ok ? 'initiated' : 'failed',
-    }).eq('id', order.id);
+    };
+    if (paymentProvider === 'paystack') paymentUpdate.paystack_refund_status = refund.ok ? 'initiated' : 'failed';
+    await admin.from('public_data_orders').update(paymentUpdate).eq('id', order.id);
     return json({
       success: false,
       status: 'failed',
       refunded: refund.ok,
-      message: refund.ok ? 'The bundle could not be delivered. Your payment has been refunded.' : 'The bundle could not be delivered. Refund processing needs administrator attention.',
+      message: refund.ok
+        ? 'The bundle could not be delivered. Your payment has been refunded.'
+        : paymentProvider === 'hubtel'
+          ? 'The bundle could not be delivered. Please contact support for the Hubtel payment refund.'
+          : 'The bundle could not be delivered. Refund processing needs administrator attention.',
     });
   } catch (error) {
     console.error('verify-public-data-payment failed:', error);
@@ -147,8 +185,10 @@ Deno.serve(async (request) => {
         provider_response: { error: error instanceof Error ? error.message : 'Guest checkout failed.' },
         completed_at: new Date().toISOString(),
       }).eq('payment_reference', reference).eq('status', 'processing');
-      const refund = await refundPaystack(reference).catch(() => ({ requested: false, ok: false }));
-      if (refund.ok) await admin.from('public_data_orders').update({ paystack_refund_status: 'initiated' }).eq('payment_reference', reference);
+      if (paymentProvider === 'paystack') {
+        const refund = await refundPaystack(reference).catch(() => ({ requested: false, ok: false }));
+        if (refund.ok) await admin.from('public_data_orders').update({ paystack_refund_status: 'initiated' }).eq('payment_reference', reference);
+      }
     }
     return json({ error: error instanceof Error ? error.message : 'Unable to complete this purchase.' }, 500);
   }

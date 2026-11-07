@@ -1,5 +1,7 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
 import { resolveDataPackage } from '../_shared/dataProvider.ts';
+import { hubtelWalletGrossAmount } from '../_shared/paymentGateway.ts';
+import { hubtelPaymentsConfigured, initializeHubtelCollection } from '../_shared/hubtelPayments.ts';
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -9,13 +11,7 @@ function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-function customerCoveredGrossAmount(netAmount: number) {
-  const configured = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.0195');
-  const feeRate = Number.isFinite(configured) && configured >= 0 && configured < 1 ? configured : 0.0195;
-  return roundMoney(netAmount * (1 + feeRate));
-}
-
-/** Creates a Paystack checkout for a guest; no agent session or wallet is used. */
+/** Creates a Hubtel checkout for a guest; no agent session or wallet is used. */
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -29,9 +25,8 @@ Deno.serve(async (request) => {
     }
 
     const siteUrl = Deno.env.get('SITE_URL')?.trim();
-    const paystackSecret = Deno.env.get('PAYSTACK_SECRET_KEY')?.trim();
     const companyAgentId = Deno.env.get('PUBLIC_DATA_AGENT_ID')?.trim();
-    if (!siteUrl || !/^https?:\/\//i.test(siteUrl) || !paystackSecret || !companyAgentId) {
+    if (!siteUrl || !/^https?:\/\//i.test(siteUrl) || !companyAgentId || !hubtelPaymentsConfigured()) {
       return json({ error: 'Guest data checkout is not configured yet. Please try again later.' }, 503);
     }
 
@@ -57,7 +52,7 @@ Deno.serve(async (request) => {
     if (!Number.isFinite(saleAmount) || saleAmount <= 0) return json({ error: 'This bundle has no valid selling price.' }, 409);
 
     // Confirm provider availability before taking payment. The provider cost is
-    // still resolved again after Paystack verification before fulfilment.
+    // still resolved again after Hubtel payment verification before fulfilment.
     const dataPackage = await resolveDataPackage(String(bundle.network), Number(bundle.volume_mb));
     if (!dataPackage) {
       return json({ error: 'This bundle is temporarily unavailable from its provider. No payment was started.' }, 409);
@@ -65,11 +60,10 @@ Deno.serve(async (request) => {
 
     const reference = `PUB-GUEST-${crypto.randomUUID()}`;
     const accessToken = crypto.randomUUID();
-    const grossAmount = customerCoveredGrossAmount(saleAmount);
+    const grossAmount = hubtelWalletGrossAmount(saleAmount);
     const feeAmount = roundMoney(grossAmount - saleAmount);
     const callbackUrl = `${siteUrl.replace(/\/$/, '')}/nonAgentBuyers.html?reference=${encodeURIComponent(reference)}`;
     const customerEmail = `guest-${reference.toLowerCase().replace(/[^a-z0-9-]/g, '')}@customers.skaitechgh.app`;
-
     const { data: order, error: orderError } = await admin.from('public_data_orders').insert({
       payment_reference: reference,
       public_access_token: accessToken,
@@ -79,52 +73,56 @@ Deno.serve(async (request) => {
       network_type: String(bundle.network).toLowerCase(),
       volume_mb: Number(bundle.volume_mb),
       sale_amount: saleAmount,
-      paystack_fee_amount: feeAmount,
-      paystack_gross_amount: grossAmount,
-      payment_provider: 'paystack',
+      paystack_fee_amount: 0,
+      paystack_gross_amount: null,
+      payment_fee_amount: feeAmount,
+      payment_gross_amount: grossAmount,
+      payment_provider: 'hubtel',
       provider_name: dataPackage.provider,
       provider_package_id: dataPackage.id,
       status: 'pending_payment',
     }).select('id, short_code').single();
     if (orderError) throw orderError;
 
-    const response = await fetch('https://api.paystack.co/transaction/initialize', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${paystackSecret}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: customerEmail,
-        amount: Math.round(grossAmount * 100),
-        currency: 'GHS',
+    try {
+      const callbackSecret = Deno.env.get('HUBTEL_WALLET_CALLBACK_SECRET')?.trim();
+      const configuredCallback = Deno.env.get('HUBTEL_WALLET_CALLBACK_URL')?.trim()
+        || `${Deno.env.get('SUPABASE_URL')}/functions/v1/hubtel-webhook`;
+      const hubtelCallbackUrl = callbackSecret
+        ? (() => {
+            const target = new URL(configuredCallback);
+            target.searchParams.set('token', callbackSecret);
+            return target.toString();
+          })()
+        : configuredCallback;
+      const payment = await initializeHubtelCollection({
         reference,
-        callback_url: callbackUrl,
-        metadata: {
-          payment_type: 'public_data',
-          public_data_order_id: order.id,
-          guest_checkout: true,
-          bundle_id: bundleId,
-          customer_phone: phone,
-        },
-      }),
-    });
-    const payment = await response.json().catch(() => ({}));
-    if (!response.ok || payment.status !== true || !payment.data?.authorization_url) {
+        amountGhs: saleAmount,
+        returnUrl: callbackUrl,
+        callbackUrl: hubtelCallbackUrl,
+        description: 'Skaitech guest data bundle',
+      });
+      await admin.from('public_data_orders').update({
+        provider_response: { checkout: payment.payload, checkoutId: payment.orderId || null },
+      }).eq('id', order.id);
+      return json({
+        success: true,
+        authorizationUrl: payment.authorizationUrl,
+        reference,
+        accessToken,
+        orderCode: order.short_code,
+        amount: saleAmount,
+        grossAmount,
+        paymentProvider: 'hubtel',
+      });
+    } catch (error) {
       await admin.from('public_data_orders').update({
         status: 'failed',
-        provider_response: { paymentInitialization: payment.message || `Paystack returned HTTP ${response.status}` },
+        provider_response: { paymentInitialization: error instanceof Error ? error.message : 'Hubtel could not start checkout.' },
         completed_at: new Date().toISOString(),
       }).eq('id', order.id);
-      return json({ error: payment.message || 'Paystack could not start checkout. No payment was taken.' }, 502);
+      return json({ error: error instanceof Error ? error.message : 'Hubtel could not start checkout. No payment was taken.' }, 502);
     }
-
-    return json({
-      success: true,
-      authorizationUrl: payment.data.authorization_url,
-      reference,
-      accessToken,
-      orderCode: order.short_code,
-      amount: saleAmount,
-      grossAmount,
-    });
   } catch (error) {
     console.error('create-public-data-checkout failed:', error);
     return json({ error: errorMessage(error, 'Unable to start checkout. Please try again.') }, 500);

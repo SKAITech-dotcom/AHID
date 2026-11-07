@@ -2,97 +2,108 @@
 <html lang="en">
 <head>
   <meta name="robots" content="noindex, nofollow">
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Skaitech - Agent Wallet</title>
-    <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<script>
-  try {
-    if (localStorage.getItem('skaitech_theme') === 'dark') {
-      document.documentElement.classList.add('dark');
-    }
-  } catch (e) {}
-</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skaitech - Deposit</title>
+  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/deposit.css?v=20261107-load-wallet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    try {
+      if (localStorage.getItem('skaitech_theme') === 'dark') document.documentElement.classList.add('dark');
+    } catch (e) {}
+  </script>
 </head>
-<body class="dashboard-body">
-
-    <!-- WALLET BALANCE BANNER -->
-<div style="background: linear-gradient(135deg, #7380ec, #4f5dcb); color: white; padding: 15px 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin: 16px auto 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 800px;">
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <i class="fa-solid fa-wallet" style="font-size: 20px;"></i>
+<body class="deposit-page">
+  <main class="deposit-main">
+    <section class="deposit-intro" aria-labelledby="depositTitle">
+      <div>
+        <p class="deposit-eyebrow">AGENT WALLET</p>
+        <h1 id="depositTitle">Fund Your Agent Wallet</h1>
+        <p class="deposit-subtitle">Fund your account securely. Your balance updates instantly after payment confirmation.</p>
+      </div>
+      <div class="deposit-balance-card" aria-label="Available wallet balance">
+        <span class="deposit-balance-icon"><i class="fa-solid fa-wallet" aria-hidden="true"></i></span>
         <div>
-            <span style="font-size: 12px; opacity: 0.85; display: block;">Available Balance</span>
-            <strong id="walletHeaderDisplay" style="font-size: 18px;">GHS 0.00</strong>
+          <span class="deposit-balance-label">Available Balance</span>
+          <strong id="walletHeaderDisplay">Available Balance: GHS 0.00</strong>
         </div>
-    </div>
-</div>
+        <i class="fa-solid fa-arrow-trend-up deposit-balance-trend" aria-hidden="true"></i>
+      </div>
+    </section>
 
-    <main class="wallet-container" style="padding: 30px; max-width: 800px; margin: auto;">
-        <h2>Fund Your Agent Wallet</h2>
-        <p style="color: #666; margin-bottom: 25px;">Fund your account securely. Your balance updates instantly after payment confirmation.</p>
-        <div id="walletPaymentStatus" hidden role="status" style="background: #eef6ff; border: 1px solid #bfdbfe; color: #1e3a8a; padding: 12px 14px; border-radius: 6px; margin-bottom: 20px; font-size: 14px;"></div>
+    <section class="deposit-action-card" aria-label="Load your wallet">
+      <div class="deposit-action-icon"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></div>
+      <div class="deposit-action-copy">
+        <h2>Ready to top up?</h2>
+        <p>Choose an amount and complete a secure mobile-money or card checkout.</p>
+      </div>
+      <button id="loadWalletBtn" class="load-wallet-btn" type="button">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i> Load Wallet
+      </button>
+    </section>
 
-        <!-- PAYSTACK CHECKOUT -->
-        <div class="funding-card" style="background: #fff; padding: 24px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e5e7eb;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                <h3 style="margin: 0; font-size: 18px; color: #111827; display: flex; align-items: center; gap: 8px;">
-                    <i class="fa-solid fa-credit-card" style="color: #0056b3;"></i> Paystack Checkout
-                </h3>
-                <span style="background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 9999px;">Instant Credit</span>
-            </div>
-            <p style="font-size: 14px; color: #4b5563; margin-top: 0; margin-bottom: 18px; line-height: 1.5;">
-                Deposit funds directly into your agent wallet via Paystack using Mobile Money (MTN, Telecel, AT) or Bank Card. Your wallet is credited instantly once payment succeeds.
-            </p>
+    <div id="walletPaymentStatus" class="wallet-payment-status" hidden role="status" aria-live="polite"></div>
+  </main>
 
-            <div style="margin-bottom: 18px;">
-                <label for="expressAmount" style="display: block; font-weight: 600; font-size: 14px; color: #374151; margin-bottom: 6px;">Deposit Amount (GHS) *</label>
-                <div style="position: relative;">
-                    <span style="position: absolute; left: 12px; top: 11px; font-weight: 700; color: #6b7280; font-size: 15px;">₵</span>
-                    <input type="number" id="expressAmount" min="1" max="10000" step="0.5" placeholder="0.00" style="width: 100%; padding: 11px 12px 11px 32px; font-size: 16px; font-weight: 600; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; outline: none;">
-                </div>
-                
-                <!-- Quick Amount Buttons -->
-                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
-                    <button type="button" onclick="document.getElementById('expressAmount').value=20" style="background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; color: #374151;">+ GHS 20</button>
-                    <button type="button" onclick="document.getElementById('expressAmount').value=50" style="background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; color: #374151;">+ GHS 50</button>
-                    <button type="button" onclick="document.getElementById('expressAmount').value=100" style="background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; color: #374151;">+ GHS 100</button>
-                    <button type="button" onclick="document.getElementById('expressAmount').value=200" style="background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; color: #374151;">+ GHS 200</button>
-                    <button type="button" onclick="document.getElementById('expressAmount').value=500" style="background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; color: #374151;">+ GHS 500</button>
-                </div>
-            </div>
+  <div id="loadWalletModal" class="wallet-modal" hidden>
+    <div class="wallet-modal-backdrop" data-close-wallet-modal></div>
+    <section class="wallet-modal-card" role="dialog" aria-modal="true" aria-labelledby="loadWalletTitle" aria-describedby="loadWalletSubtitle">
+      <header class="wallet-modal-header">
+        <div class="wallet-modal-title-wrap">
+          <span class="wallet-modal-icon"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></span>
+          <div>
+            <h2 id="loadWalletTitle">Load Wallet</h2>
+            <p id="loadWalletSubtitle">Top up via MoMo</p>
+          </div>
+        </div>
+        <button id="closeLoadWalletBtn" class="wallet-modal-close" type="button" aria-label="Close load wallet dialog">&times;</button>
+      </header>
 
-            <button id="paystackPayBtn" onclick="payWithExpressPay('paystack')" class="btn-primary" style="width: 100%; background: #0056b3; color: white; padding: 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                <i class="fa-solid fa-lock"></i> Pay with Paystack
+      <form id="loadWalletForm" novalidate>
+        <label class="wallet-field-label" for="expressAmount">Amount (GH₵)</label>
+        <div class="wallet-amount-input-wrap">
+          <span aria-hidden="true">₵</span>
+          <input id="expressAmount" type="number" min="1" max="10000" step="0.01" inputmode="decimal" placeholder="Enter amount" autocomplete="off" required>
+        </div>
+
+        <div class="quick-amounts" aria-label="Quick amount selection">
+          <button type="button" class="quick-amount" data-amount="5">₵5</button>
+          <button type="button" class="quick-amount" data-amount="10">₵10</button>
+          <button type="button" class="quick-amount" data-amount="20">₵20</button>
+          <button type="button" class="quick-amount" data-amount="50">₵50</button>
+          <button type="button" class="quick-amount" data-amount="100">₵100</button>
+          <button type="button" class="quick-amount" data-amount="200">₵200</button>
+          <button type="button" class="quick-amount" data-amount="500">₵500</button>
+        </div>
+
+        <fieldset class="gateway-fieldset">
+          <legend>Pay with</legend>
+          <div class="gateway-options">
+            <button type="button" class="gateway-option is-selected" data-provider="paystack" aria-pressed="true">
+              <span class="gateway-logo gateway-logo-paystack"><i class="fa-solid fa-credit-card" aria-hidden="true"></i></span>
+              <span><strong>Paystack</strong><small>Card or MoMo</small></span>
+              <i class="fa-solid fa-circle-check gateway-check" aria-hidden="true"></i>
             </button>
-            <p style="text-align: center; font-size: 12px; color: #6b7280; margin-top: 12px; margin-bottom: 0;">
-                <i class="fa-solid fa-shield-halved" style="color: #10b981;"></i> Secured 256-bit encrypted checkout via Paystack
-            </p>
-        </div>
-
-        <!-- HUBTEL CHECKOUT -->
-        <div class="funding-card" style="background: #fff; padding: 24px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e5e7eb;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                <h3 style="margin: 0; font-size: 18px; color: #111827; display: flex; align-items: center; gap: 8px;">
-                    <i class="fa-solid fa-mobile-screen-button" style="color: #0f766e;"></i> Hubtel Checkout
-                </h3>
-                <span style="background: #ecfdf5; color: #047857; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 9999px;">Mobile Money</span>
-            </div>
-            <p style="font-size: 14px; color: #4b5563; margin-top: 0; margin-bottom: 18px; line-height: 1.5;">
-                Use Hubtel to pay with the available Ghana mobile-money checkout options. Your wallet is credited only after Hubtel confirms the payment.
-            </p>
-            <button id="hubtelPayBtn" onclick="payWithExpressPay('hubtel')" style="width: 100%; background: #0f766e; color: white; padding: 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                <i class="fa-solid fa-lock"></i> Pay with Hubtel
+            <button type="button" class="gateway-option" data-provider="hubtel" aria-pressed="false">
+              <span class="gateway-logo gateway-logo-skaipay"><i class="fa-solid fa-mobile-screen-button" aria-hidden="true"></i></span>
+              <span><strong>Skaipay</strong><small>Powered by Hubtel</small></span>
+              <i class="fa-solid fa-circle-check gateway-check" aria-hidden="true"></i>
             </button>
-            <p style="text-align: center; font-size: 12px; color: #6b7280; margin-top: 12px; margin-bottom: 0;">
-                <i class="fa-solid fa-shield-halved" style="color: #10b981;"></i> Secure checkout with server-side payment confirmation
-            </p>
-        </div>
-    </main>
+          </div>
+        </fieldset>
 
-    <!-- Link the JavaScript file -->
-  <script type="module" src="agentNav.js?v=20261103"></script>
-    <script type="module" src="agentDeposit.js?v=20261107-hubtel-credit-v2"></script>
+        <div class="wallet-modal-actions">
+          <button id="loadWalletPayBtn" class="wallet-pay-btn" type="submit">Enter Amount</button>
+          <button id="cancelLoadWalletBtn" class="wallet-cancel-btn" type="button">Cancel</button>
+        </div>
+      </form>
+      <p class="wallet-modal-footer">Powered by Skaitech</p>
+    </section>
+  </div>
+
+  <script type="module" src="agentNav.js?v=20261107-load-wallet"></script>
+  <script type="module" src="agentDeposit.js?v=20261107-load-wallet"></script>
 </body>
 </html>
