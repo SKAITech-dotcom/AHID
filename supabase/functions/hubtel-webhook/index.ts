@@ -1,3 +1,4 @@
+import { hubtelWalletAmountMatches } from '../_shared/paymentGateway.ts';
 import { adminClient, json } from '../_shared/supabase.ts';
 
 /**
@@ -122,11 +123,12 @@ Deno.serve(async (request) => {
     }
 
     if (!isSuccessfulCallback) return json({ received: true, settled: false });
-    if (!Number.isFinite(amount) || Math.round(amount * 100) !== Math.round(Number(topup.amount) * 100)) {
+    if (!hubtelWalletAmountMatches(amount, Number(topup.amount), Number(topup.gross_amount))) {
       console.error('[Hubtel wallet callback] Amount mismatch', {
         reference,
         callbackAmount: amount,
-        expectedAmount: Number(topup.amount),
+        expectedNetAmount: Number(topup.amount),
+        expectedGrossAmount: Number(topup.gross_amount),
       });
       return json({ received: true, settled: false });
     }

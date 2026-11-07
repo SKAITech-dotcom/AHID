@@ -84,6 +84,38 @@ export function hubtelResponseState(code: string | undefined): PaymentState | un
   return 'failed';
 }
 
+/**
+ * Hubtel's checkout callback reports the amount paid by the customer, which
+ * can include Hubtel's checkout fee. The wallet must receive the requested
+ * net amount, so accept the net amount, a recorded gross amount, or the
+ * configured provider-fee total while never crediting the callback amount.
+ */
+export function hubtelWalletFeeRate(): number {
+  const configured = Number(Deno.env.get('HUBTEL_WALLET_FEE_PERCENT') ?? '0.01');
+  return Number.isFinite(configured) && configured >= 0 && configured < 1 ? configured : 0.01;
+}
+
+export function hubtelWalletGrossAmount(netAmount: number): number {
+  return Math.round((netAmount * (1 + hubtelWalletFeeRate()) + Number.EPSILON) * 100) / 100;
+}
+
+export function hubtelWalletAmountMatches(
+  callbackAmount: number,
+  netAmount: number,
+  recordedGrossAmount?: number,
+): boolean {
+  if (!Number.isFinite(callbackAmount) || !Number.isFinite(netAmount) || netAmount <= 0) return false;
+  const callbackCents = Math.round(callbackAmount * 100);
+  const allowedCents = new Set([
+    Math.round(netAmount * 100),
+    Math.round(hubtelWalletGrossAmount(netAmount) * 100),
+  ]);
+  if (Number.isFinite(recordedGrossAmount) && (recordedGrossAmount ?? 0) > 0) {
+    allowedCents.add(Math.round((recordedGrossAmount as number) * 100));
+  }
+  return allowedCents.has(callbackCents);
+}
+
 export function normalizePaystack(payload: unknown): NormalizedPayment {
   const body = asRecord(payload);
   const data = asRecord(body.data);

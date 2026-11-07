@@ -1,4 +1,5 @@
 import { adminClient, corsPreflight, json, requireAgent, supabaseUrl } from '../_shared/supabase.ts';
+import { hubtelWalletGrossAmount } from '../_shared/paymentGateway.ts';
 import { hubtelPaymentsConfigured, initializeHubtelCollection } from '../_shared/hubtelPayments.ts';
 
 /**
@@ -6,9 +7,8 @@ import { hubtelPaymentsConfigured, initializeHubtelCollection } from '../_shared
  * together: the agent picks one, and whichever settles credits the wallet the
  * same way (both webhooks call the one idempotent `fulfil_wallet_topup`).
  *
- * Paystack charges the customer the entered amount plus its 1.95% fee, so the
- * wallet receives the round amount entered. Hubtel's fee is not yet known, so a
- * Hubtel top-up charges the exact amount entered and credits the same.
+ * Both providers may charge a checkout fee. The wallet receives the round
+ * amount entered, while the provider callback amount is verified separately.
  */
 
 function getCustomerCoveredGrossAmount(netAmount: number) {
@@ -45,11 +45,13 @@ Deno.serve(async (request) => {
       if (!hubtelPaymentsConfigured()) {
         return json({ error: 'Hubtel payments are not switched on yet. Please use Paystack.' }, 503);
       }
+      const grossAmount = hubtelWalletGrossAmount(netAmount);
+      const feeAmount = Math.round((grossAmount - netAmount + Number.EPSILON) * 100) / 100;
       const { data: topup, error: topupError } = await admin.from('wallet_topups').insert({
         agent_id: user.id,
         amount: netAmount,
-        fee_amount: 0,
-        gross_amount: netAmount,
+        fee_amount: feeAmount,
+        gross_amount: grossAmount,
         payment_reference: reference,
         provider: 'hubtel',
       }).select('id').single();
@@ -83,8 +85,8 @@ Deno.serve(async (request) => {
         reference,
         provider,
         netAmount,
-        feeAmount: 0,
-        grossAmount: netAmount,
+        feeAmount,
+        grossAmount,
       });
     }
 

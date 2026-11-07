@@ -45,11 +45,14 @@ unclear event can hold a wallet but never release goods.
 
 **Wallet funding.** `create-agent-wallet-payment` accepts `provider` (`"paystack"`
 default, or `"hubtel"`); the agent chooses on `deposit.html`. Paystack charges the
-amount grossed up by 1.95%, while Hubtel charges the exact amount. Either way the
-webhook (`paystack-webhook` / `hubtel-webhook`) re-reads the transaction server-side
-and credits the wallet through the one idempotent `fulfil_wallet_topup`. Hubtel
-cannot start a top-up until `HUBTEL_CHECKOUT_URL` is set, and will not credit until
-`HUBTEL_CHECKOUT_STATUS_URL` is set (a callback is never trusted on its own).
+amount grossed up by 1.95%. Hubtel's checkout request carries the wallet's net
+amount, while its callback may report the customer-paid amount including Hubtel's
+checkout fee (the live account reported GHS 1.01 for a GHS 1.00 credit). The app
+credits only the requested net amount after the authenticated callback's reference,
+success state, and net/gross amount checks. `HUBTEL_WALLET_FEE_PERCENT` defaults to
+`0.01` and can be changed if Hubtel changes its fee. The webhook (`paystack-webhook`
+/ `hubtel-webhook`) uses the one idempotent `fulfil_wallet_topup`; the Hubtel status
+endpoint remains a recovery path when a callback has not arrived.
 
 ---
 

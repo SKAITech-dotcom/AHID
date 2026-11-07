@@ -1,6 +1,6 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { hubtelPaymentsVerifyConfigured, verifyHubtelCollection } from '../_shared/hubtelPayments.ts';
-import { normalizeHubtel } from '../_shared/paymentGateway.ts';
+import { hubtelWalletAmountMatches, normalizeHubtel } from '../_shared/paymentGateway.ts';
 
 function getExpectedGrossAmount(netAmount: number): number {
   const configuredRate = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.0195');
@@ -30,7 +30,7 @@ Deno.serve(async (request) => {
 
     const { data: topup, error: topupError } = await admin
       .from('wallet_topups')
-      .select('id, agent_id, amount, provider, provider_order_id, provider_response, status, payment_reference')
+      .select('id, agent_id, amount, gross_amount, provider, provider_order_id, provider_response, status, payment_reference')
       .eq('agent_id', user.id)
       .eq('payment_reference', reference)
       .maybeSingle();
@@ -49,7 +49,7 @@ Deno.serve(async (request) => {
       const callbackAmount = callbackPayload?.amountGhs;
       const callbackSuccess = callbackPayload?.state === 'success'
         && callbackAmount !== undefined
-        && Math.round(callbackAmount * 100) === Math.round(Number(topup.amount) * 100);
+        && hubtelWalletAmountMatches(callbackAmount, Number(topup.amount), Number(topup.gross_amount));
       if (callbackSuccess) {
         const { error: callbackFulfilError } = await admin.rpc('fulfil_wallet_topup', { p_topup_id: topup.id });
         if (callbackFulfilError) throw callbackFulfilError;
@@ -75,10 +75,12 @@ Deno.serve(async (request) => {
         await admin.from('wallet_topups').update({ status: 'failed' }).eq('id', topup.id).eq('status', 'pending_payment');
         return json({ success: false, credited: false, status: 'failed', message: 'Hubtel payment was not successful.' });
       }
-      if (verified?.amountGhs !== undefined && Math.round(verified.amountGhs * 100) !== Math.round(Number(topup.amount) * 100)) {
+      if (verified?.amountGhs !== undefined
+        && !hubtelWalletAmountMatches(verified.amountGhs, Number(topup.amount), Number(topup.gross_amount))) {
         return json({ error: 'The verified Hubtel amount does not match this wallet top-up.' }, 400);
       }
-      if (callbackSuccess && callbackAmount !== undefined && verified?.amountGhs !== undefined && Math.round(verified.amountGhs * 100) !== Math.round(callbackAmount * 100)) {
+      if (callbackSuccess && callbackAmount !== undefined && verified?.amountGhs !== undefined
+        && Math.round(verified.amountGhs * 100) !== Math.round(callbackAmount * 100)) {
         return json({ error: 'The Hubtel callback and status amounts do not match.' }, 400);
       }
 
