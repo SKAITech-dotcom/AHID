@@ -111,25 +111,11 @@ Deno.serve(async (request) => {
     });
     if (dispatchError) throw dispatchError;
 
-    // Check if provider confirmed delivery immediately (synchronously)
-    const rawDispatchStatus = String(dispatch.status || '').trim().toLowerCase();
-    const isImmediatelyDelivered = ['delivered', 'successful', 'success', 'completed', 'true'].includes(rawDispatchStatus);
-    let finalStatus = 'processing';
-
-    if (isImmediatelyDelivered) {
-      const { error: settleErr } = await admin.rpc('settle_agent_data_order', {
-        p_order_id: orderId,
-        p_status: 'successful',
-        p_provider_response: {
-          ...dispatchPayload,
-          settledAt: new Date().toISOString(),
-          lastProviderStatus: dispatch.status || 'DELIVERED',
-        },
-      });
-      if (!settleErr) {
-        finalStatus = 'successful';
-      }
-    }
+    // A successful purchase response only means the provider accepted the
+    // request. It is not proof that the bundle reached the recipient. The
+    // status sync function must query the provider's order-status endpoint and
+    // settle this row only after a live terminal status is returned.
+    const finalStatus = 'processing';
 
     // The 5-character code is what the agent reads out to the customer.
     const { data: dispatched } = await admin
@@ -145,7 +131,8 @@ Deno.serve(async (request) => {
       shortCode: dispatched?.short_code ?? null,
       providerReference: dispatch.orderId ?? null,
       status: finalStatus,
-      providerStatus: dispatch.status || finalStatus,
+      providerStatus: 'PROCESSING',
+      pending: true,
       amount: saleAmount,
       walletBalance: Number(wallet?.balance ?? 0),
     });

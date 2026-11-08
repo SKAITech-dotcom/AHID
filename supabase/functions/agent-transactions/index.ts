@@ -1,4 +1,6 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
+import { fetchHubtelCommissionStatus } from '../_shared/hubtelCommissionStatus.ts';
+import { settleHubtelAirtimeOrder, settleHubtelUtilityOrder } from '../_shared/hubtelSettlement.ts';
 
 const NETWORK_LABELS: Record<string, string> = {
   mtn: 'MTN',
@@ -76,6 +78,101 @@ async function fetchTransactionRows(
   }
 }
 
+const MAX_LIVE_HUBTEL_CHECKS = 25;
+
+/**
+ * Refreshes only non-terminal Hubtel orders before the history response is
+ * rendered. A missing/blocked provider response is left untouched; it is not
+ * safe to turn an unknown status into either success or failure.
+ */
+async function reconcilePendingHubtelOrders(
+  admin: ReturnType<typeof adminClient>,
+  agentId: string,
+  airtimeOrders: any[],
+  utilityOrders: any[],
+): Promise<void> {
+  const pendingAirtime = airtimeOrders
+    .filter((order) => ['pending', 'pending_provider', 'processing'].includes(String(order.airtime_status)))
+    .map((order) => ({ table: 'airtime' as const, order }));
+  const pendingUtility = utilityOrders
+    .filter((order) => ['paid', 'processing'].includes(String(order.status)))
+    .map((order) => ({ table: 'utility' as const, order }));
+
+  for (const item of [...pendingAirtime, ...pendingUtility].slice(0, MAX_LIVE_HUBTEL_CHECKS)) {
+    const order = item.order;
+    const reference = String(order.payment_reference || '').trim();
+    if (!reference) continue;
+
+    const live = await fetchHubtelCommissionStatus(reference).catch((error) => {
+      console.warn('Agent order live status check failed:', { reference, error: String(error) });
+      return null;
+    });
+    if (!live) continue;
+
+    const checkedAt = new Date().toISOString();
+    const providerResponse = {
+      ...(order.provider_response && typeof order.provider_response === 'object' ? order.provider_response : {}),
+      ...live.payload,
+      lastProviderStatus: live.status || live.state.toUpperCase(),
+      checkedAt,
+    };
+    const providerReference = live.orderId || order.provider_reference || null;
+
+    try {
+      if (live.state === 'pending') {
+        const update = item.table === 'airtime'
+          ? { provider_reference: providerReference, provider_response: providerResponse, updated_at: checkedAt }
+          : { provider_reference: providerReference, provider_response: providerResponse, paid_at: checkedAt };
+        await admin.from(item.table === 'airtime' ? 'airtime_orders' : 'utility_orders')
+          .update(update)
+          .eq('id', order.id);
+        order.provider_reference = providerReference;
+        order.provider_response = providerResponse;
+        continue;
+      }
+
+      if (item.table === 'airtime') {
+        await settleHubtelAirtimeOrder(admin, {
+          id: String(order.id),
+          agent_id: agentId,
+          payment_reference: reference,
+          amount: Number(order.amount),
+          wallet_charge_amount: Number(order.wallet_charge_amount ?? order.amount),
+          provider_reference: order.provider_reference,
+        }, {
+          state: live.state,
+          payload: providerResponse,
+          providerReference,
+        });
+        order.airtime_status = live.state === 'success' ? 'delivered' : 'failed';
+        order.payment_status = live.state === 'success' ? 'paid' : 'failed';
+      } else {
+        await settleHubtelUtilityOrder(admin, {
+          id: String(order.id),
+          agent_id: agentId,
+          payment_reference: reference,
+          gross_amount: Number(order.gross_amount ?? order.amount),
+          wallet_charge_amount: Number(order.wallet_charge_amount ?? order.gross_amount ?? order.amount),
+          bill_category: String(order.bill_category || ''),
+          provider_reference: order.provider_reference,
+        }, {
+          state: live.state,
+          payload: providerResponse,
+          providerReference,
+        });
+        order.status = live.state === 'success' ? 'completed' : 'failed';
+      }
+
+      order.provider_reference = providerReference;
+      order.provider_response = providerResponse;
+    } catch (error) {
+      // Keep the order visible as pending if a settlement race or provider
+      // lookup issue occurs; the webhook/reconciliation job can retry safely.
+      console.error('Agent order live settlement failed:', { reference, error: String(error) });
+    }
+  }
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -116,6 +213,8 @@ Deno.serve(async (request) => {
           .order('created_at', { ascending: false })
           .range(from, to)),
     ]);
+
+    await reconcilePendingHubtelOrders(admin, agentId, airtimeOrders, utilityOrders);
 
     const airtime = airtimeOrders.map((o) => {
       const statusLabel = airtimeStatusLabel(o);

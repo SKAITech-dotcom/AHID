@@ -116,8 +116,9 @@
         <label for="regPhone">Ghanaian Phone Number</label>
         <div class="input-wrapper">
           <i class="fa-solid fa-phone"></i>
-          <input type="tel" id="regPhone" class="form-input" placeholder="05XXXXXXXX" required>
+          <input type="tel" id="regPhone" class="form-input" placeholder="0241234567 or +233241234567" inputmode="tel" autocomplete="tel-national" minlength="10" maxlength="13" pattern="(?:0[0-9]{9}|\+233[0-9]{9})" aria-describedby="regPhoneHelp" oninput="this.setCustomValidity('')" required>
         </div>
+        <small id="regPhoneHelp" style="display: block; margin-top: 6px; color: #6b7280;">Use a valid 10-digit Ghana number, or the +233 format.</small>
       </div>
 
       <div class="form-group">

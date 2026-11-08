@@ -243,14 +243,17 @@ Deno.serve(async (request) => {
       }, 502);
     }
 
-    const fulfilmentStatus = dispatch.status === 'processing' ? 'processing' : 'successful';
+    // Provider acceptance is not delivery confirmation. Keep the durable store
+    // order in processing until sync-agent-data-order receives a live terminal
+    // status from Swift or GrandTech.
+    const fulfilmentStatus = 'processing';
     await admin.from('store_orders').update({
       fulfilment_status: fulfilmentStatus,
       provider: dispatch.provider,
       provider_reference: providerReference,
       provider_response: dispatchPayload,
       failure_reason: null,
-      completed_at: new Date().toISOString(),
+      completed_at: null,
       updated_at: new Date().toISOString(),
     }).eq('id', orderId);
 
@@ -259,7 +262,8 @@ Deno.serve(async (request) => {
       orderReference: reference,
       shortCode,
       status: fulfilmentStatus,
-      providerStatus: dispatch.status || fulfilmentStatus,
+      providerStatus: 'PROCESSING',
+      pending: true,
       amount: debitAmount,
       saleAmount: round2(saleAmount),
       storeEarning,

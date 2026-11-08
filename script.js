@@ -105,6 +105,19 @@ function generateAgentCode() {
   return `SKAI-${token}`;
 }
 
+function normalizeGhanaPhone(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw || !/^[+()\d\s.-]+$/.test(raw)) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10 && digits.startsWith('0')) return digits;
+  if (digits.length === 12 && digits.startsWith('233')) return `0${digits.slice(3)}`;
+  return '';
+}
+
+function isValidGhanaPhone(value) {
+  return /^0\d{9}$/.test(normalizeGhanaPhone(value));
+}
+
 async function ensureAgentProfile(userId, agentName, agentCode, phone = '') {
   try {
     // profiles is read-only to browsers on purpose: its wallet_balance column
@@ -319,9 +332,23 @@ async function handleRegistration(event) {
   const agentName = fullNameInput && fullNameInput.value.trim() !== '' 
     ? fullNameInput.value.trim() 
     : 'Agent';
-  const phone = phoneInput ? phoneInput.value.trim() : '';
+  const phone = normalizeGhanaPhone(phoneInput ? phoneInput.value : '');
   const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
   const password = passwordInput ? passwordInput.value : '';
+
+  if (!isValidGhanaPhone(phone)) {
+    if (phoneInput) {
+      phoneInput.setCustomValidity('Enter a valid Ghanaian phone number, such as 0241234567 or +233241234567.');
+      phoneInput.reportValidity();
+    } else {
+      alert('Enter a valid Ghanaian phone number, such as 0241234567 or +233241234567.');
+    }
+    return;
+  }
+  if (phoneInput) {
+    phoneInput.value = phone;
+    phoneInput.setCustomValidity('');
+  }
 
   if (!email || !email.includes('@')) {
     alert('Please enter a valid email address.');
@@ -949,7 +976,19 @@ async function fetchAllRows(queryFactory, pageSize = 1000) {
     }
 }
 
+let ordersLoadInProgress = false;
+
 async function loadStoredOrders() {
+  if (ordersLoadInProgress) return;
+  ordersLoadInProgress = true;
+  try {
+    await loadStoredOrdersInternal();
+  } finally {
+    ordersLoadInProgress = false;
+  }
+}
+
+async function loadStoredOrdersInternal() {
     const tableBody = document.getElementById('ordersTableBody');
     if (!tableBody) return;
 
@@ -1176,6 +1215,11 @@ async function loadStoredOrders() {
 // RUN ON PAGE LOAD
 document.addEventListener('DOMContentLoaded', () => {
   loadStoredOrders();
+  if (document.getElementById('ordersTableBody')) {
+    window.setInterval(() => {
+      if (!document.hidden) loadStoredOrders();
+    }, 20000);
+  }
 });
 
 function updatePaginationUI(totalOrders) {
