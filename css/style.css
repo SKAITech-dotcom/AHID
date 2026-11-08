@@ -1529,13 +1529,6 @@ html body.dashboard-page {
   white-space: nowrap;
 }
 
-.orders-data-table .cell-ref {
-  font-size: 0.75rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #64748b;
-}
-
-.orders-data-table .cell-muted { color: #cbd5e1; }
 .orders-data-table .cell-date { color: #64748b; font-size: 0.8rem; white-space: nowrap; }
 
 /* STATUS BADGES */
@@ -3557,7 +3550,6 @@ body.orders-body-yellow .orders-count-text,
 body.orders-body-yellow .page-size-selector,
 body.orders-body-yellow .pagination-buttons,
 body.orders-body-yellow .orders-data-table th,
-body.orders-body-yellow .orders-data-table .cell-ref,
 body.orders-body-yellow .orders-data-table .cell-date {
   color: #94a3b8;
 }

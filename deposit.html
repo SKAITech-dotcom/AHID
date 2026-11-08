@@ -7,7 +7,7 @@
   <title>Skaitech - Deposit</title>
   <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/deposit.css?v=20261108-skaipay-logo">
+  <link rel="stylesheet" href="css/deposit.css?v=20261108-direct-load-wallet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script>
     try {
@@ -17,31 +17,13 @@
 </head>
 <body class="deposit-page">
   <main class="deposit-main">
-    <section class="deposit-intro" aria-labelledby="depositTitle">
+    <section class="deposit-balance-card deposit-balance-card-standalone" aria-label="Available wallet balance">
+      <span class="deposit-balance-icon"><i class="fa-solid fa-wallet" aria-hidden="true"></i></span>
       <div>
-        <p class="deposit-eyebrow">AGENT WALLET</p>
-        <h1 id="depositTitle">Fund Your Agent Wallet</h1>
-        <p class="deposit-subtitle">Fund your account securely. Your balance updates instantly after payment confirmation.</p>
+        <span class="deposit-balance-label">Available Balance</span>
+        <strong id="walletHeaderDisplay">Available Balance: GHS 0.00</strong>
       </div>
-      <div class="deposit-balance-card" aria-label="Available wallet balance">
-        <span class="deposit-balance-icon"><i class="fa-solid fa-wallet" aria-hidden="true"></i></span>
-        <div>
-          <span class="deposit-balance-label">Available Balance</span>
-          <strong id="walletHeaderDisplay">Available Balance: GHS 0.00</strong>
-        </div>
-        <i class="fa-solid fa-arrow-trend-up deposit-balance-trend" aria-hidden="true"></i>
-      </div>
-    </section>
-
-    <section class="deposit-action-card" aria-label="Load your wallet">
-      <div class="deposit-action-icon"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></div>
-      <div class="deposit-action-copy">
-        <h2>Ready to top up?</h2>
-        <p>Choose an amount and complete a secure mobile-money or card checkout.</p>
-      </div>
-      <button id="loadWalletBtn" class="load-wallet-btn" type="button">
-        <i class="fa-solid fa-plus" aria-hidden="true"></i> Load Wallet
-      </button>
+      <i class="fa-solid fa-arrow-trend-up deposit-balance-trend" aria-hidden="true"></i>
     </section>
 
     <div id="walletPaymentStatus" class="wallet-payment-status" hidden role="status" aria-live="polite"></div>
@@ -103,7 +85,7 @@
     </section>
   </div>
 
-  <script type="module" src="agentNav.js?v=20261107-load-wallet"></script>
-  <script type="module" src="agentDeposit.js?v=20261107-load-wallet"></script>
+  <script type="module" src="agentNav.js?v=20261108-direct-load-wallet"></script>
+  <script type="module" src="agentDeposit.js?v=20261108-direct-load-wallet"></script>
 </body>
 </html>

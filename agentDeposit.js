@@ -7,6 +7,9 @@ document.addEventListener('DOMContentLoaded', () => {
     updateWalletDisplay();
     handlePaymentReturn();
     initializeWalletModal();
+    if (!new URLSearchParams(window.location.search).has('reference')) {
+        openLoadWalletModal();
+    }
 });
 
 async function updateWalletDisplay() {
@@ -83,7 +86,6 @@ function chooseWalletAmount(amount) {
 }
 
 function initializeWalletModal() {
-    document.getElementById('loadWalletBtn')?.addEventListener('click', openLoadWalletModal);
     document.getElementById('closeLoadWalletBtn')?.addEventListener('click', closeLoadWalletModal);
     document.getElementById('cancelLoadWalletBtn')?.addEventListener('click', closeLoadWalletModal);
     document.querySelector('[data-close-wallet-modal]')?.addEventListener('click', closeLoadWalletModal);

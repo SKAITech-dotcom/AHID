@@ -841,18 +841,12 @@ function filterOrders() {
     // The network belongs with the package details; the Service column names
     // the product instead of repeating the network in the service label.
     const details = [order.network, order.package].filter(Boolean).join(' · ');
-    const providerRef = order.providerRef
-        ? `<span class="cell-ref">${escapeOrderCell(order.providerRef)}</span>`
-        : '<span class="cell-muted">-</span>';
-    const providerStatus = safeProviderStatus(order.providerStatus, 'UNKNOWN');
     row.innerHTML = `
         <td class="cell-id">#${escapeOrderCell(orderId)}</td>
         <td>${escapeOrderCell(serviceLabel(type))}</td>
         <td>${escapeOrderCell(order.phone || '-')}</td>
         <td>${escapeOrderCell(details || '-')}</td>
         <td><span class="status-badge badge-${status}">${label}</span></td>
-        <td><span class="provider-status-text">${escapeOrderCell(providerStatus.toUpperCase())}</span></td>
-        <td>${providerRef}</td>
         <td class="cell-date">${escapeOrderCell(order.date || '')}</td>
     `;
     tableBody.appendChild(row);
