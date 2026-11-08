@@ -913,49 +913,6 @@ html body.dashboard-page {
   cursor: pointer;
 }
 
-/* DROPDOWN ACCORDIONS */
-.info-accordion {
-  background-color: #111827;
-  border-radius: 0.75rem;
-  padding: 1rem 1.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  cursor: pointer;
-}
-
-.accordion-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #e9eef8;
-}
-
-.indicator-dots {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-}
-
-.dot-amber { background-color: #f59e0b; }
-.dot-emerald { background-color: #10b981; }
-
-.badge-pill {
-  background-color: rgba(37, 99, 235, 0.2);
-  color: #93c5fd;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.2rem 0.6rem;
-  border-radius: 9999px;
-}
-
 /* TOPUP SECTION */
 .topup-card {
   background-color: #111827;
@@ -1322,15 +1279,6 @@ html body.dashboard-page {
   font-weight: 600;
   cursor: pointer;
 }
-.info-accordion {
-  background: #111827;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  margin-bottom: 12px;
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-
 .accordion-header {
   padding: 16px;
   display: flex;
@@ -1340,76 +1288,12 @@ html body.dashboard-page {
   background: #111827;
 }
 
-.accordion-title {
-  font-weight: 700;
-  color: #e9eef8;
-  font-size: 1rem;
-}
-
-.accordion-arrow {
-  transition: transform 0.3s ease;
-  color: #8b97ad;
-}
-
-.info-accordion.active .accordion-arrow {
-  transform: rotate(180deg);
-}
-
-.accordion-content {
-  display: none;
-  padding: 0 16px 16px 16px;
-  border-top: 1px solid rgba(148, 163, 184, 0.14);
-}
-
-.info-accordion.active .accordion-content {
-  display: block;
-}
-
-.accordion-desc {
-  font-size: 0.85rem;
-  color: #8b97ad;
-  margin: 12px 0 16px;
-}
-
-/* STATUS & DEPOSIT ROWS */
-.status-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
-  font-weight: 600;
-  color: #e9eef8;
-}
-
 .badge {
   padding: 3px 10px;
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 600;
 }
-.badge-amber { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
-.badge-green { background: rgba(16, 185, 129, 0.18); color: #34d399; }
-.badge-pill { background: rgba(37, 99, 235, 0.2); color: #93c5fd; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600; }
-
-.deposit-option {
-  margin-bottom: 14px;
-}
-.deposit-option .option-title {
-  font-weight: 700;
-  color: #e9eef8;
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.deposit-option p {
-  font-size: 0.8rem;
-  color: #8b97ad;
-  margin-top: 2px;
-}
-
-
 /* YELLOW THEME BACKGROUND & LAYOUT */
 .orders-body-yellow {
   /* Deep yellow. Rich gold rather than pastel, so the white cards on top of it
@@ -3525,7 +3409,6 @@ body.dashboard-page .gt-dashboard-body {
   background: #0b0f19;
 }
 
-body.dashboard-page .info-accordion,
 body.dashboard-page .accordion-header {
   background: #111827;
   border-color: rgba(148, 163, 184, 0.14);

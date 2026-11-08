@@ -1,5 +1,7 @@
 # Progress
 
+- **Agent dashboard cleanup (2026-11-08):** Removed the obsolete “Delivery speed” and “How to fund your agent wallet” accordion sections from both dashboard entrypoints, their unused styles, and the unused toggle handler. Wallet funding and order functionality remain unchanged.
+
 **What works**
 
 - **Instant Data storefront and admin separation fix (2026-11-03).** Fixed the loading-only `instantData.html` page: `instantData.js` was missing its `CEDI` and `GHANA_PHONE` constants, so rendering threw before the Hubtel packages could appear. The admin stock view/API now exposes only two catalog sources: `bundle_catalog` for Dashboard Data Bundle (Swift/GrandTech) and `instant_data_bundles` for Hubtel Instant Data; legacy `public.bundles` Instant Mapping rows were removed from that view. `admin-portal-api` redeployed; `node --check`, `deno check`, and `git diff --check` pass.

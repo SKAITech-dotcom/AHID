@@ -755,10 +755,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('focus', refreshWhenVisible);
   window.setInterval(refreshWhenVisible, 30000);
 });
-function toggleAccordion(headerElement) {
-  const accordion = headerElement.parentElement;
-  accordion.classList.toggle('active');
-}
 // REALTIME ORDER SEARCH FILTER
 
 //  // REALTIME ORDER SEARCH FILTER
@@ -1483,7 +1479,6 @@ function closeAirtimeAgentModal() {
 
 // Global Window Bindings for HTML Inline Event Handlers
 window.toggleDrawer = toggleDrawer;
-window.toggleAccordion = toggleAccordion;
 window.selectNetwork = selectNetwork;
 window.openBuyModal = openBuyModal;
 window.closeBuyModal = closeBuyModal;

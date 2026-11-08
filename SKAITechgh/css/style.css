@@ -829,49 +829,6 @@ body {
   cursor: pointer;
 }
 
-/* DROPDOWN ACCORDIONS */
-.info-accordion {
-  background-color: #ffffff;
-  border-radius: 0.75rem;
-  padding: 1rem 1.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
-  cursor: pointer;
-}
-
-.accordion-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.indicator-dots {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-}
-
-.dot-amber { background-color: #f59e0b; }
-.dot-emerald { background-color: #10b981; }
-
-.badge-pill {
-  background-color: #eff6ff;
-  color: #2563eb;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.2rem 0.6rem;
-  border-radius: 9999px;
-}
-
 /* TOPUP SECTION */
 .topup-card {
   background-color: #ffffff;
@@ -1225,15 +1182,6 @@ body {
   font-weight: 600;
   cursor: pointer;
 }
-.info-accordion {
-  background: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  margin-bottom: 12px;
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-
 .accordion-header {
   padding: 16px;
   display: flex;
@@ -1243,75 +1191,12 @@ body {
   background: #ffffff;
 }
 
-.accordion-title {
-  font-weight: 700;
-  color: #1e293b;
-  font-size: 1rem;
-}
-
-.accordion-arrow {
-  transition: transform 0.3s ease;
-  color: #64748b;
-}
-
-.info-accordion.active .accordion-arrow {
-  transform: rotate(180deg);
-}
-
-.accordion-content {
-  display: none;
-  padding: 0 16px 16px 16px;
-  border-top: 1px solid #f1f5f9;
-}
-
-.info-accordion.active .accordion-content {
-  display: block;
-}
-
-.accordion-desc {
-  font-size: 0.85rem;
-  color: #64748b;
-  margin: 12px 0 16px;
-}
-
-/* STATUS & DEPOSIT ROWS */
-.status-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid #f8fafc;
-  font-weight: 600;
-}
-
 .badge {
   padding: 3px 10px;
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 600;
 }
-.badge-amber { background: #fef3c7; color: #d97706; }
-.badge-green { background: #dcfce7; color: #15803d; }
-.badge-pill { background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600; }
-
-.deposit-option {
-  margin-bottom: 14px;
-}
-.deposit-option .option-title {
-  font-weight: 700;
-  color: #1e293b;
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.deposit-option p {
-  font-size: 0.8rem;
-  color: #64748b;
-  margin-top: 2px;
-}
-
-
 /* YELLOW THEME BACKGROUND & LAYOUT */
 .orders-body-yellow {
   background-color: yellow; /* Vibrant light yellow theme */
