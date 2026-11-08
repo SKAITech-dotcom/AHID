@@ -41,7 +41,7 @@
 .quick-amount { padding: 8px 13px; border: 1px solid #d8e2eb; border-radius: 999px; color: #334864; background: #fff; font-size: .82rem; font-weight: 800; cursor: pointer; transition: .2s ease; }
 .quick-amount:hover, .quick-amount.is-selected { border-color: #159c72; color: #087a68; background: #e9faf1; }
 .gateway-fieldset { padding: 0; border: 0; }
-.gateway-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.gateway-options { display: grid; grid-template-columns: 1fr; gap: 11px; }
 .gateway-option { position: relative; display: flex; align-items: center; gap: 10px; min-height: 73px; padding: 12px; border: 1.5px solid #dce4ec; border-radius: 15px; color: #263b55; background: #fff; text-align: left; cursor: pointer; transition: border-color .2s ease, background .2s ease, box-shadow .2s ease; }
 .gateway-option.is-selected { border-color: #159c72; background: #f1fcf6; box-shadow: 0 0 0 3px rgba(21, 156, 114, .09); }
 .gateway-logo { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 11px; font-size: .9rem; }
@@ -80,5 +80,5 @@ html.dark .wallet-modal-close, html.dark .wallet-cancel-btn { color: #cbd5e1; ba
 }
 @media (max-width: 430px) {
   .wallet-modal-card { padding: 21px 18px; border-radius: 22px; }
-  .gateway-options, .wallet-modal-actions { grid-template-columns: 1fr; }
+  .wallet-modal-actions { grid-template-columns: 1fr; }
 }
