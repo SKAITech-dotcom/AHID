@@ -46,7 +46,8 @@
 .gateway-option.is-selected { border-color: #159c72; background: #f1fcf6; box-shadow: 0 0 0 3px rgba(21, 156, 114, .09); }
 .gateway-logo { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 11px; font-size: .9rem; }
 .gateway-logo-paystack { color: #1d4ed8; background: #e6efff; }
-.gateway-logo-skaipay { color: #087a68; background: #dcf8eb; }
+.gateway-logo-skaipay { overflow: hidden; padding: 0; color: #087a68; background: #dcf8eb; }
+.gateway-logo-skaipay img { width: 100%; height: 100%; object-fit: cover; }
 .gateway-option strong, .gateway-option small { display: block; }
 .gateway-option strong { font-size: .82rem; }
 .gateway-option small { margin-top: 3px; color: #7a879a; font-size: .68rem; }
