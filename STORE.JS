@@ -36,19 +36,6 @@ function escapeHtml(str) {
         .replace(/'/g, '&#039;');
 }
 
-function parsePriceKey(key) {
-    const match = String(key).match(/^price_([a-z]+)_(.+)$/i);
-    if (!match) return null;
-    let net = match[1].toLowerCase();
-    if (net === 'mtn') net = 'MTN';
-    else if (net === 'telecel') net = 'Telecel';
-    else if (net === 'airteltigo') net = 'AirtelTigo';
-    else net = net.toUpperCase();
-
-    const pkg = match[2].toUpperCase();
-    return { network: net, packageId: pkg };
-}
-
 // Simple tab switching function
 function switchTab(tabName) {
     const tabs = ['overview', 'store', 'pricing', 'withdrawals'];
@@ -109,11 +96,6 @@ const priceKeys = [
     'price_airteltigo_5gb', 'price_airteltigo_6gb', 'price_airteltigo_7gb', 'price_airteltigo_8gb', 'price_airteltigo_10gb', 'price_airteltigo_15gb'
 ];
 
-// Helper to convert priceKey to bundleId (e.g. price_mtn_1gb -> mtn-1gb)
-function bundleIdFromPriceKey(key) {
-    return key.replace(/^price_/, '').replace(/_/g, '-');
-}
-
 // Save all custom prices directly to agent_pricing and store_products in Supabase
 async function saveStorePrices() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -124,7 +106,6 @@ async function saveStorePrices() {
     }
 
     const prices = {};
-    const agentPricingRows = [];
 
     priceKeys.forEach(key => {
         const inputEl = document.getElementById(key);
@@ -132,25 +113,18 @@ async function saveStorePrices() {
             const val = parseFloat(inputEl.value);
             if (!isNaN(val) && val >= 0) {
                 prices[key] = val;
-                localStorage.setItem(key, inputEl.value);
-                agentPricingRows.push({
-                    agent_id: user.id,
-                    pricing_key: key,
-                    price: Math.round(val * 100) / 100,
-                    updated_at: new Date().toISOString()
-                });
             }
         }
     });
 
-    if (agentPricingRows.length === 0) {
+    if (Object.keys(prices).length === 0) {
         alert("Please enter at least one valid price.");
         return;
     }
 
-    let saved = false;
-
-    // 1. Edge function synchronization (runs with service_role to ensure agent_stores and store_products)
+    // The protected edge function is the only write path. This keeps the
+    // platform-price floor and the agent/store mirrors consistent instead of
+    // allowing a direct browser upsert to bypass validation.
     try {
         const { data: { session } } = await supabase.auth.getSession();
         const headers = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
@@ -158,101 +132,19 @@ async function saveStorePrices() {
             body: { prices },
             headers
         });
-        if (!fnErr && !fnData?.error) saved = true;
+        if (fnErr || fnData?.error) {
+            const message = fnData?.error || fnErr?.message || 'Unable to save your prices.';
+            alert(String(message));
+            return;
+        }
     } catch (fnErr) {
-        console.warn('manage-agent-pricing edge function notice:', fnErr);
+        alert(fnErr?.message || 'Unable to save your prices. Please try again.');
+        return;
     }
 
-    // 2. Direct database upsert into agent_pricing
-    try {
-        const { error: dbErr } = await supabase
-            .from('agent_pricing')
-            .upsert(agentPricingRows, { onConflict: 'agent_id,pricing_key' });
-        if (!dbErr) saved = true;
-    } catch (e) {
-        console.warn('Direct agent_pricing save error:', e);
-    }
-
-    // 3. Direct database upsert into store_products for the agent's store
-    //    (best-effort – failures here do not block the agent_prices write below)
-    let storeForSlug = null;
-    try {
-        const { data: store } = await supabase
-            .from('agent_stores')
-            .select('id, slug')
-            .eq('agent_id', user.id)
-            .maybeSingle();
-
-        if (store?.id) {
-            storeForSlug = store;
-            const storeProductsRows = agentPricingRows.map(r => ({
-                store_id: store.id,
-                product_type: 'data_bundle',
-                product_ref: bundleIdFromPriceKey(r.pricing_key),
-                price: r.price,
-                is_enabled: true,
-                updated_at: new Date().toISOString()
-            }));
-
-            await supabase
-                .from('store_products')
-                .upsert(storeProductsRows, { onConflict: 'store_id,product_type,product_ref' });
-        }
-    } catch (spErr) {
-        console.warn('store_products sync warning:', spErr);
-    }
-
-    // 4. Direct database upsert into agent_prices table.
-    //    This block is intentionally separate from the store_products block so
-    //    that a store lookup failure (step 3) cannot prevent prices from being
-    //    written to agent_prices — which is the primary source read by the
-    //    public storefront when rendering custom package prices.
-    try {
-        const agentPricesRows = [];
-        priceKeys.forEach(key => {
-            const inputEl = document.getElementById(key);
-            if (inputEl && inputEl.value !== '') {
-                const val = parseFloat(inputEl.value);
-                if (!isNaN(val) && val >= 0) {
-                    const parsed = parsePriceKey(key);
-                    if (parsed) {
-                        agentPricesRows.push({
-                            agent_id: user.id,
-                            network: parsed.network,
-                            package_id: parsed.packageId,
-                            custom_price: Math.round(val * 100) / 100,
-                            updated_at: new Date().toISOString()
-                        });
-                    }
-                }
-            }
-        });
-
-        if (agentPricesRows.length > 0) {
-            const { error: apErr } = await supabase
-                .from('agent_prices')
-                .upsert(agentPricesRows, { onConflict: 'agent_id,network,package_id' });
-            if (!apErr) saved = true;
-
-            // Also mirror rows keyed by store slug for slug-based storefront lookups
-            if (storeForSlug?.slug && storeForSlug.slug !== user.id) {
-                const slugRows = agentPricesRows.map(r => ({ ...r, agent_id: storeForSlug.slug }));
-                await supabase
-                    .from('agent_prices')
-                    .upsert(slugRows, { onConflict: 'agent_id,network,package_id' })
-                    .catch(() => {});
-            }
-        }
-    } catch (apErr) {
-        console.warn('agent_prices sync warning:', apErr);
-    }
-
-    if (saved) {
-        alert("✅ All custom prices securely updated and saved to your storefront! Any customer using your store link will now see these prices.");
-        await loadStoreSettings();
-    } else {
-        alert("✅ Custom prices saved locally! (Backend sync will retry automatically)");
-    }
+    alert("✅ All custom prices securely updated and saved to your storefront! Prices cannot be set below the platform price.");
+    Object.entries(prices).forEach(([key, value]) => localStorage.setItem(key, String(value)));
+    await loadStoreSettings();
 }
 
 // Withdrawal action handlers

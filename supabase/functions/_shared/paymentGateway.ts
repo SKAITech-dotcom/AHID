@@ -99,6 +99,20 @@ export function hubtelWalletGrossAmount(netAmount: number): number {
   return Math.round((netAmount * (1 + hubtelWalletFeeRate()) + Number.EPSILON) * 100) / 100;
 }
 
+/**
+ * Hubtel can add a fixed low-value checkout charge, so the provider's final
+ * customer-paid amount is not always the configured percentage gross amount.
+ * The callback is still bound to the stored reference and authenticated source;
+ * this cap only prevents an obviously unrelated amount from settling a top-up.
+ */
+export function hubtelWalletMaximumFee(netAmount: number): number {
+  const fixed = Number(Deno.env.get('HUBTEL_WALLET_MAX_FEE_GHS') ?? '0.50');
+  const percent = Number(Deno.env.get('HUBTEL_WALLET_MAX_FEE_PERCENT') ?? '0.05');
+  const safeFixed = Number.isFinite(fixed) && fixed >= 0 ? fixed : 0.50;
+  const safePercent = Number.isFinite(percent) && percent >= 0 && percent < 1 ? percent : 0.05;
+  return Math.max(safeFixed, Math.round(netAmount * safePercent * 100) / 100);
+}
+
 export function hubtelWalletAmountMatches(
   callbackAmount: number,
   netAmount: number,
@@ -113,7 +127,10 @@ export function hubtelWalletAmountMatches(
   if (Number.isFinite(recordedGrossAmount) && (recordedGrossAmount ?? 0) > 0) {
     allowedCents.add(Math.round((recordedGrossAmount as number) * 100));
   }
-  return allowedCents.has(callbackCents);
+  if (allowedCents.has(callbackCents)) return true;
+
+  const maxCustomerPaidCents = Math.round((netAmount + hubtelWalletMaximumFee(netAmount)) * 100);
+  return callbackCents >= Math.round(netAmount * 100) && callbackCents <= maxCustomerPaidCents;
 }
 
 export function normalizePaystack(payload: unknown): NormalizedPayment {
@@ -163,7 +180,9 @@ export function normalizeHubtel(payload: unknown): NormalizedPayment {
       || str(data.clientReference) || str(data.ClientReference),
     orderId: str(data.orderId) || str(data.OrderId) || str(data.checkoutId) || str(data.CheckoutId)
       || str(body.orderId) || str(body.order_id) || str(body.transaction_id) || str(body.TransactionId),
-    amountGhs: num(data.amount) ?? num(data.Amount) ?? num(body.amount) ?? num(body.Amount),
+    amountGhs: num(data.amountCharged) ?? num(data.AmountCharged)
+      ?? num(body.amountCharged) ?? num(body.AmountCharged)
+      ?? num(data.amount) ?? num(data.Amount) ?? num(body.amount) ?? num(body.Amount),
     currency: str(data.currency) || str(body.currency) || (body.responseCode || body.response_code ? 'GHS' : undefined),
     message: str(body.message) || str(body.Message) || str(data.message) || str(data.Message),
   };

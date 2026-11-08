@@ -61,7 +61,14 @@ Deno.serve(async (request) => {
       ?? callbackData.CheckoutId ?? callbackData.checkoutId ?? callbackData.SalesInvoiceId
       ?? callbackData.salesInvoiceId ?? callbackData.OrderId ?? callbackData.orderId ?? ''
     ).trim();
-    const amount = Number(payload.Amount ?? payload.amount ?? callbackData.Amount ?? callbackData.amount);
+    const amount = Number(
+      payload.AmountCharged ?? payload.amountCharged
+      ?? callbackData.AmountCharged ?? callbackData.amountCharged
+      ?? payload.Amount ?? payload.amount ?? callbackData.Amount ?? callbackData.amount,
+    );
+    const charges = Number(
+      payload.Charges ?? payload.charges ?? callbackData.Charges ?? callbackData.charges,
+    );
     const isSuccessfulCallback = responseCode === '0000' && status === 'SUCCESS';
     const isFailedCallback = responseCode === '2001' || ['FAILED', 'DECLINED', 'CANCELLED', 'CANCELED'].includes(status);
 
@@ -71,6 +78,7 @@ Deno.serve(async (request) => {
       status,
       reference,
       amount,
+      charges,
       checkoutId: orderId,
     }, null, 2));
 
@@ -162,6 +170,21 @@ Deno.serve(async (request) => {
         expectedGrossAmount: Number(topup.gross_amount),
       });
       return json({ received: true, settled: false });
+    }
+
+    // Store the actual customer-paid amount when Hubtel reports a fee-inclusive
+    // callback. The wallet is credited only with the original requested amount.
+    if (Number.isFinite(amount) && amount >= Number(topup.amount)) {
+      callbackUpdate.gross_amount = Math.round(amount * 100) / 100;
+      callbackUpdate.fee_amount = Math.round((amount - Number(topup.amount)) * 100) / 100;
+      const { error: amountSaveError } = await admin
+        .from('wallet_topups')
+        .update(callbackUpdate)
+        .eq('id', topup.id);
+      if (amountSaveError) {
+        console.error('[Hubtel wallet callback] Gross amount persistence failed', amountSaveError);
+        return json({ received: true, settled: false }, 200);
+      }
     }
 
     const { error: creditError } = await admin.rpc('fulfil_wallet_topup', { p_topup_id: topup.id });

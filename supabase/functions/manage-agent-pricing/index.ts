@@ -1,8 +1,18 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
+import { catalogPrice } from '../_shared/dataCatalog.ts';
 
 // Reserved pricing_key holding the percent of their commission profit an agent
 // chooses to share with customers on their storefront.
 const DISCOUNT_KEY = 'customer_discount_percent';
+
+function parseDataPriceKey(key: string): { network: string; volumeInMB: number } | null {
+  const match = /^price_(mtn|telecel|airteltigo)_(\d+(?:\.\d+)?)(gb|mb)$/i.exec(String(key).trim());
+  if (!match) return null;
+  const volumeInMB = Math.round(Number(match[2]) * (match[3].toLowerCase() === 'gb' ? 1024 : 1));
+  return Number.isFinite(volumeInMB) && volumeInMB > 0
+    ? { network: match[1].toLowerCase(), volumeInMB }
+    : null;
+}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
@@ -87,6 +97,30 @@ Deno.serve(async (request) => {
 
       if (rowsToUpsert.length === 0) {
         return json({ error: 'No valid prices provided to update.' }, 400);
+      }
+
+      const dataPriceRows = rowsToUpsert.filter((row) => row.pricing_key !== DISCOUNT_KEY);
+      if (dataPriceRows.length > 0) {
+        const { data: catalogRows, error: catalogError } = await admin
+          .from('bundle_catalog')
+          .select('network, volume_mb, price');
+        if (catalogError) throw catalogError;
+
+        for (const row of dataPriceRows) {
+          const parsed = parseDataPriceKey(row.pricing_key);
+          if (!parsed) continue;
+          const catalogRow = (catalogRows || []).find((candidate: { network: string; volume_mb: number }) =>
+            String(candidate.network).toLowerCase() === parsed.network
+            && Number(candidate.volume_mb) === parsed.volumeInMB);
+          const minimum = Number(catalogRow?.price ?? catalogPrice(parsed.network, parsed.volumeInMB));
+          if (Number.isFinite(minimum) && row.price < minimum) {
+            return json({
+              error: `${parsed.network.toUpperCase()} ${parsed.volumeInMB / 1024}GB cannot be priced below the platform price of GHS ${minimum.toFixed(2)}.`,
+              code: 'price_below_platform_minimum',
+              minimumPrice: minimum,
+            }, 400);
+          }
+        }
       }
 
       const { error: upsertError } = await admin

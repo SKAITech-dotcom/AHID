@@ -311,9 +311,12 @@ Deno.serve(async (request) => {
           refDashed ? customPrices.get(refDashed) : undefined,
         ].find((value): value is number => value !== undefined);
 
-        const price = (custom !== undefined && custom > 0)
+        // Never expose a customer price below the current platform catalog,
+        // including legacy rows saved before the platform floor was enforced.
+        const requestedPrice = (custom !== undefined && custom > 0)
           ? custom
           : (override?.price && override.price > 0 ? override.price : catalogPrice);
+        const price = Math.max(catalogPrice, requestedPrice);
 
         return {
           bundleId: String(bundle.bundle_id),

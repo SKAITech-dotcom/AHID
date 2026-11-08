@@ -97,7 +97,7 @@ export async function resolveAgentBundlePrice(
       .maybeSingle();
     const price = Number(data?.price);
     if (Number.isFinite(price) && price > 0) {
-      return Math.round(price * 100) / 100;
+      return Math.max(fallback, Math.round(price * 100) / 100);
     }
   } catch (err) {
     console.warn(`Could not read agent price for ${key}:`, err);

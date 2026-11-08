@@ -265,12 +265,13 @@ Deno.serve(async (request) => {
       }
     }
 
-    // Give priority to the agent's custom prices (matching what was rendered in get-store)
+    // Give priority to the agent's custom prices (matching what was rendered in
+    // get-store), but never allow a legacy/custom value below the platform floor.
     let saleAmount = platformPrice;
     if (customPrice !== null) {
-      saleAmount = round2(customPrice);
+      saleAmount = round2(Math.max(platformPrice, customPrice));
     } else if (override && Number.isFinite(Number(override.price)) && Number(override.price) > 0) {
-      saleAmount = round2(Number(override.price));
+      saleAmount = round2(Math.max(platformPrice, Number(override.price)));
     }
 
     // Confirm upstream package availability
