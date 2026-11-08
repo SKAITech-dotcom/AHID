@@ -77,7 +77,7 @@ Deno.serve(async (request) => {
     // Guest/non-agent data checkouts use the same authenticated Hubtel callback
     // endpoint, but they must never touch wallet_topups. The browser return
     // flow consumes this persisted callback through verify-public-data-payment.
-    if (/^PUB-GUEST-/i.test(reference)) {
+    if (/^(?:PUB[0-9a-f]{29}|PUB-GUEST-[0-9a-f-]{36})$/i.test(reference)) {
       const admin = adminClient();
       const { data: publicOrder, error: publicOrderError } = await admin
         .from('public_data_orders')

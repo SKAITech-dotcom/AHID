@@ -58,7 +58,10 @@ Deno.serve(async (request) => {
       return json({ error: 'This bundle is temporarily unavailable from its provider. No payment was started.' }, 409);
     }
 
-    const reference = `PUB-GUEST-${crypto.randomUUID()}`;
+    // Hubtel limits clientReference to 32 characters. Keep the guest reference
+    // short while retaining the old PUB-GUEST format for historical Paystack
+    // orders handled by the verification route.
+    const reference = `PUB${crypto.randomUUID().replaceAll('-', '').slice(0, 29)}`;
     const accessToken = crypto.randomUUID();
     const grossAmount = hubtelWalletGrossAmount(saleAmount);
     const feeAmount = roundMoney(grossAmount - saleAmount);

@@ -39,7 +39,9 @@ Deno.serve(async (request) => {
   try {
     const body = await request.json().catch(() => ({}));
     reference = String(body.reference || '').trim();
-    if (!/^PUB-GUEST-[0-9a-f-]{36}$/i.test(reference)) return json({ error: 'A valid payment reference is required.' }, 400);
+    if (!/^(?:PUB[0-9a-f]{29}|PUB-GUEST-[0-9a-f-]{36})$/i.test(reference)) {
+      return json({ error: 'A valid payment reference is required.' }, 400);
+    }
 
     const order = await currentOrder(admin, reference);
     if (!order) return json({ error: 'Order not found.' }, 404);
