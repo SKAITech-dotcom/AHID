@@ -1,5 +1,7 @@
 # Active context
 
+**Storefront checkout UI cleanup (2026-11-09):** Cleaned the public agent-store checkout (`storefront.html`/`storefront.js`): customers now see only "Total: GHS X.XX" and a "Pay GHS X.XX" button - removed the Package Price row, Paystack Fee (1.95%) row, "Total Payable" label, and gateway name ("Paystack"/"Skaipay") from buttons and spinner. Backend gateway split logic unchanged (Hubtel for <GHS 10, Paystack for >=GHS 10). Committed `e4e6af7`, pushed to `main`, auto-deploying to Wasmer.
+
 **Agent order/deposit UI privacy cleanup (2026-11-08):** Removed Provider Status and Provider Ref columns from the agent Orders table while retaining provider fields, status polling, and persistence internally. The Deposit page no longer shows the introductory funding panel; it opens the existing Load Wallet modal directly on entry. No provider or wallet backend behavior changed.
 
 **Agent dashboard cleanup (2026-11-08):** Removed the obsolete “Delivery speed” and “How to fund your agent wallet” accordion sections from both dashboard entrypoints, their unused styles, and the unused toggle handler. Wallet funding and order functionality remain unchanged.
