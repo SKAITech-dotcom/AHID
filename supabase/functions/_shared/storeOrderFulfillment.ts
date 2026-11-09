@@ -1,5 +1,7 @@
 import { adminClient } from './supabase.ts';
 import { buyDataPackage, resolveDataPackage, type DataBuyResult } from './dataProvider.ts';
+import { hubtelPaymentsVerifyConfigured, verifyHubtelCollection } from './hubtelPayments.ts';
+import { hubtelWalletAmountMatches, normalizeHubtel } from './paymentGateway.ts';
 import { refundWallet } from './wallet.ts';
 import { volumeForBundleId } from './dataCatalog.ts';
 
@@ -22,17 +24,12 @@ export interface StoreOrderFulfillmentResult {
 }
 
 /**
- * Idempotently verifies payment with Paystack, fulfills bundle dispatch,
+ * Idempotently verifies payment with the selected gateway, fulfills bundle dispatch,
  * and records the agent's store margin. Public storefront payments fund the
  * fulfilment directly; the margin is credited to the commission wallet only
  * after successful delivery.
  */
 export async function fulfilStoreOrder(reference: string): Promise<StoreOrderFulfillmentResult> {
-  const secret = Deno.env.get('PAYSTACK_SECRET_KEY');
-  if (!secret) {
-    throw new Error('Paystack secret key is not configured.');
-  }
-
   const admin = adminClient();
 
   // 1. Fetch store order
@@ -45,6 +42,8 @@ export async function fulfilStoreOrder(reference: string): Promise<StoreOrderFul
   if (orderError || !order) {
     throw new Error('Store order not found.');
   }
+
+  const paymentProvider = String(order.payment_provider || 'paystack').trim().toLowerCase();
 
   // Idempotency: once payment has been settled and fulfilment has reached a
   // terminal/processing state, do not dispatch or refund the same payment a
@@ -66,18 +65,75 @@ export async function fulfilStoreOrder(reference: string): Promise<StoreOrderFul
     };
   }
 
-  // 2. Verify payment status with Paystack
-  const verifiedRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-    headers: { Authorization: `Bearer ${secret}` },
-  });
-  const paystackData = await verifiedRes.json().catch(() => null);
+  // 2. Verify payment status with the gateway saved on this durable order.
+  // Hubtel callbacks are persisted by hubtel-webhook; its status endpoint is a
+  // recovery path when the browser returns before the callback arrives.
+  let paymentConfirmed = false;
+  let paymentFailureReason = 'Payment verification failed.';
+  let secret: string | undefined;
+  if (paymentProvider === 'hubtel') {
+    const callbackPayload = order.provider_response && typeof order.provider_response === 'object'
+      ? normalizeHubtel(order.provider_response)
+      : null;
+    const callbackAmount = callbackPayload?.amountGhs;
+    const callbackSuccess = callbackPayload?.state === 'success'
+      && callbackAmount !== undefined
+      && hubtelWalletAmountMatches(callbackAmount, Number(order.sale_amount), Number(order.payment_gross_amount));
+    if (callbackSuccess) {
+      paymentConfirmed = true;
+    } else if (callbackPayload?.state === 'failed') {
+      paymentFailureReason = callbackPayload.message || 'Skaipay payment was not successful.';
+    } else {
+      const verified = hubtelPaymentsVerifyConfigured()
+        ? await verifyHubtelCollection(reference)
+        : null;
+      const verifiedAmountMatches = verified?.state === 'success'
+        && verified.amountGhs !== undefined
+        && hubtelWalletAmountMatches(verified.amountGhs, Number(order.sale_amount), Number(order.payment_gross_amount));
+      if (verifiedAmountMatches) {
+        paymentConfirmed = true;
+      } else if (verified?.state === 'failed') {
+        paymentFailureReason = 'Skaipay payment was not successful.';
+      } else {
+        return {
+          success: false,
+          orderReference: order.reference,
+          paymentStatus: 'pending',
+          fulfilmentStatus: 'pending_payment',
+          profitMargin: 0,
+          message: 'Payment is not confirmed yet. Please wait a moment and try again.',
+          recipient: order.recipient,
+          bundleTitle: order.product_label,
+        };
+      }
+    }
+  } else {
+    secret = Deno.env.get('PAYSTACK_SECRET_KEY');
+    if (!secret) throw new Error('Paystack secret key is not configured.');
+    const verifiedRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    const paystackData = await verifiedRes.json().catch(() => null);
+    const expectedGross = Number(order.payment_gross_amount || 0) > 0
+      ? Math.round(Number(order.payment_gross_amount) * 100)
+      : Math.round((Number(order.sale_amount || 0) + Number(order.payment_fee || 0)) * 100);
+    const amountMatches = !Number.isFinite(Number(paystackData?.data?.amount)) || expectedGross <= 0
+      ? false
+      : Number(paystackData.data.amount) === expectedGross;
+    paymentConfirmed = verifiedRes.ok
+      && paystackData?.data?.status === 'success'
+      && paystackData.data.currency === 'GHS'
+      && amountMatches;
+    if (!paymentConfirmed) {
+      paymentFailureReason = paystackData?.data?.gateway_response || paystackData?.message || 'Payment verification failed.';
+    }
+  }
 
-  if (!verifiedRes.ok || paystackData?.data?.status !== 'success' || paystackData.data.currency !== 'GHS') {
-    const reason = paystackData?.data?.gateway_response || paystackData?.message || 'Payment verification failed.';
+  if (!paymentConfirmed) {
     await admin.from('store_orders').update({
       payment_status: 'failed',
       fulfilment_status: 'failed',
-      failure_reason: reason,
+      failure_reason: paymentFailureReason,
       updated_at: new Date().toISOString(),
     }).eq('id', order.id);
 
@@ -87,7 +143,7 @@ export async function fulfilStoreOrder(reference: string): Promise<StoreOrderFul
       paymentStatus: 'failed',
       fulfilmentStatus: 'failed',
       profitMargin: 0,
-      message: reason,
+      message: paymentFailureReason,
       recipient: order.recipient,
       bundleTitle: order.product_label,
     };
@@ -147,12 +203,13 @@ export async function fulfilStoreOrder(reference: string): Promise<StoreOrderFul
     ...dispatch.payload,
     provider: dataPackage?.provider || 'unknown',
     providerOrderId: dispatch.orderId ?? null,
+    providerReference: dispatch.providerReference ?? null,
     providerStatus: dispatch.status || null,
   };
 
-  const fulfilmentStatus = dispatch.success
-    ? (String(dispatch.status || '').toLowerCase() === 'processing' ? 'processing' : 'successful')
-    : 'failed';
+  // Provider acceptance is not delivery confirmation. Live status polling will
+  // move this order to successful/failed after Swift or GrandTech confirms it.
+  const fulfilmentStatus = dispatch.success ? 'processing' : 'failed';
   let walletRefunded = false;
   let walletRefundError: string | null = null;
   if (!dispatch.success && order.agent_id && walletDebited) {
@@ -164,21 +221,23 @@ export async function fulfilStoreOrder(reference: string): Promise<StoreOrderFul
       console.error('Store order wallet refund failed:', error);
     }
   }
-  const paystackRefunded = !dispatch.success ? await requestPaystackRefund(secret, reference) : false;
+  const paystackRefunded = !dispatch.success && paymentProvider === 'paystack' && secret
+    ? await requestPaystackRefund(secret, reference)
+    : false;
   await admin.from('store_orders').update({
     payment_status: !dispatch.success && paystackRefunded ? 'refunded' : 'paid',
     wallet_debited: dispatch.success ? walletDebited : !walletRefunded,
     fulfilment_status: fulfilmentStatus,
     provider: dataPackage?.provider || null,
-    provider_reference: dispatch.orderId ?? null,
+    provider_reference: dispatch.orderId ?? dispatch.providerReference ?? null,
     provider_response: providerResponse,
     failure_reason: dispatch.success ? null : [
       dispatch.failureReason || 'Provider could not deliver bundle.',
       walletRefundError ? `Wallet refund failed: ${walletRefundError}` : null,
-      paystackRefunded ? null : 'Customer payment refund is pending manual review.',
+      paystackRefunded || paymentProvider === 'hubtel' ? null : 'Customer payment refund is pending manual review.',
     ].filter(Boolean).join(' '),
     agent_earning: profitMargin,
-    completed_at: new Date().toISOString(),
+    completed_at: fulfilmentStatus === 'processing' ? null : new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }).eq('id', order.id);
 

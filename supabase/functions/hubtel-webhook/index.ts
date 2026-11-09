@@ -113,6 +113,46 @@ Deno.serve(async (request) => {
       return json({ received: true, settled: false }, 200);
     }
 
+    // Public agent-store purchases can use Skaipay/Hubtel for low-value
+    // bundles. Persist the authenticated callback on the store order; the
+    // browser return (or a later retry) verifies the amount before dispatching.
+    if (/^STR(?:[0-9a-f]{29}|-[0-9a-f-]{36})$/i.test(reference)) {
+      const admin = adminClient();
+      const { data: storeOrder, error: storeOrderError } = await admin
+        .from('store_orders')
+        .select('id, sale_amount, payment_status, fulfilment_status')
+        .eq('reference', reference)
+        .maybeSingle();
+      if (storeOrderError) {
+        console.error('[Hubtel store callback] Order lookup failed', storeOrderError);
+        return json({ received: true, settled: false }, 200);
+      }
+      if (!storeOrder) {
+        console.error('[Hubtel store callback] No matching store order', { reference, orderId });
+        return json({ received: true, settled: false }, 200);
+      }
+
+      const storeUpdate: Record<string, unknown> = {
+        provider_response: payload,
+        payment_provider: 'hubtel',
+        updated_at: new Date().toISOString(),
+      };
+      if (Number.isFinite(amount) && amount >= Number(storeOrder.sale_amount || 0)) {
+        storeUpdate.payment_gross_amount = Math.round(amount * 100) / 100;
+        storeUpdate.payment_fee_amount = Math.round((amount - Number(storeOrder.sale_amount || 0)) * 100) / 100;
+        storeUpdate.payment_fee = storeUpdate.payment_fee_amount;
+      }
+      if (isFailedCallback && ['pending', 'pending_payment', 'processing'].includes(String(storeOrder.fulfilment_status))) {
+        storeUpdate.payment_status = 'failed';
+        storeUpdate.fulfilment_status = 'failed';
+        storeUpdate.failure_reason = 'Skaipay payment was not successful.';
+        storeUpdate.completed_at = new Date().toISOString();
+      }
+      const { error: storeSaveError } = await admin.from('store_orders').update(storeUpdate).eq('id', storeOrder.id);
+      if (storeSaveError) console.error('[Hubtel store callback] Callback persistence failed', storeSaveError);
+      return json({ received: true, settled: false }, 200);
+    }
+
     if (!reference && !orderId) {
       console.error('[Hubtel wallet callback] Missing ClientReference and CheckoutId', payload);
       return json({ received: true, settled: false });

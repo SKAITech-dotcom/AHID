@@ -1,6 +1,8 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
 import { resolveDataPackage } from '../_shared/dataProvider.ts';
 import { catalogPrice, formatBundleVolume, volumeForBundleId } from '../_shared/dataCatalog.ts';
+import { hubtelWalletGrossAmount } from '../_shared/paymentGateway.ts';
+import { hubtelPaymentsConfigured, initializeHubtelCollection } from '../_shared/hubtelPayments.ts';
 import { fulfilStoreOrder } from '../_shared/storeOrderFulfillment.ts';
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -19,10 +21,12 @@ Deno.serve(async (request) => {
       if (!reference) return json({ error: 'Order reference is required.' }, 400);
 
       const result = await fulfilStoreOrder(reference);
-      return json(result, result.success ? 200 : 400);
+      const isWaitingForPayment = result.fulfilmentStatus === 'pending_payment';
+      return json(result, result.success || isWaitingForPayment ? 200 : 400);
     }
 
-    // 2. Order Checkout Initialization (Paystack Direct Checkout)
+    // 2. Order Checkout Initialization. The gateway is selected server-side:
+    // Skaipay/Hubtel for prices below GHS 10, Paystack for GHS 10 and above.
     const rawSlug = String(body.slug || body.ref || body.agent || body.code || '').trim();
     const bundleId = String(body.bundleId || '').trim().toLowerCase();
     const recipient = String(body.recipient || body.phone || '').trim();
@@ -281,25 +285,31 @@ Deno.serve(async (request) => {
     }
     const providerCost = round2(dataPackage.costGhs);
 
-    // Automatic Paystack Fee Calculation (1.95% transaction processing fee)
+    const paymentProvider = saleAmount < 10 ? 'hubtel' : 'paystack';
     const feeRate = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.0195');
-    const safeRate = Number.isFinite(feeRate) && feeRate > 0 && feeRate < 1 ? feeRate : 0.0195;
-    const grossAmount = Math.round(((saleAmount * (1 + safeRate)) + Number.EPSILON) * 100) / 100;
+    const safeRate = Number.isFinite(feeRate) && feeRate >= 0 && feeRate < 1 ? feeRate : 0.0195;
+    const grossAmount = paymentProvider === 'hubtel'
+      ? hubtelWalletGrossAmount(saleAmount)
+      : Math.round(((saleAmount * (1 + safeRate)) + Number.EPSILON) * 100) / 100;
     const feeAmount = Math.round((grossAmount - saleAmount) * 100) / 100;
+
+    if (paymentProvider === 'hubtel' && !hubtelPaymentsConfigured()) {
+      return json({ error: 'Skaipay checkout is not configured yet. Please try again later.' }, 503);
+    }
+    const secret = Deno.env.get('PAYSTACK_SECRET_KEY');
+    if (paymentProvider === 'paystack' && !secret) {
+      return json({ error: 'Paystack checkout is not configured yet.' }, 503);
+    }
 
     // Calculate agent profit margin
     const profitMargin = Math.max(0, round2(saleAmount - platformPrice));
 
-    // 7. Initialize Paystack Transaction
-    const secret = Deno.env.get('PAYSTACK_SECRET_KEY');
-    if (!secret) {
-      return json({ error: 'Paystack checkout is not configured yet.' }, 500);
-    }
-
-    const reference = `STR-${crypto.randomUUID()}`;
+    // Keep new references within Hubtel's 32-character client-reference limit.
+    // Historical STR-{uuid} references remain valid for Paystack verification.
+    const reference = `STR${crypto.randomUUID().replaceAll('-', '').slice(0, 29)}`;
     const payerEmail = customerEmail || `${recipient}@skaitechgh.com`;
     const siteUrl = Deno.env.get('SITE_URL') || 'https://skaitechgh.wasmer.app';
-    const callbackUrl = `${siteUrl}/storefront.html?ref=${encodeURIComponent(rawSlug || store.slug)}&agent=${encodeURIComponent(rawSlug || store.slug)}&reference=${encodeURIComponent(reference)}`;
+    const callbackUrl = `${siteUrl}/storefront.html?ref=${encodeURIComponent(rawSlug || store.slug)}&agent=${encodeURIComponent(rawSlug || store.slug)}&reference=${encodeURIComponent(reference)}&gateway=${paymentProvider}`;
 
     // Create pending store order record
     const { data: order, error: orderError } = await admin.from('store_orders').insert({
@@ -320,6 +330,9 @@ Deno.serve(async (request) => {
       platform_price: platformPrice,
       provider_cost: providerCost,
       payment_fee: feeAmount,
+      payment_provider: paymentProvider,
+      payment_fee_amount: feeAmount,
+      payment_gross_amount: grossAmount,
       agent_earning: profitMargin,
       platform_revenue: round2(platformPrice - providerCost),
       wallet_debited: false,
@@ -337,10 +350,64 @@ Deno.serve(async (request) => {
         processing_fee: feeAmount,
         gross_amount: grossAmount,
         fee_rate: safeRate,
+        payment_provider: paymentProvider,
       },
     }).select('id, short_code').single();
 
     if (orderError) throw orderError;
+
+    if (paymentProvider === 'hubtel') {
+      try {
+        const callbackSecret = Deno.env.get('HUBTEL_WALLET_CALLBACK_SECRET')?.trim();
+        const configuredCallback = Deno.env.get('HUBTEL_WALLET_CALLBACK_URL')?.trim()
+          || `${Deno.env.get('SUPABASE_URL')}/functions/v1/hubtel-webhook`;
+        const hubtelCallbackUrl = callbackSecret
+          ? (() => {
+              const target = new URL(configuredCallback);
+              target.searchParams.set('token', callbackSecret);
+              return target.toString();
+            })()
+          : configuredCallback;
+        const payment = await initializeHubtelCollection({
+          reference,
+          amountGhs: saleAmount,
+          returnUrl: callbackUrl,
+          callbackUrl: hubtelCallbackUrl,
+          description: `Skaipay data bundle ${bundle.title}`,
+        });
+        const { error: checkoutSaveError } = await admin.from('store_orders').update({
+          provider_response: { checkout: payment.payload, checkoutId: payment.orderId || null },
+          updated_at: new Date().toISOString(),
+        }).eq('id', order.id);
+        if (checkoutSaveError) throw checkoutSaveError;
+
+        return json({
+          success: true,
+          orderReference: reference,
+          shortCode: order.short_code,
+          authorizationUrl: payment.authorizationUrl,
+          paymentProvider,
+          gatewayLabel: 'Skaipay (Hubtel)',
+          packagePrice: saleAmount,
+          feeAmount,
+          grossAmount,
+          saleAmount,
+          customerEmail: payerEmail,
+          recipient,
+          bundleTitle: bundle.title,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Skaipay could not start checkout.';
+        await admin.from('store_orders').update({
+          payment_status: 'failed',
+          fulfilment_status: 'failed',
+          failure_reason: message,
+          provider_response: { paymentInitialization: message },
+          updated_at: new Date().toISOString(),
+        }).eq('id', order.id);
+        return json({ error: `${message} No payment was taken.` }, 502);
+      }
+    }
 
     // Call Paystack API charging the total grossAmount (package price + Paystack processing fee)
     const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
@@ -389,10 +456,12 @@ Deno.serve(async (request) => {
       authorizationUrl: payment.data.authorization_url,
       accessCode: payment.data.access_code,
       paystackPublicKey: Deno.env.get('PAYSTACK_PUBLIC_KEY') || null,
+      paymentProvider,
+      gatewayLabel: 'Paystack',
       packagePrice: saleAmount,
       feeAmount,
       grossAmount,
-      saleAmount: grossAmount,
+      saleAmount,
       customerEmail: payerEmail,
       recipient,
       bundleTitle: bundle.title,

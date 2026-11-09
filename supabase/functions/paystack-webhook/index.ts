@@ -23,7 +23,7 @@ Deno.serve(async (request) => {
     const admin = adminClient();
 
     // 0. Store Data Bundle Order (direct customer purchase with agent profit margin credit)
-    if (event.data?.metadata?.payment_type === 'store_order' || String(reference).startsWith('STR-')) {
+    if (event.data?.metadata?.payment_type === 'store_order' || /^STR(?:[0-9a-f]{29}|-[0-9a-f-]{36})$/i.test(String(reference))) {
       await fulfilStoreOrder(reference);
       return json({ received: true });
     }

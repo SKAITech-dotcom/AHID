@@ -33,6 +33,15 @@ if (['mtn', 'telecel', 'airteltigo'].includes(initialNetwork)) {
 }
 
 const PAYSTACK_FEE_RATE = 0.0195; // 1.95% Paystack processing fee
+const STORE_HUBTEL_THRESHOLD = 10;
+
+function storePaymentProvider(packagePrice) {
+  return Number(packagePrice) < STORE_HUBTEL_THRESHOLD ? 'hubtel' : 'paystack';
+}
+
+function storeGatewayLabel(provider) {
+  return provider === 'hubtel' ? 'Skaipay (Hubtel)' : 'Paystack';
+}
 
 function computePaystackFee(packagePrice) {
   const price = Number(packagePrice) || 0;
@@ -43,6 +52,14 @@ function computePaystackFee(packagePrice) {
     feeAmount: fee,
     grossAmount: gross,
   };
+}
+
+function computeStoreCheckout(packagePrice) {
+  const provider = storePaymentProvider(packagePrice);
+  if (provider === 'hubtel') {
+    return { provider, feeAmount: 0, grossAmount: Number(packagePrice) || 0 };
+  }
+  return { provider, ...computePaystackFee(packagePrice) };
 }
 
 function showResult(message, kind = 'ok') {
@@ -76,7 +93,8 @@ async function loadStore() {
 
       // If customer returned from redirect checkout with a reference
       if (returningReference) {
-        showResult('<i class="fa-solid fa-spinner fa-spin"></i> Confirming your payment with Paystack...', 'ok');
+        const gateway = params.get('gateway') === 'hubtel' ? 'Skaipay' : 'the payment gateway';
+        showResult(`<i class="fa-solid fa-spinner fa-spin"></i> Confirming your payment with ${gateway}...`, 'ok');
         verifyOrder(returningReference);
       }
       return;
@@ -271,7 +289,8 @@ async function loadStore() {
     renderStore();
 
     if (returningReference) {
-      showResult('<i class="fa-solid fa-spinner fa-spin"></i> Confirming your payment with Paystack...', 'ok');
+      const gateway = params.get('gateway') === 'hubtel' ? 'Skaipay' : 'the payment gateway';
+      showResult(`<i class="fa-solid fa-spinner fa-spin"></i> Confirming your payment with ${gateway}...`, 'ok');
       verifyOrder(returningReference);
     }
   } catch (err) {
@@ -315,7 +334,7 @@ function renderStore() {
   }
 
   if (els.storeTagline) els.storeTagline.textContent = store.tagline || '';
-  if (els.storeDescription) els.storeDescription.textContent = store.description || 'Choose your data package below and pay securely via Paystack (MoMo / Card). Bundles are delivered instantly.';
+  if (els.storeDescription) els.storeDescription.textContent = store.description || 'Choose your data package below and enter the recipient number to get started.';
 
   if (store.contactPhone && els.storePhone) {
     els.storePhone.href = `tel:${String(store.contactPhone).replace(/[^+0-9]/g, '')}`;
@@ -368,7 +387,7 @@ function renderBundles(bundles) {
   if (!els.grid) return;
   els.grid.innerHTML = bundles.map((bundle, index) => {
     const price = Number(bundle.price);
-    const { feeAmount, grossAmount } = computePaystackFee(price);
+    const checkout = computeStoreCheckout(price);
 
     return `
       <div class="bundle">
@@ -381,22 +400,14 @@ function renderBundles(bundles) {
           <input type="tel" id="phone-${index}" placeholder="Recipient number e.g. 0240000000 *" autocomplete="tel" inputmode="tel">
           
           <div class="fee-breakdown">
-            <div class="fee-row">
-              <span>Package Price:</span>
-              <strong>${money(price)}</strong>
-            </div>
-            <div class="fee-row">
-              <span>Paystack Fee (1.95%):</span>
-              <span>+ ${money(feeAmount)}</span>
-            </div>
-            <div class="fee-row total">
-              <span>Total Payable:</span>
-              <strong>${money(grossAmount)}</strong>
+            <div class="fee-row total" style="border-top:none; padding-top:0; margin-top:0;">
+              <span>Total:</span>
+              <strong>${money(checkout.grossAmount)}</strong>
             </div>
           </div>
 
           <div class="row">
-            <button type="button" class="confirm" data-confirm="${index}">Pay ${money(grossAmount)} with Paystack</button>
+            <button type="button" class="confirm" data-confirm="${index}">Pay ${money(checkout.grossAmount)}</button>
             <button type="button" class="cancel" data-cancel="${index}">Cancel</button>
           </div>
         </div>
@@ -428,7 +439,13 @@ async function submitOrder(bundle, index) {
   const button = els.grid.querySelector(`[data-confirm="${index}"]`);
 
   const packagePrice = Number(bundle.price);
-  const { feeAmount, grossAmount } = computePaystackFee(packagePrice);
+  const checkout = computeStoreCheckout(packagePrice);
+  const resetButton = (amount = checkout.grossAmount) => {
+    if (button) {
+      button.disabled = false;
+      button.textContent = `Pay ${money(amount)}`;
+    }
+  };
 
   if (!phone) {
     showResult('<strong>Missing details.</strong> Please enter the customer/recipient phone number.', 'err');
@@ -442,7 +459,7 @@ async function submitOrder(bundle, index) {
   const idempotencyKey = (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
   if (button) {
     button.disabled = true;
-    button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Opening Paystack…';
+    button.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing payment…`;
   }
 
   try {
@@ -462,12 +479,33 @@ async function submitOrder(bundle, index) {
       try { body = await error?.context?.json(); } catch (_) { /* ignore */ }
       const message = body?.error || data?.error || 'Unable to start checkout right now.';
       showResult(`<strong>Checkout error.</strong> ${message}`, 'err');
-      if (button) { button.disabled = false; button.textContent = `Pay ${money(grossAmount)} with Paystack`; }
+      resetButton();
       return;
     }
 
-    const { orderReference, authorizationUrl, grossAmount: serverGross, saleAmount: serverSale, customerEmail: payerEmail, paystackPublicKey } = data;
-    const finalGross = Number(serverGross || serverSale || grossAmount);
+    const {
+      orderReference,
+      authorizationUrl,
+      grossAmount: serverGross,
+      saleAmount: serverSale,
+      customerEmail: payerEmail,
+      paystackPublicKey,
+      paymentProvider,
+    } = data;
+    const selectedProvider = paymentProvider || checkout.provider;
+    const finalGross = Number(serverGross || serverSale || checkout.grossAmount);
+
+    // Hubtel returns a hosted Skaipay page. Keep the customer in this tab and
+    // let the return URL confirm the durable store order.
+    if (selectedProvider === 'hubtel') {
+      if (authorizationUrl) {
+        window.location.replace(authorizationUrl);
+        return;
+      }
+      showResult('Could not open Skaipay checkout. Please try again.', 'err');
+      resetButton(finalGross);
+      return;
+    }
 
     // Use Paystack Popup if PaystackPop is available
     if (typeof window.PaystackPop !== 'undefined' && paystackPublicKey) {
@@ -479,11 +517,11 @@ async function submitOrder(bundle, index) {
           currency: 'GHS',
           ref: orderReference,
           onClose: function () {
-            if (button) { button.disabled = false; button.textContent = `Pay ${money(finalGross)} with Paystack`; }
+            resetButton(finalGross);
             showResult('<strong>Payment cancelled.</strong> You can try again when you are ready.', 'err');
           },
           callback: function (response) {
-            if (button) { button.disabled = false; button.textContent = `Pay ${money(finalGross)} with Paystack`; }
+            resetButton(finalGross);
             showResult('<i class="fa-solid fa-spinner fa-spin"></i> <strong>Payment successful!</strong> Delivering your data bundle...', 'ok');
             verifyOrder(orderReference);
           },
@@ -497,19 +535,19 @@ async function submitOrder(bundle, index) {
 
     // Direct redirect fallback
     if (authorizationUrl) {
-      window.location.href = authorizationUrl;
+      window.location.replace(authorizationUrl);
       return;
     }
 
     showResult('Could not open payment checkout. Please try again.', 'err');
-    if (button) { button.disabled = false; button.textContent = `Pay ${money(finalGross)} with Paystack`; }
+    resetButton(finalGross);
   } catch (err) {
     showResult(`<strong>Order error.</strong> ${err.message || 'Please try again.'}`, 'err');
-    if (button) { button.disabled = false; button.textContent = `Pay ${money(grossAmount)} with Paystack`; }
+    resetButton();
   }
 }
 
-async function verifyOrder(reference) {
+async function verifyOrder(reference, attempt = 0) {
   try {
     const { data, error } = await FN.invoke('create-store-order', {
       body: { action: 'verify', reference },
@@ -521,8 +559,23 @@ async function verifyOrder(reference) {
       return;
     }
 
+    if (data?.fulfilmentStatus === 'pending_payment' || data?.status === 'pending_payment') {
+      if (attempt < 5) {
+        showResult('<i class="fa-solid fa-spinner fa-spin"></i> Waiting for Skaipay confirmation...', 'ok');
+        window.setTimeout(() => verifyOrder(reference, attempt + 1), 2500);
+        return;
+      }
+      showResult(`<strong>Payment is still being confirmed.</strong><br>Reference: <code>${reference}</code><br>Please refresh this page shortly.`, 'ok');
+      return;
+    }
+
+    if (data?.success === false || data?.fulfilmentStatus === 'failed') {
+      showResult(`<strong>Order not completed.</strong> ${data.message || 'Please contact support if you were charged.'}<br>Reference: <code>${reference}</code>`, 'err');
+      return;
+    }
+
     showResult(
-      `<strong><i class="fa-solid fa-circle-check" style="color: #10b981;"></i> Order Successful!</strong><br>` +
+      `<strong><i class="fa-solid fa-circle-check" style="color: #10b981;"></i> Order accepted!</strong><br>` +
       `Reference: <code>${reference}</code><br>` +
       `${data.message || 'Your data bundle order was accepted and is being delivered.'}`,
       'ok',
