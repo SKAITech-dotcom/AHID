@@ -20,6 +20,7 @@ let cachedUtilityOrders = [];
 let cachedWallets = [];
 let cachedAdmins = [];
 let selectedWalletUser = null;
+let activeSectionRefreshInProgress = false;
 
 // Constant Configurations
 const TV_PACKAGES = {
@@ -157,6 +158,13 @@ async function initAdminPortal() {
     // Load the default operational view.
     await loadDataModuleData();
 
+    // Keep operational order statuses current while an admin is watching them.
+    window.setInterval(() => {
+      if (!document.hidden && ['data-module', 'airtime-module', 'utility-module'].includes(activeSection)) {
+        refreshActiveSection();
+      }
+    }, 20000);
+
     // Close sidebar on mobile clicking outside
     document.addEventListener('click', (e) => {
       const sidebar = document.getElementById('adminSidebar');
@@ -220,6 +228,8 @@ function switchSection(sectionId) {
 }
 
 async function refreshActiveSection() {
+  if (activeSectionRefreshInProgress) return;
+  activeSectionRefreshInProgress = true;
   const icon = document.getElementById('refreshIcon');
   if (icon) icon.classList.add('fa-spin');
 
@@ -239,6 +249,7 @@ async function refreshActiveSection() {
     else if (activeSection === 'admins-module' && isSuperAdmin) await loadAdminsData();
   } finally {
     if (icon) setTimeout(() => icon.classList.remove('fa-spin'), 400);
+    activeSectionRefreshInProgress = false;
   }
 }
 
@@ -315,6 +326,7 @@ async function loadDataModuleData(options = {}) {
         status: isCancelled ? 'cancelled' : o.status,
         provider,
         providerStatus,
+        providerReference: o.provider_order_id || o.provider_reference || '',
         isCancelled,
         failureReason: o.failure_reason,
         createdAt: o.created_at,
@@ -341,6 +353,7 @@ async function loadDataModuleData(options = {}) {
         status: isCancelled ? 'cancelled' : o.status,
         provider,
         providerStatus,
+        providerReference: o.provider_reference || '',
         isCancelled,
         failureReason: '',
         createdAt: o.created_at,
@@ -361,6 +374,7 @@ async function loadDataModuleData(options = {}) {
       status: o.status || 'completed',
       provider: 'Wallet order',
       providerStatus: safeProviderStatus(o.status, 'COMPLETED'),
+      providerReference: '',
       isCancelled: false,
       failureReason: '',
       createdAt: o.created_at,
@@ -374,7 +388,7 @@ async function loadDataModuleData(options = {}) {
       return {
         id: o.id,
         orderId: fiveCharacterAdminOrderCode(o.short_code || o.reference || o.id),
-        kind: 'legacy',
+        kind: 'store_orders',
         reference: o.reference,
         shortCode: o.short_code || '',
         phone: o.recipient || o.customer_phone,
@@ -383,6 +397,7 @@ async function loadDataModuleData(options = {}) {
         status,
         provider: o.provider || 'Swift',
         providerStatus: safeProviderStatus(resp.lastProviderStatus || resp.providerStatus || status),
+        providerReference: o.provider_reference || '',
         isCancelled: status === 'cancelled',
         failureReason: o.failure_reason || '',
         createdAt: o.created_at,
@@ -422,7 +437,7 @@ function renderDataOrders(orders) {
   if (!tbody) return;
 
   if (!orders.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 16px;">No data orders found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 16px;">No data orders found.</td></tr>';
     return;
   }
 
@@ -448,6 +463,9 @@ function renderDataOrders(orders) {
     } else {
       statusBadge = `<span class="badge badge-pending"><i class="fa-solid fa-clock"></i> ${escapeHtml(providerStatus.toUpperCase())}</span>`;
     }
+
+    const orderStatusLabel = isCancelled ? 'Cancelled' : isSuccess ? 'Completed' : isFailed ? 'Failed' : 'Processing';
+    const orderStatusClass = isCancelled || isFailed ? 'badge-failed' : isSuccess ? 'badge-success' : 'badge-pending';
 
     const providerBadge = `<span class="badge ${String(o.provider || '').toLowerCase().includes('grand') ? 'badge-primary' : 'badge-network'}">${escapeHtml(o.provider || 'Swift')}</span>`;
 
@@ -500,6 +518,8 @@ function renderDataOrders(orders) {
         <td><strong>${money(o.amount)}</strong></td>
         <td>${providerBadge}</td>
         <td>${statusBadge}</td>
+        <td><span class="badge ${orderStatusClass}">${orderStatusLabel}</span></td>
+        <td><code style="font-size: 0.72rem; word-break: break-all;">${escapeHtml(o.providerReference || '—')}</code></td>
         <td style="color: var(--text-dim); font-size: 0.74rem;">${new Date(o.createdAt).toLocaleString()}</td>
         <td><div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">${eventButton}${actions}</div></td>
       </tr>
@@ -1415,6 +1435,24 @@ async function loadWalletsData() {
         totalCommissionEarned: Number(w.total_commission_earned || 0),
         updatedAt: w.updated_at,
       };
+    });
+
+    const agentWallets = cachedWallets.filter((wallet) => String(wallet.role || 'agent').toLowerCase() === 'agent');
+    const totals = agentWallets.reduce((summary, wallet) => ({
+      balance: summary.balance + Number(wallet.balance || 0),
+      commissionBalance: summary.commissionBalance + Number(wallet.commissionBalance || 0),
+      deposits: summary.deposits + Number(wallet.deposits || 0),
+      sales: summary.sales + Number(wallet.sales || 0),
+    }), { balance: 0, commissionBalance: 0, deposits: 0, sales: 0 });
+    const summaryFields = {
+      walletsTotalBalance: totals.balance,
+      walletsTotalCommission: totals.commissionBalance,
+      walletsTotalDeposits: totals.deposits,
+      walletsTotalSales: totals.sales,
+    };
+    Object.entries(summaryFields).forEach(([id, value]) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = money(value);
     });
 
     renderWallets(cachedWallets);

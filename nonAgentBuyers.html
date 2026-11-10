@@ -61,7 +61,7 @@
       <a href="login.html">Sign in / Create agent account</a>
     </header>
     <section class="hero">
-      <div><h1>Buy data without an agent account.</h1><p>Choose a live bundle, enter the customer's number, and pay securely with Hubtel. You do not need to register to buy.</p></div>
+      <div><h1>Buy data without an agent account.</h1><p>Choose a live bundle, enter the customer's number, and pay securely with Skaipay or Paystack. You do not need to register to buy.</p></div>
       <div class="hero-note"><strong>Simple checkout</strong><br>Only the recipient phone number is required. Prices are controlled from Skaitech's live data catalogue.</div>
     </section>
     <div id="message" class="message"></div>
@@ -74,10 +74,10 @@
         <div style="flex:1"><label for="customerPhone">Customer phone number</label><input id="customerPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="0241234567" maxlength="10"></div>
         <button id="payButton" class="pay" type="button">Continue to payment</button><button id="cancelButton" class="cancel" type="button">Cancel</button>
       </div>
-      <p class="help">Complete the Hubtel mobile-money checkout. Your bundle is sent after payment is confirmed.</p>
+      <p class="help" id="paymentHelp">Your bundle is sent after payment is confirmed.</p>
     </section>
     <section id="statusCard" class="status-card" aria-live="polite"><h2>Order status</h2><p id="statusText"></p><div id="statusReference" class="track"></div></section>
   </main>
-  <script type="module" src="nonAgentBuyers.js?v=20261107-hubtel"></script>
+  <script type="module" src="nonAgentBuyers.js?v=20261110-gateway-rules"></script>
 </body>
 </html>

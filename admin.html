@@ -1032,6 +1032,8 @@
                     <th>Amount</th>
                     <th>Provider</th>
                     <th>Live Status</th>
+                    <th>Order Status</th>
+                    <th>Provider Reference</th>
                     <th>Date</th>
                     <th>Actions</th>
                   </tr>
@@ -1732,6 +1734,29 @@
             <div class="panel-actions">
               <input type="text" id="walletSearchInput" class="form-input" placeholder="Search by name, phone, code…" style="width: 240px;" oninput="filterWallets()">
               <button class="btn btn-secondary btn-sm" onclick="loadWalletsData()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+            </div>
+          </div>
+
+          <div class="metrics-grid" style="margin: 0 0 18px;">
+            <div class="metric-card">
+              <div class="metric-header"><div class="metric-title">Agent Wallet Balance</div><div class="metric-icon" style="background: rgba(37, 99, 235, 0.16); color: #60a5fa;"><i class="fa-solid fa-wallet"></i></div></div>
+              <div class="metric-value" id="walletsTotalBalance">GHS 0.00</div>
+              <div class="metric-sub">Combined available balance</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-header"><div class="metric-title">Agent Commission Balance</div><div class="metric-icon" style="background: rgba(16, 185, 129, 0.16); color: #34d399;"><i class="fa-solid fa-hand-holding-dollar"></i></div></div>
+              <div class="metric-value" id="walletsTotalCommission">GHS 0.00</div>
+              <div class="metric-sub">Combined commission balance</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-header"><div class="metric-title">Total Agent Deposits</div><div class="metric-icon" style="background: rgba(245, 158, 11, 0.16); color: #fbbf24;"><i class="fa-solid fa-arrow-down"></i></div></div>
+              <div class="metric-value" id="walletsTotalDeposits">GHS 0.00</div>
+              <div class="metric-sub">All recorded wallet deposits</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-header"><div class="metric-title">Total Agent Sales</div><div class="metric-icon" style="background: rgba(168, 85, 247, 0.16); color: #c084fc;"><i class="fa-solid fa-chart-line"></i></div></div>
+              <div class="metric-value" id="walletsTotalSales">GHS 0.00</div>
+              <div class="metric-sub">All recorded agent sales</div>
             </div>
           </div>
 

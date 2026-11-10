@@ -11,6 +11,7 @@ const $ = (id) => document.getElementById(id);
 const money = (value) => `GHS ${Number(value || 0).toFixed(2)}`;
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 const volume = (mb) => Number(mb) >= 1024 ? `${Number(mb) / 1024 % 1 ? (Number(mb) / 1024).toFixed(1) : Number(mb) / 1024}GB` : `${mb}MB`;
+const paymentGatewayForPrice = (price) => Number(price) >= 10 && Number(price) <= 50 ? 'Paystack' : 'Skaipay';
 
 function showMessage(text, type = 'info') {
   const element = $('message');
@@ -52,6 +53,7 @@ function openCheckout(bundleId) {
   selectedBundle = bundles.find((bundle) => bundle.bundleId === bundleId) || null;
   if (!selectedBundle) return;
   $('selectedBundle').textContent = `${NETWORK_LABELS[selectedBundle.network]} · ${volume(selectedBundle.volumeMb)} · ${money(selectedBundle.price)}`;
+  $('paymentHelp').textContent = `Complete the ${paymentGatewayForPrice(selectedBundle.price)} checkout. Your bundle is sent after payment is confirmed.`;
   $('checkout').classList.add('open');
   $('customerPhone').focus();
   $('checkout').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -92,13 +94,13 @@ async function startCheckout() {
   showMessage('Preparing your secure payment…', 'info');
   try {
     const { data, error } = await supabase.functions.invoke('create-public-data-checkout', {
-      body: { bundleId: selectedBundle.bundleId, phone, paymentProvider: 'hubtel' },
+      body: { bundleId: selectedBundle.bundleId, phone },
     });
     if (error) {
       const details = await readFunctionError(error);
       throw new Error(details.message || 'Unable to start checkout.');
     }
-    if (!data?.authorizationUrl || !data.reference || !data.accessToken) throw new Error(data?.error || 'Hubtel did not return a checkout link.');
+    if (!data?.authorizationUrl || !data.reference || !data.accessToken) throw new Error(data?.error || 'The payment gateway did not return a checkout link.');
     sessionStorage.setItem('skaitech_guest_data_payment', JSON.stringify({
       reference: data.reference,
       accessToken: data.accessToken,
@@ -159,7 +161,7 @@ async function showPaymentResult() {
         return;
       }
       if (state === 'failed' || state === 'cancelled') {
-        $('statusText').textContent = 'This bundle could not be delivered. Please contact support about the Hubtel payment refund.';
+        $('statusText').textContent = 'This bundle could not be delivered. Please contact support about the payment refund.';
         $('statusText').style.color = '#991b1b';
         return;
       }

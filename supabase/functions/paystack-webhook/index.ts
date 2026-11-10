@@ -1,6 +1,5 @@
 import { adminClient, json } from '../_shared/supabase.ts';
 import { dispatchAirtimeTopup } from '../_shared/airtimeProvider.ts';
-import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
 import { callUtilityProvider } from '../_shared/utilityProvider.ts';
 import { fulfilStoreOrder } from '../_shared/storeOrderFulfillment.ts';
 
@@ -48,66 +47,23 @@ Deno.serve(async (request) => {
     }
 
     if (event.data?.metadata?.payment_type === 'public_data') {
-      const { data: order, error: orderError } = await admin.from('public_data_orders')
-        .select('*').eq('payment_reference', reference).single();
-      if (orderError || !order || order.status !== 'pending_payment') return json({ received: true });
-
-      const verified = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, { headers: { Authorization: `Bearer ${secret}` } });
-      const transaction = await verified.json();
-      const feeRate = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.0195');
-      const safeRate = Number.isFinite(feeRate) && feeRate >= 0 && feeRate < 1 ? feeRate : 0.0195;
-      const expectedGross = Math.round(((Number(order.sale_amount) * (1 + safeRate)) + Number.EPSILON) * 100) / 100;
-      if (!verified.ok || transaction.data?.status !== 'success' || transaction.data.amount !== Math.round(expectedGross * 100) || transaction.data.currency !== 'GHS') {
-        return json({ error: 'Payment verification failed.' }, 400);
-      }
-
-      const companyAgentId = Deno.env.get('PUBLIC_DATA_AGENT_ID');
-      if (!companyAgentId) throw new Error('Public data provider funding is not configured.');
-      const { data: claimed, error: claimError } = await admin.rpc('claim_public_data_order', { p_order_id: order.id });
-      if (claimError) throw claimError;
-      if (!claimed) return json({ received: true });
-
-      const dataPackage = await resolveDataPackage(order.network_type, order.volume_mb);
-      if (!dataPackage) throw new Error('Unable to confirm the provider bundle price.');
-      const providerCost = dataPackage.costGhs;
-      if (!Number.isFinite(providerCost) || providerCost <= 0) throw new Error('Unable to confirm the provider bundle price.');
-
-      const providerReference = `PUB-DATA-${crypto.randomUUID()}`;
-      const { data: providerOrderId, error: reserveError } = await admin.rpc('reserve_agent_data_order', {
-        p_agent_id: companyAgentId, p_reference: providerReference, p_network_type: order.network_type,
-        p_phone: order.customer_phone, p_volume_mb: order.volume_mb, p_amount: Math.round(providerCost * 100) / 100,
+      const baseUrl = Deno.env.get('SUPABASE_URL')?.trim();
+      if (!baseUrl) throw new Error('Supabase function URL is not configured.');
+      // Keep one fulfilment implementation for both browser returns and
+      // Paystack callbacks. It verifies the amount, claims the order once, and
+      // dispatches directly through the configured Swift/GrandTech account.
+      const fulfilment = await fetch(`${baseUrl.replace(/\/$/, '')}/functions/v1/verify-public-data-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference }),
       });
-      if (reserveError) throw reserveError;
-
-      let providerPayload: Record<string, unknown> = {};
-      let success = false;
-      try {
-        const dispatch = await buyDataPackage(dataPackage, order.network_type, order.customer_phone);
-        providerPayload = {
-          ...dispatch.payload,
-          providerReference: dispatch.providerReference ?? null,
-          providerOrderId: dispatch.orderId ?? dispatch.providerReference ?? null,
-        };
-        success = dispatch.success;
-      } catch (providerError) {
-        providerPayload = { error: providerError instanceof Error ? providerError.message : 'Provider request failed.' };
-      }
-      const { error: completeError } = await admin.rpc('complete_agent_data_order', {
-        p_order_id: providerOrderId, p_success: success, p_provider_response: providerPayload,
-      });
-      if (completeError) throw completeError;
-      await admin.rpc('mark_public_data_order', {
-        p_order_id: order.id, p_status: success ? 'processing' : 'failed', p_provider_amount: providerCost,
-        p_provider_reference: providerReference,
-        p_provider_response: { ...providerPayload, provider: dataPackage.provider },
-      });
-      if (!success) {
-        const refund = await fetch('https://api.paystack.co/refund', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transaction: reference }),
+      const fulfilmentPayload = await fulfilment.json().catch(() => ({}));
+      if (!fulfilment.ok || fulfilmentPayload?.error) {
+        console.error('Paystack public data fulfilment deferred:', {
+          reference,
+          httpStatus: fulfilment.status,
+          response: fulfilmentPayload,
         });
-        await admin.from('public_data_orders').update({ paystack_refund_status: refund.ok ? 'initiated' : 'failed' }).eq('id', order.id);
       }
       return json({ received: true });
     }
