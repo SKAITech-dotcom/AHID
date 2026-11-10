@@ -1,6 +1,7 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
-import { activeDataProvider, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
+import { activeDataProvider, fetchDataOrderStatus, recoverGrandTechOrderIdFromProvider, recoverGrandTechOrderIdFromStored } from '../_shared/dataProvider.ts';
 import { refundWallet } from '../_shared/wallet.ts';
+import { volumeForBundleId } from '../_shared/dataCatalog.ts';
 
 /**
  * Reconciles the agent's own data orders against the provider.
@@ -58,7 +59,10 @@ Deno.serve(async (request) => {
       .from('agent_data_orders')
       .select('id, provider_reference, provider_name, provider_order_id, network_type, volume_mb, amount, status, created_at, provider_response')
       .eq('agent_id', user.id)
-      .in('status', ['pending', 'processing'])
+      // Include successful rows whose last provider answer was still pending.
+      // Older code could mark an accepted order successful before delivery;
+      // those rows must be allowed back into reconciliation.
+      .in('status', ['pending', 'processing', 'successful'])
       .order('created_at', { ascending: true })
       .limit(MAX_ORDERS_PER_SYNC);
 
@@ -72,10 +76,35 @@ Deno.serve(async (request) => {
     for (const order of orders ?? []) {
       const existingResp = (order.provider_response && typeof order.provider_response === 'object') ? order.provider_response as Record<string, unknown> : {};
       const providerName = String(order.provider_name || existingResp.provider || activeDataProvider(order.network_type, Number(order.volume_mb)));
-      const providerOrderId = String(
+      const lastProviderStatus = String(existingResp.lastProviderStatus || existingResp.providerStatus || '').trim().toUpperCase();
+      const lastProviderState = String(existingResp.lastProviderState || '').trim().toLowerCase();
+      const isStaleSuccessful = order.status === 'successful' && (
+        ['PENDING', 'PROCESSING', 'QUEUED', 'SUBMITTED', 'RECEIVED', 'ACCEPTED', 'INITIATED'].includes(lastProviderStatus) ||
+        lastProviderState === 'processing' ||
+        (!lastProviderStatus && Boolean(order.provider_order_id)) ||
+        (providerName.toLowerCase().includes('grandtech') && !order.provider_order_id)
+      );
+      if (order.status === 'successful' && !isStaleSuccessful && !orderReference) continue;
+      let providerOrderId = String(
         order.provider_order_id || existingResp.orderId || existingResp.provider_order_id ||
         existingResp.order_id || existingResp.providerReference || '',
       );
+      if (!providerOrderId && providerName.toLowerCase().includes('grandtech')) {
+        providerOrderId = recoverGrandTechOrderIdFromStored(existingResp, {
+          phone: String(order.phone || ''),
+          network: String(order.network_type || ''),
+          volumeMb: Number(order.volume_mb || 0),
+          createdAt: String(order.created_at || ''),
+        }) || '';
+        if (!providerOrderId) {
+          providerOrderId = await recoverGrandTechOrderIdFromProvider({
+            phone: String(order.phone || ''),
+            network: String(order.network_type || ''),
+            volumeMb: Number(order.volume_mb || 0),
+            createdAt: String(order.created_at || ''),
+          }) || '';
+        }
+      }
       const ref = String(order.provider_reference || '');
 
       const live = (providerOrderId || ref)
@@ -86,6 +115,26 @@ Deno.serve(async (request) => {
         : null;
 
       if (live && (live.state === 'successful' || live.state === 'failed' || live.state === 'cancelled')) {
+        // A previous false-success must be reopened before the terminal RPC can
+        // safely apply the provider's real result and, when necessary, refund.
+        if (order.status === 'successful' && live.state !== 'successful') {
+          await supabase.from('agent_data_orders').update({
+            status: 'processing',
+            completed_at: null,
+          }).eq('id', order.id).eq('status', 'successful');
+        }
+        await supabase.from('agent_data_orders').update({
+          provider_order_id: order.provider_order_id || live.providerOrderId || null,
+          provider_status: live.status,
+          provider_state: live.state,
+          last_status_checked_at: new Date().toISOString(),
+          provider_response: {
+            ...existingResp,
+            lastProviderStatus: live.status,
+            lastProviderState: live.state,
+            checkedAt: new Date().toISOString(),
+          },
+        }).eq('id', order.id);
         const { error: settleError } = await supabase.rpc('settle_agent_data_order', {
           p_order_id: order.id,
           p_status: live.state,
@@ -110,10 +159,19 @@ Deno.serve(async (request) => {
       // If live answer is still processing or unavailable, update provider_response with check timestamp
       // DO NOT auto-refund or mark failed without provider confirmation.
       if (live?.status) {
+        const nextStatus = live.state === 'processing' && order.status === 'successful'
+          ? 'processing'
+          : String(order.status || 'processing');
         await supabase
           .from('agent_data_orders')
           .update({
-            provider_response: { ...existingResp, lastProviderStatus: live.status, checkedAt: new Date().toISOString() },
+            status: nextStatus,
+            completed_at: nextStatus === 'processing' ? null : order.completed_at,
+            provider_order_id: order.provider_order_id || live.providerOrderId || null,
+            provider_status: live.status,
+            provider_state: live.state,
+            last_status_checked_at: new Date().toISOString(),
+            provider_response: { ...existingResp, lastProviderStatus: live.status, lastProviderState: live.state, checkedAt: new Date().toISOString() },
           })
           .eq('id', order.id);
         await recordStatusEvent(supabase, {
@@ -203,7 +261,15 @@ async function syncStoreDataOrders(
   for (const order of orders ?? []) {
     const isPublicStoreOrder = order.meta && typeof order.meta === 'object'
       && String((order.meta as Record<string, unknown>).source || '') === 'public_storefront';
-    if (order.fulfilment_status === 'successful') {
+    const stored = (order.provider_response && typeof order.provider_response === 'object')
+      ? order.provider_response as Record<string, unknown>
+      : {};
+    const lastProviderStatus = String(stored.lastProviderStatus || stored.providerStatus || '').trim().toUpperCase();
+    const staleSuccessful = order.fulfilment_status === 'successful' && (
+      ['PENDING', 'PROCESSING', 'QUEUED', 'SUBMITTED', 'RECEIVED', 'ACCEPTED', 'INITIATED'].includes(lastProviderStatus) ||
+      String(stored.lastProviderState || '').toLowerCase() === 'processing'
+    );
+    if (order.fulfilment_status === 'successful' && !staleSuccessful) {
       // A provider may have delivered successfully while the commission RPC
       // was temporarily unavailable. Keep successful but uncredited rows in
       // this reconciliation queue until the idempotent credit succeeds.
@@ -219,13 +285,26 @@ async function syncStoreDataOrders(
       }
       continue;
     }
-    const stored = (order.provider_response && typeof order.provider_response === 'object')
-      ? order.provider_response as Record<string, unknown>
-      : {};
     const provider = String(order.provider || stored.provider || activeDataProvider(order.network, Number(stored.volumeMb || 0)));
-    const providerOrderId = String(
+    let providerOrderId = String(
       order.provider_reference || stored.providerOrderId || stored.orderId || stored.providerReference || '',
     );
+    if (!providerOrderId && provider.toLowerCase().includes('grandtech')) {
+      providerOrderId = recoverGrandTechOrderIdFromStored(stored, {
+        phone: String(order.recipient || ''),
+        network: String(order.network || ''),
+        volumeMb: Number(stored.volumeMb || volumeForBundleId(String(order.product_ref || ''))?.volumeInMB || 0),
+        createdAt: String(order.created_at || ''),
+      }) || '';
+      if (!providerOrderId) {
+        providerOrderId = await recoverGrandTechOrderIdFromProvider({
+          phone: String(order.recipient || ''),
+          network: String(order.network || ''),
+          volumeMb: Number(stored.volumeMb || volumeForBundleId(String(order.product_ref || ''))?.volumeInMB || 0),
+          createdAt: String(order.created_at || ''),
+        }) || '';
+      }
+    }
     const reference = String(order.reference || '');
 
     const live = (providerOrderId || reference)
@@ -242,14 +321,25 @@ async function syncStoreDataOrders(
       ...stored,
       provider,
       lastProviderStatus: live.status,
+      lastProviderState: live.state,
       checkedAt,
     };
+
+    if (order.fulfilment_status === 'successful' && live.state !== 'successful') {
+      await supabase.from('store_orders').update({
+        fulfilment_status: 'processing',
+        completed_at: null,
+      }).eq('id', order.id).eq('fulfilment_status', 'successful');
+    }
 
     if (live.state === 'successful') {
       const { error: updateError } = await supabase
         .from('store_orders')
         .update({
           fulfilment_status: 'successful',
+          provider_status: live.status,
+          provider_state: live.state,
+          last_status_checked_at: checkedAt,
           provider_response: updatedResponse,
           failure_reason: null,
           completed_at: checkedAt,
@@ -307,6 +397,9 @@ async function syncStoreDataOrders(
           payment_status: paymentStatus,
           fulfilment_status: 'failed',
           refund_amount: refundAmount,
+          provider_status: live.status,
+          provider_state: live.state,
+          last_status_checked_at: checkedAt,
           provider_response: updatedResponse,
           failure_reason: refundMessage || `Provider ${live.state}: ${live.status}`,
           completed_at: checkedAt,
@@ -332,9 +425,17 @@ async function syncStoreDataOrders(
 
     await supabase
       .from('store_orders')
-      .update({ provider_response: updatedResponse, updated_at: checkedAt })
+      .update({
+        fulfilment_status: order.fulfilment_status === 'successful' && live.state === 'processing' ? 'processing' : order.fulfilment_status,
+        provider_reference: order.provider_reference || live.providerOrderId || null,
+        provider_status: live.status,
+        provider_state: live.state,
+        last_status_checked_at: checkedAt,
+        provider_response: updatedResponse,
+        updated_at: checkedAt,
+      })
       .eq('id', order.id)
-      .in('fulfilment_status', ['pending', 'processing']);
+      .in('fulfilment_status', ['pending', 'processing', 'successful']);
     changed += 1;
     await recordStatusEvent(supabase, {
       orderType: 'store_orders',
@@ -359,9 +460,9 @@ async function syncLegacyPublicDataOrders(
 ): Promise<number> {
   let query = supabase
     .from('public_data_orders')
-    .select('id, payment_reference, agent_id, network_type, volume_mb, sale_amount, status, created_at, provider_response')
+    .select('id, payment_reference, provider_name, provider_reference, agent_id, customer_phone, network_type, volume_mb, sale_amount, status, created_at, provider_response')
     .eq('agent_id', agentId)
-    .in('status', ['pending_payment', 'processing'])
+    .in('status', ['pending_payment', 'processing', 'successful'])
     .order('created_at', { ascending: true })
     .limit(MAX_ORDERS_PER_SYNC);
 
@@ -377,8 +478,30 @@ async function syncLegacyPublicDataOrders(
 
   for (const order of orders ?? []) {
     const stored = (order.provider_response || {}) as Record<string, unknown>;
-    const provider = String(stored.provider || activeDataProvider(order.network_type, Number(order.volume_mb)));
-    const providerOrderId = String(stored.providerOrderId ?? stored.orderId ?? stored.providerReference ?? '');
+    const lastProviderStatus = String(stored.lastProviderStatus || stored.providerStatus || '').trim().toUpperCase();
+    const staleSuccessful = order.status === 'successful' && (
+      ['PENDING', 'PROCESSING', 'QUEUED', 'SUBMITTED', 'RECEIVED', 'ACCEPTED', 'INITIATED'].includes(lastProviderStatus) ||
+      String(stored.lastProviderState || '').toLowerCase() === 'processing'
+    );
+    if (order.status === 'successful' && !staleSuccessful && !orderReference) continue;
+    const provider = String(order.provider_name || stored.provider || activeDataProvider(order.network_type, Number(order.volume_mb)));
+    let providerOrderId = String(order.provider_reference ?? stored.providerOrderId ?? stored.orderId ?? stored.providerReference ?? '');
+    if (!providerOrderId && provider.toLowerCase().includes('grandtech')) {
+      providerOrderId = recoverGrandTechOrderIdFromStored(stored, {
+        phone: String(order.customer_phone || ''),
+        network: String(order.network_type || ''),
+        volumeMb: Number(order.volume_mb || 0),
+        createdAt: String(order.created_at || ''),
+      }) || '';
+      if (!providerOrderId) {
+        providerOrderId = await recoverGrandTechOrderIdFromProvider({
+          phone: String(order.customer_phone || ''),
+          network: String(order.network_type || ''),
+          volumeMb: Number(order.volume_mb || 0),
+          createdAt: String(order.created_at || ''),
+        }) || '';
+      }
+    }
     const ref = String(order.payment_reference ?? '');
 
     const live = (providerOrderId || ref)
@@ -396,14 +519,37 @@ async function syncLegacyPublicDataOrders(
       nextStatus = 'failed';
     }
 
+    if (live?.state === 'processing' && order.status === 'successful') {
+      await supabase.from('public_data_orders').update({
+        status: 'processing',
+        completed_at: null,
+        provider_status: live.status,
+        provider_state: live.state,
+        last_status_checked_at: new Date().toISOString(),
+        provider_response: { ...stored, lastProviderStatus: live.status, lastProviderState: live.state, checkedAt: new Date().toISOString() },
+      }).eq('id', order.id).eq('status', 'successful');
+    }
+
+    if (live?.state && live.state !== 'processing') {
+      await supabase.from('public_data_orders').update({
+        provider_reference: order.provider_reference || live.providerOrderId || null,
+        provider_status: live.status,
+        provider_state: live.state,
+        last_status_checked_at: new Date().toISOString(),
+      }).eq('id', order.id);
+    }
+
     // If provider confirmed terminal state
     if (nextStatus) {
+      if (order.status === 'successful') {
+        await supabase.from('public_data_orders').update({ status: 'processing', completed_at: null }).eq('id', order.id).eq('status', 'successful');
+      }
       const { error: settleError } = await supabase.rpc('mark_public_data_order', {
         p_order_id: order.id,
         p_status: nextStatus,
         p_provider_amount: null,
-        p_provider_reference: null,
-        p_provider_response: { ...stored, lastProviderStatus: live?.status, checkedAt: new Date().toISOString() },
+        p_provider_reference: order.provider_reference || live?.providerOrderId || null,
+        p_provider_response: { ...stored, lastProviderStatus: live?.status, lastProviderState: live?.state, checkedAt: new Date().toISOString() },
       });
       if (settleError) {
         console.error('Standard data settle failed:', settleError);
@@ -435,7 +581,11 @@ async function syncLegacyPublicDataOrders(
       await supabase
         .from('public_data_orders')
         .update({
-          provider_response: { ...stored, lastProviderStatus: live.status, checkedAt: new Date().toISOString() },
+          provider_reference: order.provider_reference || live.providerOrderId || null,
+          provider_status: live.status,
+          provider_state: live.state,
+          last_status_checked_at: new Date().toISOString(),
+          provider_response: { ...stored, lastProviderStatus: live.status, lastProviderState: live.state, checkedAt: new Date().toISOString() },
         })
         .eq('id', order.id);
     }

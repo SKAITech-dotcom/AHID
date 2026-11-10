@@ -1,5 +1,5 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
-import { activeDataProvider, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
+import { activeDataProvider, fetchDataOrderStatus, recoverGrandTechOrderIdFromProvider, recoverGrandTechOrderIdFromStored } from '../_shared/dataProvider.ts';
 
 interface OrderMatch {
   trackingId: string;
@@ -51,14 +51,30 @@ async function liveDataStatus(admin: ReturnType<typeof adminClient>, row: Record
     : providerValue.includes('swift')
       ? 'swift'
       : providerValue;
-  const providerOrderId = String(
-    row.provider_order_id
+  let providerOrderId = String(
+    (row.order_table === 'public_data_orders' ? row.provider_reference : row.provider_order_id)
       || stored.providerOrderId
       || stored.orderId
-      || row.provider_reference
+      || (row.order_table === 'public_data_orders' ? row.provider_reference : '')
       || stored.providerReference
       || '',
   ).trim();
+  if (!providerOrderId && provider === 'grandtech') {
+    providerOrderId = recoverGrandTechOrderIdFromStored(stored, {
+      phone: String(row.phone || row.customer_phone || ''),
+      network: String(row.network_type || ''),
+      volumeMb: Number(row.volume_mb || 0),
+      createdAt: String(row.created_at || ''),
+    }) || '';
+    if (!providerOrderId) {
+      providerOrderId = await recoverGrandTechOrderIdFromProvider({
+        phone: String(row.phone || row.customer_phone || ''),
+        network: String(row.network_type || ''),
+        volumeMb: Number(row.volume_mb || 0),
+        createdAt: String(row.created_at || ''),
+      }) || '';
+    }
+  }
   const reference = String(row.provider_reference || '').trim();
   if (!providerOrderId && !reference) return null;
   if (provider !== 'swift' && provider !== 'grandtech') return null;
@@ -69,14 +85,22 @@ async function liveDataStatus(admin: ReturnType<typeof adminClient>, row: Record
     reference,
   ).catch(() => null);
   if (!live) return null;
+  const checkedAt = new Date().toISOString();
+  const providerIdentity = row.order_table === 'public_data_orders'
+    ? (providerOrderId ? { provider_reference: providerOrderId } : {})
+    : (providerOrderId ? { provider_order_id: providerOrderId } : {});
   await admin.from(row.order_table === 'public_data_orders' ? 'public_data_orders' : 'agent_data_orders')
     .update({
       provider_response: {
         ...stored,
         lastProviderStatus: live.status,
         lastProviderState: live.state,
-        lastStatusCheckedAt: new Date().toISOString(),
+        lastStatusCheckedAt: checkedAt,
       },
+      provider_status: live.status,
+      provider_state: live.state,
+      last_status_checked_at: checkedAt,
+      ...providerIdentity,
     })
     .eq('id', row.id);
   return live;

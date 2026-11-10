@@ -304,6 +304,7 @@ async function loadAfaRequests(filterQuery = '') {
                 <select onchange="setAfaStatus('${item.reference}', this.value)" style="background: ${badgeColor}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; border: none; cursor: pointer;">
                     ${statusOptions}
                 </select>
+                <span style="font-size: 12px; color: #475569;">Provider: ${escapeHtml(item.provider_status || 'WAITING')}</span>
                 <span style="font-size: 12px; color: #9ca3af;">Updated ${new Date(item.updated_at || item.created_at).toLocaleString()}</span>
             </div>
         `;
@@ -338,11 +339,13 @@ async function trackMyAfa() {
         return;
     }
     const status = String(item.status || 'Processing');
+    const providerStatus = String(item.provider_status || status);
     const statusColor = status === 'Completed' ? '#047857' : status === 'Cancelled' ? '#b91c1c' : '#1d4ed8';
     result.innerHTML = `
       <div><strong>Reference:</strong> ${escapeHtml(item.reference || '—')}</div>
       <div><strong>Provider reference:</strong> ${escapeHtml(item.provider_reference || 'Waiting for provider')}</div>
       <div><strong>Status:</strong> <span style="color: ${statusColor}; font-weight: 800;">${escapeHtml(status)}</span></div>
+      <div><strong>Live provider status:</strong> <span style="font-weight: 800;">${escapeHtml(providerStatus)}</span></div>
       <div><strong>Last updated:</strong> ${escapeHtml(new Date(item.updated_at || item.created_at).toLocaleString())}</div>
       ${item.failure_reason ? `<div style="color: #b91c1c; margin-top: 5px;"><strong>Reason:</strong> ${escapeHtml(item.failure_reason)}</div>` : ''}
     `;

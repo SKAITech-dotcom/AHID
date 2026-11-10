@@ -175,10 +175,11 @@ export async function buySwiftPackage(packageId: string, phone: string): Promise
     });
     const payload = await response.json().catch(() => ({ raw: 'Invalid provider response' })) as Record<string, unknown>;
     const success = response.ok && payload.success === true;
+    const orderId = payload.order_id ?? payload.orderId ?? payload.id;
     return {
       success,
       reference,
-      orderId: payload.order_id ? String(payload.order_id) : undefined,
+      orderId: orderId !== undefined && orderId !== null ? String(orderId) : undefined,
       status: payload.status ? String(payload.status) : undefined,
       amount: Number.isFinite(Number(payload.amount)) ? Number(payload.amount) : undefined,
       payload,
@@ -198,7 +199,7 @@ export type SwiftOrderState = 'successful' | 'failed' | 'cancelled' | 'processin
 
 export function mapSwiftOrderState(rawStatus: string): { state: SwiftOrderState; status: string } {
   const norm = String(rawStatus || '').trim().toUpperCase();
-  if (['DELIVERED', 'SUCCESSFUL', 'SUCCESS', 'COMPLETED', 'TRUE', 'DONE', 'PASSED', 'PROCESSED', 'APPROVED', 'SENT'].includes(norm)) {
+  if (['DELIVERED', 'SUCCESSFUL', 'SUCCESS', 'COMPLETED', 'DONE', 'PASSED', 'PROCESSED', 'APPROVED', 'SENT'].includes(norm)) {
     return { state: 'successful', status: norm || 'DELIVERED' };
   }
   if (['FAILED', 'FAILURE', 'DECLINED', 'REJECTED', 'ERROR', 'UNFULFILLED'].includes(norm)) {
@@ -251,20 +252,17 @@ export async function fetchSwiftOrderStatus(
       const payload = responseBody && typeof responseBody === 'object' && !Array.isArray(responseBody)
         ? responseBody as Record<string, unknown>
         : { data: responseBody };
-      const candidates = [payload, payload.data, payload.result, payload.order]
+      // Inspect nested order data before the wrapper. A root `success: true`
+      // normally means the lookup request succeeded, not that delivery did.
+      const candidates = [payload.order, payload.data, payload.result, payload.payload, payload]
         .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value)));
 
       for (const candidate of candidates) {
         const rawStatus = candidate.status ?? candidate.order_status ?? candidate.delivery_status ?? candidate.state;
+        if (typeof rawStatus === 'boolean') continue;
         if (rawStatus !== undefined && rawStatus !== null && String(rawStatus).trim() !== '') {
           const mapped = mapSwiftOrderState(String(rawStatus));
           return { ...mapped, payload };
-        }
-        if (candidate.success === true || candidate.success === 'true') {
-          return { state: 'successful', status: 'SUCCESSFUL', payload };
-        }
-        if (candidate.success === false || candidate.success === 'false') {
-          return { state: 'failed', status: 'FAILED', payload };
         }
       }
 
@@ -277,7 +275,8 @@ export async function fetchSwiftOrderStatus(
         if (!row || typeof row !== 'object') return false;
         const item = row as Record<string, unknown>;
         return String(item.order_id || item.reference || item.id || '') === orderIdOrReference;
-      }) || rows[0];
+      });
+      // A list endpoint without an exact match is not a status for this order.
       if (match && typeof match === 'object') {
         const item = match as Record<string, unknown>;
         const rawStatus = item.status ?? item.order_status ?? item.delivery_status ?? item.state;

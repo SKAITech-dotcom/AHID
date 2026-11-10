@@ -97,10 +97,15 @@ export async function fulfilStoreOrder(reference: string): Promise<StoreOrderFul
       lastProviderState: live?.state || stored.lastProviderState || 'processing',
       lastStatusCheckedAt: checkedAt,
     };
+    const liveProviderReference = live?.providerOrderId || providerOrderId || null;
 
     if (live?.state === 'successful') {
       const { error: updateError } = await admin.from('store_orders').update({
         fulfilment_status: 'successful',
+        provider_reference: liveProviderReference,
+        provider_status: live.status,
+        provider_state: live.state,
+        last_status_checked_at: checkedAt,
         provider_response: providerResponse,
         failure_reason: null,
         completed_at: checkedAt,
@@ -128,6 +133,10 @@ export async function fulfilStoreOrder(reference: string): Promise<StoreOrderFul
       const { error: updateError } = await admin.from('store_orders').update({
         payment_status: paystackRefunded ? 'refunded' : order.payment_status,
         fulfilment_status: 'failed',
+        provider_reference: liveProviderReference,
+        provider_status: live.status,
+        provider_state: live.state,
+        last_status_checked_at: checkedAt,
         provider_response: providerResponse,
         failure_reason: `Provider ${live.state}: ${live.status}${paystackRefunded ? ' Customer payment refund initiated.' : ''}`,
         completed_at: checkedAt,
@@ -148,7 +157,14 @@ export async function fulfilStoreOrder(reference: string): Promise<StoreOrderFul
       };
     }
 
-    await admin.from('store_orders').update({ provider_response: providerResponse, updated_at: checkedAt }).eq('id', order.id).eq('fulfilment_status', 'processing');
+    await admin.from('store_orders').update({
+      provider_reference: liveProviderReference,
+      provider_status: live?.status || null,
+      provider_state: live?.state || 'processing',
+      last_status_checked_at: checkedAt,
+      provider_response: providerResponse,
+      updated_at: checkedAt,
+    }).eq('id', order.id).eq('fulfilment_status', 'processing');
     return {
       success: true,
       orderReference: order.reference,
@@ -342,6 +358,9 @@ export async function fulfilStoreOrder(reference: string): Promise<StoreOrderFul
     fulfilment_status: fulfilmentStatus,
     provider: dataPackage?.provider || null,
     provider_reference: dispatch.orderId ?? dispatch.providerReference ?? null,
+    provider_status: dispatch.success ? 'PROCESSING' : 'FAILED',
+    provider_state: dispatch.success ? 'processing' : 'failed',
+    last_status_checked_at: new Date().toISOString(),
     provider_response: providerResponse,
     failure_reason: dispatch.success ? null : [
       dispatch.failureReason || 'Provider could not deliver bundle.',

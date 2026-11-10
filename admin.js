@@ -304,17 +304,17 @@ async function loadDataModuleData(options = {}) {
   const syncLive = options.syncLive !== false;
   try {
     const [agentOrders, publicOrders, legacyOrders, storeOrders, catalogRes] = await Promise.all([
-      fetchAllRows((from, to) => supabase.from('agent_data_orders').select('id, provider_reference, short_code, provider_name, provider_order_id, phone, network_type, volume_mb, amount, status, failure_reason, provider_response, created_at').order('created_at', { ascending: false }).range(from, to)),
-      fetchAllRows((from, to) => supabase.from('public_data_orders').select('id, payment_reference, short_code, provider_name, provider_reference, customer_phone, customer_name, network_type, volume_mb, sale_amount, status, provider_response, created_at').order('created_at', { ascending: false }).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('agent_data_orders').select('id, provider_reference, short_code, provider_name, provider_order_id, provider_status, provider_state, phone, network_type, volume_mb, amount, status, failure_reason, provider_response, created_at').order('created_at', { ascending: false }).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('public_data_orders').select('id, payment_reference, short_code, provider_name, provider_reference, provider_status, provider_state, customer_phone, customer_name, network_type, volume_mb, sale_amount, status, provider_response, created_at').order('created_at', { ascending: false }).range(from, to)),
       fetchAllRows((from, to) => supabase.from('orders').select('id, reference, short_code, network, bundle_size, recipient_phone, amount, status, created_at').order('created_at', { ascending: false }).range(from, to)),
-      fetchAllRows((from, to) => supabase.from('store_orders').select('id, reference, short_code, provider, provider_reference, provider_response, recipient, customer_phone, network, product_label, platform_price, sale_amount, payment_status, fulfilment_status, failure_reason, created_at').order('created_at', { ascending: false }).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('store_orders').select('id, reference, short_code, provider, provider_reference, provider_status, provider_state, provider_response, recipient, customer_phone, network, product_label, platform_price, sale_amount, payment_status, fulfilment_status, failure_reason, created_at').order('created_at', { ascending: false }).range(from, to)),
       supabase.from('bundle_catalog').select('bundle_id, network, title, volume_mb, price, provider_cost, active, inactive_reason, updated_at').order('network').order('volume_mb'),
     ]);
 
     const agentOrderRows = (agentOrders || []).map((o) => {
       const resp = (o.provider_response && typeof o.provider_response === 'object') ? o.provider_response : {};
       const provider = String(o.provider_name || ((o.network_type === 'mtn' && o.volume_mb === 1024) || (o.network_type === 'telecel' && o.volume_mb === 5120) ? 'GrandTech' : 'Swift'));
-      const providerStatus = safeProviderStatus(resp.lastProviderStatus || resp.status || o.status);
+      const providerStatus = safeProviderStatus(o.provider_status || resp.lastProviderStatus || resp.status || o.status);
       const isCancelled = o.status === 'cancelled' || resp.cancelled === true;
       const orderId = fiveCharacterAdminOrderCode(o.short_code || o.provider_reference || o.id);
       return {
@@ -341,7 +341,7 @@ async function loadDataModuleData(options = {}) {
     const publicOrderRows = (publicOrders || []).map((o) => {
       const resp = (o.provider_response && typeof o.provider_response === 'object') ? o.provider_response : {};
       const provider = String(o.provider_name || resp.provider || 'Swift');
-      const providerStatus = safeProviderStatus(resp.lastProviderStatus || resp.status || o.status);
+      const providerStatus = safeProviderStatus(o.provider_status || resp.lastProviderStatus || resp.status || o.status);
       const isCancelled = o.status === 'cancelled' || resp.cancelled === true;
       const orderId = fiveCharacterAdminOrderCode(o.short_code || o.payment_reference || o.id);
       return {
@@ -399,7 +399,7 @@ async function loadDataModuleData(options = {}) {
         amount: Number(o.platform_price || o.sale_amount || 0),
         status,
         provider: o.provider || 'Swift',
-        providerStatus: safeProviderStatus(resp.lastProviderStatus || resp.providerStatus || status),
+        providerStatus: safeProviderStatus(o.provider_status || resp.lastProviderStatus || resp.providerStatus || status),
         providerReference: o.provider_reference || '',
         isCancelled: status === 'cancelled',
         failureReason: o.failure_reason || '',
@@ -420,9 +420,12 @@ async function loadDataModuleData(options = {}) {
     // on a stored "processing" label. Limit one tab refresh to 15 provider
     // calls so a large history cannot block the portal.
     if (syncLive) {
-      const activeOrders = cachedDataOrders.filter((o) =>
-        o.kind !== 'legacy' && ['pending', 'processing'].includes(String(o.status).toLowerCase())
-      );
+      const activeOrders = cachedDataOrders.filter((o) => {
+        const status = String(o.status || '').toLowerCase();
+        const providerStatus = String(o.providerStatus || '').toLowerCase();
+        const staleTerminal = status === 'successful' && ['pending', 'processing', 'queued', 'submitted', 'accepted'].includes(providerStatus);
+        return o.kind !== 'legacy' && (['pending', 'processing'].includes(status) || staleTerminal);
+      });
       if (activeOrders.length) {
         const changed = await syncActiveDataOrders(activeOrders.slice(0, 15));
         if (changed > 0) await loadDataModuleData({ syncLive: false });
@@ -587,7 +590,12 @@ async function syncActiveDataOrders(orders) {
 }
 
 async function syncAllActiveDataOrders() {
-  const pendingOrders = cachedDataOrders.filter(o => o.kind !== 'legacy' && (o.status === 'pending' || o.status === 'processing'));
+  const pendingOrders = cachedDataOrders.filter(o => {
+    const status = String(o.status || '').toLowerCase();
+    const providerStatus = String(o.providerStatus || '').toLowerCase();
+    return o.kind !== 'legacy' && (status === 'pending' || status === 'processing' ||
+      (status === 'successful' && ['pending', 'processing', 'queued', 'submitted', 'accepted'].includes(providerStatus)));
+  });
   if (!pendingOrders.length) {
     showToast('No active pending/processing orders to sync.', 'info');
     return;
@@ -2125,7 +2133,7 @@ function renderAfaRegistrations(records) {
   if (!tbody) return;
 
   if (!records.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 16px;">No AFA records found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 16px;">No AFA records found.</td></tr>';
     return;
   }
 
@@ -2162,6 +2170,7 @@ function renderAfaRegistrations(records) {
         <td><span style="font-family: monospace;">${escapeHtml(r.id_number || '—')}</span></td>
         <td><strong>${money(r.amount || 0)}</strong></td>
         <td>${statusBadge}</td>
+        <td><span class="badge badge-pending">${escapeHtml(r.provider_status || r.provider_response?.lastProviderStatus || 'WAITING')}</span></td>
         <td style="font-size: 0.75rem; color: var(--text-dim);">${escapeHtml(r.provider_reference || '—')}</td>
         <td style="color: var(--text-dim); font-size: 0.74rem;">${new Date(r.created_at).toLocaleDateString()}</td>
         <td>${actions}</td>

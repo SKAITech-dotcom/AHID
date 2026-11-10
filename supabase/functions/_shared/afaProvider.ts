@@ -29,6 +29,33 @@ export interface AfaSubmitResult {
   failureReason?: string;
 }
 
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function providerContainers(source: Record<string, unknown>): Record<string, unknown>[] {
+  const containers: Record<string, unknown>[] = [source];
+  for (const key of ['payload', 'data', 'result', 'registration']) {
+    const nested = recordValue(source[key]);
+    if (nested) containers.push(nested);
+    const deeper = nested ? recordValue(nested.payload) || recordValue(nested.data) : null;
+    if (deeper) containers.push(deeper);
+  }
+  return containers;
+}
+
+function extractAfaId(payload: Record<string, unknown>): string | undefined {
+  for (const container of providerContainers(payload)) {
+    for (const key of ['afaId', 'afa_id', 'providerReference', 'provider_reference', 'transactionId', 'id']) {
+      const value = container[key];
+      if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+    }
+  }
+  return undefined;
+}
+
 const GRANDTECH_AFA_DEFAULT_URL = 'https://backend.grandtechub.cloud/api/afa';
 
 /**
@@ -111,25 +138,9 @@ export async function submitAfaRegistration(data: AfaSubmission): Promise<AfaSub
     // `message`. A message alone is not an error; only an explicit failure marker
     // or a failed HTTP status should trigger the wallet refund path.
     if (ok && !explicitlyFailed) {
-      const providerDataRaw = responseData.payload ?? responseData.Payload ?? responseData.data;
-      const providerData = providerDataRaw && typeof providerDataRaw === 'object' && !Array.isArray(providerDataRaw)
-        ? providerDataRaw as Record<string, unknown>
-        : {};
       return {
         success: true,
-        providerReference: String(
-          responseData.reference ??
-          responseData.provider_reference ??
-          responseData.id ??
-          responseData.transactionId ??
-          responseData.afaId ??
-          providerData.reference ??
-          providerData.provider_reference ??
-          providerData.id ??
-          providerData.transactionId ??
-          providerData.afaId ??
-          '',
-        ) || undefined,
+        providerReference: extractAfaId(responseData),
         providerResponse: responseData,
       };
     }

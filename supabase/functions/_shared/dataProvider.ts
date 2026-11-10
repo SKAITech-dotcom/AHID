@@ -9,6 +9,7 @@ import {
   buyGrandTechPackage,
   fetchGrandTechOrderStatus,
   resolveGrandTechPackage,
+  findGrandTechOrderId,
   type GrandTechOrderState,
 } from './grandtechDataProvider.ts';
 import { friendlyProviderMessage } from './providerMessages.ts';
@@ -53,6 +54,61 @@ export function activeDataProvider(networkType?: string, volumeInMB?: number): D
     return providerForBundle(networkType, Number(volumeInMB));
   }
   return 'swift';
+}
+
+/**
+ * Recover a provider order id from legacy GrandTech list responses that were
+ * stored before the purchase response parser persisted the nested orderId.
+ * Every identifying field must agree; an arbitrary list row is never accepted.
+ */
+export function recoverGrandTechOrderIdFromStored(
+  stored: Record<string, unknown>,
+  input: { phone: string; network: string; volumeMb: number; createdAt?: string },
+): string | null {
+  const livePayload = stored.livePayload && typeof stored.livePayload === 'object'
+    ? stored.livePayload as Record<string, unknown>
+    : null;
+  const rows = livePayload
+    ? (Array.isArray(livePayload.payload) ? livePayload.payload : Array.isArray(livePayload.data) ? livePayload.data : [])
+    : [];
+  const wantedPhone = String(input.phone || '').replace(/\D/g, '');
+  const wantedNetwork = String(input.network || '').trim().toUpperCase();
+  const wantedVolume = Number(input.volumeMb) / 1024;
+  const wantedTime = input.createdAt ? Date.parse(input.createdAt) : NaN;
+
+  for (const rowValue of rows) {
+    if (!rowValue || typeof rowValue !== 'object' || Array.isArray(rowValue)) continue;
+    const row = rowValue as Record<string, unknown>;
+    const packageRow = Array.isArray(row.packages) && row.packages[0] && typeof row.packages[0] === 'object'
+      ? row.packages[0] as Record<string, unknown>
+      : {};
+    const rowPhone = String(packageRow.phone ?? row.phone ?? row.recipientPhone ?? '').replace(/\D/g, '');
+    const rowNetwork = String(packageRow.network ?? row.network ?? '').trim().toUpperCase();
+    const rowSize = Number(packageRow.size ?? row.size);
+    const rowTime = Date.parse(String(packageRow.createdAt ?? row.createdAt ?? ''));
+    const timeMatches = !Number.isFinite(wantedTime) || !Number.isFinite(rowTime) || Math.abs(wantedTime - rowTime) <= 15 * 60_000;
+    if (rowPhone && wantedPhone && rowPhone === wantedPhone &&
+        rowNetwork === wantedNetwork && Number.isFinite(rowSize) && Math.abs(rowSize - wantedVolume) < 0.000001 &&
+        timeMatches) {
+      const id = row.orderId ?? row.order_id ?? row.id;
+      if (id !== undefined && id !== null && String(id).trim()) return String(id).trim();
+    }
+  }
+  return null;
+}
+
+export async function recoverGrandTechOrderIdFromProvider(input: {
+  phone: string;
+  network: string;
+  volumeMb: number;
+  createdAt: string;
+}): Promise<string | null> {
+  try {
+    return await findGrandTechOrderId(input.network, input.volumeMb, input.phone, input.createdAt);
+  } catch (error) {
+    console.warn('GrandTech legacy order recovery failed:', error);
+    return null;
+  }
 }
 
 /**
@@ -128,7 +184,7 @@ export async function fetchDataOrderStatus(
   provider: DataProviderName,
   providerOrderId: string,
   reference?: string,
-): Promise<{ state: GrandTechOrderState; status: string; payload?: Record<string, unknown> } | null> {
+): Promise<{ state: GrandTechOrderState; status: string; providerOrderId?: string; payload?: Record<string, unknown> } | null> {
   const candidates = [providerOrderId, reference]
     .map((value) => String(value || '').trim())
     .filter(Boolean);
@@ -136,7 +192,7 @@ export async function fetchDataOrderStatus(
   for (const candidate of [...new Set(candidates)]) {
     const result = await checkOrderStatus(provider, candidate);
     if (!result.error && result.status !== 'UNKNOWN') {
-      return { state: result.state, status: result.status, payload: result.payload };
+      return { state: result.state, status: result.status, payload: result.payload, providerOrderId: candidate };
     }
   }
   return null;

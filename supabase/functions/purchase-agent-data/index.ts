@@ -110,6 +110,11 @@ Deno.serve(async (request) => {
       p_provider_response: dispatchPayload,
     });
     if (dispatchError) throw dispatchError;
+    await admin.from('agent_data_orders').update({
+      provider_status: 'PROCESSING',
+      provider_state: 'processing',
+      last_status_checked_at: new Date().toISOString(),
+    }).eq('id', orderId);
 
     // A successful purchase response only means the provider accepted the
     // request. It is not proof that the bundle reached the recipient. The

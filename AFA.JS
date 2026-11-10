@@ -140,6 +140,8 @@ async function trackAfa() {
             <div style="display: inline-block; background: #d97706; color: white; padding: 3px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; margin-top: 4px;">
                 ${escapeHtml(found.status)}
             </div>
+            <div class="field-label" style="margin-top: 10px;">LIVE PROVIDER STATUS</div>
+            <div class="field-val">${escapeHtml(found.provider_status || found.status || 'Processing')}</div>
         </div>
     `;
 }

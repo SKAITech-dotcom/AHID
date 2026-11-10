@@ -1,5 +1,5 @@
 import { adminClient, corsPreflight, json, requireAdmin } from '../_shared/supabase.ts';
-import { activeDataProvider, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
+import { activeDataProvider, fetchDataOrderStatus, recoverGrandTechOrderIdFromProvider, recoverGrandTechOrderIdFromStored } from '../_shared/dataProvider.ts';
 
 type OrderRow = Record<string, unknown>;
 
@@ -33,6 +33,14 @@ function internalStatus(row: OrderRow): string {
 
 function isOpen(status: string): boolean {
   return ['pending', 'processing'].includes(status.toLowerCase());
+}
+
+function needsProviderRefresh(status: string, stored: Record<string, unknown>): boolean {
+  const providerStatus = text(stored.lastProviderStatus || stored.providerStatus).toUpperCase();
+  return isOpen(status) || (status.toLowerCase() === 'successful' && (
+    ['PENDING', 'PROCESSING', 'QUEUED', 'SUBMITTED', 'RECEIVED', 'ACCEPTED', 'INITIATED'].includes(providerStatus) ||
+    text(stored.lastProviderState).toLowerCase() === 'processing'
+  ));
 }
 
 /**
@@ -72,23 +80,53 @@ Deno.serve(async (request) => {
 
       // Keep one admin refresh bounded even if a large history contains many
       // open orders. The stored status remains visible for the rest.
-      if (isOpen(status) && orderId && liveChecks < 80 && (provider === 'swift' || provider === 'grandtech')) {
+      if (needsProviderRefresh(status, stored) && !orderId && provider === 'grandtech') {
+        const recovered = recoverGrandTechOrderIdFromStored(stored, {
+          phone: text(row.customer_phone),
+          network: text(row.network_type),
+          volumeMb: Number(row.volume_mb || 0),
+          createdAt: text(row.created_at),
+        });
+        if (recovered) {
+          stored.providerOrderId = recovered;
+        }
+        if (!stored.providerOrderId) {
+          stored.providerOrderId = await recoverGrandTechOrderIdFromProvider({
+            phone: text(row.customer_phone),
+            network: text(row.network_type),
+            volumeMb: Number(row.volume_mb || 0),
+            createdAt: text(row.created_at),
+          });
+        }
+      }
+      const liveOrderId = provider === 'grandtech' && !orderId
+        ? text(stored.providerOrderId)
+        : orderId;
+      if (needsProviderRefresh(status, stored) && liveOrderId && liveChecks < 80 && (provider === 'swift' || provider === 'grandtech')) {
         liveChecks += 1;
         try {
-          const live = await fetchDataOrderStatus(provider as 'swift' | 'grandtech', orderId, reference);
+          const live = await fetchDataOrderStatus(provider as 'swift' | 'grandtech', liveOrderId, reference);
           if (live) {
             providerStatus = live.status || providerStatus;
             providerState = live.state;
             checkedAt = new Date().toISOString();
-            await admin.from('public_data_orders').update({
+            const update: Record<string, unknown> = {
               provider_response: {
                 ...stored,
+                providerOrderId: live.providerOrderId || liveOrderId,
                 lastProviderStatus: providerStatus,
                 lastProviderState: providerState,
                 lastStatusCheckedAt: checkedAt,
                 livePayload: live.payload || null,
               },
-            }).eq('id', row.id);
+            };
+            if (live.providerOrderId) update.provider_reference = live.providerOrderId;
+            if (status === 'successful' && live.state === 'processing') {
+              update.status = 'processing';
+              update.completed_at = null;
+            }
+            await admin.from('public_data_orders').update(update).eq('id', row.id);
+            if (status === 'successful' && live.state === 'processing') status = 'processing';
           }
         } catch (statusError) {
           console.warn('Guest order provider status check failed:', row.id, statusError);
@@ -105,7 +143,7 @@ Deno.serve(async (request) => {
         paymentProvider: text(row.payment_provider),
         status,
         provider,
-        providerOrderId: orderId || null,
+        providerOrderId: liveOrderId || null,
         providerReference: reference || null,
         providerStatus,
         providerState: providerState || null,

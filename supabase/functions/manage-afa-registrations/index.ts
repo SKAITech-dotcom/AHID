@@ -4,7 +4,7 @@ import { chargeWallet, refundWallet } from '../_shared/wallet.ts';
 import { submitAfaRegistration } from '../_shared/afaProvider.ts';
 
 const VALID_STATUSES = ['Pending', 'Processing', 'Completed', 'Cancelled'];
-const AFA_SELECT = 'id, reference, full_name, phone, town, id_type, id_number, occupation, price_id, amount, status, source, created_at, updated_at, provider_reference, failure_reason';
+const AFA_SELECT = 'id, reference, full_name, phone, town, id_type, id_number, occupation, price_id, amount, status, source, created_at, updated_at, provider_reference, provider_response, failure_reason';
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
@@ -29,7 +29,12 @@ Deno.serve(async (request) => {
 
       const { data, error } = await supabaseQuery;
       if (error) throw error;
-      return json({ registrations: data || [] });
+      return json({ registrations: (data || []).map((row) => ({
+        ...row,
+        provider_status: row.provider_response && typeof row.provider_response === 'object'
+          ? (row.provider_response as Record<string, unknown>).lastProviderStatus || null
+          : null,
+      })) });
     }
 
     if (request.method === 'POST') {

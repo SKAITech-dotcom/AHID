@@ -1,5 +1,5 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
-import { activeDataProvider, dataOrderStuckMinutes, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
+import { activeDataProvider, dataOrderStuckMinutes, fetchDataOrderStatus, recoverGrandTechOrderIdFromProvider, recoverGrandTechOrderIdFromStored } from '../_shared/dataProvider.ts';
 import { refundWallet } from '../_shared/wallet.ts';
 
 /**
@@ -46,40 +46,84 @@ Deno.serve(async (request) => {
     let status = data.status as string;
     let note: string | null = null;
 
-    if (status === 'processing') {
-      const stored = (data.provider_response || {}) as Record<string, unknown>;
+    const stored = (data.provider_response || {}) as Record<string, unknown>;
+    const lastProviderStatus = String(stored.lastProviderStatus || stored.providerStatus || '').trim().toUpperCase();
+    const staleSuccessful = status === 'successful' && (
+      ['PENDING', 'PROCESSING', 'QUEUED', 'SUBMITTED', 'RECEIVED', 'ACCEPTED', 'INITIATED'].includes(lastProviderStatus) ||
+      String(stored.lastProviderState || '').toLowerCase() === 'processing'
+    );
+
+    if (status === 'processing' || staleSuccessful) {
       const provider = String(stored.provider || activeDataProvider(data.network_type, Number(data.volume_mb)));
-      const providerOrderId = String(
+      let providerOrderId = String(
         stored.providerOrderId
           ?? stored.orderId
           ?? data.provider_reference
           ?? stored.providerReference
           ?? '',
       );
+      if (!providerOrderId && provider.toLowerCase().includes('grandtech')) {
+        providerOrderId = recoverGrandTechOrderIdFromStored(stored, {
+          phone: String(data.customer_phone || ''),
+          network: String(data.network_type || ''),
+          volumeMb: Number(data.volume_mb || 0),
+          createdAt: String(data.created_at || ''),
+        }) || '';
+        if (!providerOrderId) {
+          providerOrderId = await recoverGrandTechOrderIdFromProvider({
+            phone: String(data.customer_phone || ''),
+            network: String(data.network_type || ''),
+            volumeMb: Number(data.volume_mb || 0),
+            createdAt: String(data.created_at || ''),
+          }) || '';
+        }
+      }
 
       const live = providerOrderId
         ? await fetchDataOrderStatus(provider as 'grandtech' | 'swift', providerOrderId, String(data.payment_reference))
         : null;
 
-      if (live?.state === 'successful') {
+      if (live?.state === 'processing' && staleSuccessful) {
+        status = 'processing';
+        await supabase.from('public_data_orders').update({
+          status: 'processing',
+          completed_at: null,
+          provider_status: live.status,
+          provider_state: live.state,
+          last_status_checked_at: new Date().toISOString(),
+          provider_response: { ...stored, lastProviderStatus: live.status, lastProviderState: live.state, lastStatusCheckedAt: new Date().toISOString() },
+        }).eq('id', data.id).eq('status', 'successful');
+      } else if (live?.state === 'successful') {
         status = 'successful';
         await supabase.rpc('mark_public_data_order', {
           p_order_id: data.id,
           p_status: 'successful',
           p_provider_amount: null,
-          p_provider_reference: null,
-          p_provider_response: { ...stored, lastProviderStatus: live.status },
+          p_provider_reference: data.provider_reference || live.providerOrderId || null,
+          p_provider_response: { ...stored, lastProviderStatus: live.status, lastProviderState: live.state, lastStatusCheckedAt: new Date().toISOString() },
         });
       } else if (live?.state === 'failed' || live?.state === 'cancelled') {
         status = 'failed';
+        if (staleSuccessful) {
+          await supabase.from('public_data_orders').update({ status: 'processing', completed_at: null }).eq('id', data.id).eq('status', 'successful');
+        }
         await supabase.rpc('mark_public_data_order', {
           p_order_id: data.id,
           p_status: 'failed',
           p_provider_amount: null,
-          p_provider_reference: null,
-          p_provider_response: { ...stored, lastProviderStatus: live.status },
+          p_provider_reference: data.provider_reference || live.providerOrderId || null,
+          p_provider_response: { ...stored, lastProviderStatus: live.status, lastProviderState: live.state, lastStatusCheckedAt: new Date().toISOString() },
         });
       } else {
+        if (live?.status) {
+          await supabase.from('public_data_orders').update({
+            provider_reference: data.provider_reference || live.providerOrderId || null,
+            provider_status: live.status,
+            provider_state: live.state,
+            last_status_checked_at: new Date().toISOString(),
+            provider_response: { ...stored, lastProviderStatus: live.status, lastProviderState: live.state, lastStatusCheckedAt: new Date().toISOString() },
+          }).eq('id', data.id);
+        }
         // Still in flight. If the provider has had long enough, treat the order
         // as dropped rather than leaving the customer paid and waiting.
         const ageMinutes = (Date.now() - new Date(data.created_at).getTime()) / 60000;
@@ -94,8 +138,8 @@ Deno.serve(async (request) => {
             p_order_id: data.id,
             p_status: 'failed',
             p_provider_amount: null,
-            p_provider_reference: null,
-            p_provider_response: { ...stored, lastProviderStatus: live?.status ?? 'TIMED_OUT' },
+            p_provider_reference: data.provider_reference || live?.providerOrderId || null,
+            p_provider_response: { ...stored, lastProviderStatus: live?.status ?? 'TIMED_OUT', lastProviderState: live?.state || 'processing' },
           });
         }
       }

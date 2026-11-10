@@ -5,6 +5,7 @@ import { callUtilityProvider } from '../_shared/utilityProvider.ts';
 import { hubtelRequest } from '../_shared/hubtelClient.ts';
 import { activeDataProvider, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
 import { requestProviderCancellation } from '../_shared/providerCancellation.ts';
+import { refundWallet } from '../_shared/wallet.ts';
 
 // Commission Services path segment: the DISBURSEMENT (prepaid deposit) account.
 // Distinct from the merchant/collection account used to receive money.
@@ -14,6 +15,7 @@ const ECG_SERVICE_ID = 'e6d6bac062b5499cb1ece1ac3d742a84';
 type LiveOrderStatus = {
   state: 'successful' | 'failed' | 'cancelled' | 'processing';
   status: string;
+  providerOrderId?: string;
   payload?: Record<string, unknown>;
 };
 
@@ -453,12 +455,12 @@ Deno.serve(async (request) => {
         const [agentOrders, publicOrders, legacyOrders, storeOrders, catalogRes] = await Promise.all([
           fetchAllRows((from, to) => admin
             .from('agent_data_orders')
-            .select('id, provider_reference, short_code, provider_name, provider_order_id, provider_response, phone, network_type, volume_mb, amount, status, created_at')
+            .select('id, provider_reference, short_code, provider_name, provider_order_id, provider_status, provider_state, provider_response, phone, network_type, volume_mb, amount, status, created_at')
             .order('created_at', { ascending: false })
             .range(from, to)),
           fetchAllRows((from, to) => admin
             .from('public_data_orders')
-            .select('id, payment_reference, short_code, provider_name, provider_reference, provider_response, customer_phone, customer_name, network_type, volume_mb, sale_amount, status, created_at')
+            .select('id, payment_reference, short_code, provider_name, provider_reference, provider_status, provider_state, provider_response, customer_phone, customer_name, network_type, volume_mb, sale_amount, status, created_at')
             .order('created_at', { ascending: false })
             .range(from, to)),
           fetchAllRows((from, to) => admin
@@ -468,7 +470,7 @@ Deno.serve(async (request) => {
             .range(from, to)),
           fetchAllRows((from, to) => admin
             .from('store_orders')
-            .select('id, reference, short_code, product_type, product_label, network, recipient, platform_price, fulfilment_status, payment_status, provider, provider_reference, provider_response, created_at')
+            .select('id, reference, short_code, product_type, product_label, network, recipient, platform_price, fulfilment_status, payment_status, provider, provider_reference, provider_status, provider_state, provider_response, created_at')
             .eq('product_type', 'data_bundle')
             .order('created_at', { ascending: false })
             .range(from, to)),
@@ -488,7 +490,7 @@ Deno.serve(async (request) => {
           amount: Number(o.amount || 0),
           status: o.status,
           provider: o.provider_name || 'Swift',
-          providerStatus: o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.status,
+          providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.status,
           providerReference: o.provider_order_id || o.provider_reference || '',
           failureReason: '',
           createdAt: o.created_at,
@@ -505,7 +507,7 @@ Deno.serve(async (request) => {
           amount: Number(o.sale_amount || 0),
           status: o.status,
           provider: o.provider_name || 'Swift',
-          providerStatus: o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.status,
+          providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.status,
           providerReference: o.provider_reference || '',
           failureReason: '',
           createdAt: o.created_at,
@@ -538,7 +540,7 @@ Deno.serve(async (request) => {
           amount: Number(o.platform_price || 0),
           status: o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status),
           provider: o.provider || 'Swift',
-          providerStatus: o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.fulfilment_status,
+          providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.fulfilment_status,
           providerReference: o.provider_reference || '',
           failureReason: '',
           createdAt: o.created_at,
@@ -1445,7 +1447,7 @@ Deno.serve(async (request) => {
             : {};
           const providerOrderId = String(
             order.provider_order_id || storedProviderResponse.providerOrderId ||
-            storedProviderResponse.providerReference || '',
+            storedProviderResponse.orderId || storedProviderResponse.providerReference || '',
           );
           const ref = String(order.provider_reference || '');
 
@@ -1478,6 +1480,7 @@ Deno.serve(async (request) => {
           const updatedResponse = {
             ...stored,
             lastProviderStatus: live.status,
+            lastProviderState: live.state,
             livePayload: live.payload || null,
             syncedAt: new Date().toISOString(),
           };
@@ -1487,6 +1490,18 @@ Deno.serve(async (request) => {
           // PENDING/PROCESSING → processing (no change)
           // FAILED → failed
           const terminalState = live.state === 'successful' || live.state === 'failed' || live.state === 'cancelled';
+          if (live.state === 'processing' && String(order.status) === 'successful') {
+            const { error: reopenError } = await admin.from('agent_data_orders').update({
+              status: 'processing',
+              completed_at: null,
+              provider_order_id: order.provider_order_id || live.providerOrderId || null,
+              provider_response: updatedResponse,
+            }).eq('id', order.id).eq('status', 'successful');
+            if (reopenError) throw reopenError;
+          }
+          if (live.state !== 'processing' && String(order.status) === 'successful' && live.state !== 'successful') {
+            await admin.from('agent_data_orders').update({ status: 'processing', completed_at: null }).eq('id', order.id).eq('status', 'successful');
+          }
           if (terminalState) {
             const { data: settledState, error: settleError } = await admin.rpc('settle_agent_data_order', {
               p_order_id: order.id,
@@ -1506,6 +1521,7 @@ Deno.serve(async (request) => {
           } else {
             // Still processing – update the response timestamp so we know the check ran
             const { error: updateError } = await admin.from('agent_data_orders').update({
+              provider_order_id: order.provider_order_id || live.providerOrderId || null,
               provider_response: updatedResponse,
             }).eq('id', order.id);
             if (updateError) throw updateError;
@@ -1533,7 +1549,7 @@ Deno.serve(async (request) => {
           let order: Record<string, unknown> | null = null;
           let fetchErr: unknown = null;
           const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          const select = 'id, agent_id, payment_reference, network_type, volume_mb, sale_amount, status, provider_response';
+          const select = 'id, agent_id, payment_reference, provider_name, provider_reference, network_type, volume_mb, sale_amount, status, provider_response';
 
           if (uuidPattern.test(orderId)) {
             const res = await admin.from('public_data_orders').select(select).eq('id', orderId).maybeSingle();
@@ -1557,11 +1573,11 @@ Deno.serve(async (request) => {
           const stored = (order.provider_response && typeof order.provider_response === 'object')
             ? order.provider_response as Record<string, unknown>
             : {};
-          const provider = String(stored.provider || activeDataProvider(
+          const provider = String(order.provider_name || stored.provider || activeDataProvider(
             order.network_type as string,
             Number(order.volume_mb),
           ));
-          const providerOrderId = String(stored.providerOrderId || stored.orderId || stored.provider_order_id || '');
+          const providerOrderId = String(order.provider_reference || stored.providerOrderId || stored.orderId || stored.provider_order_id || '');
           const ref = String(order.payment_reference || '');
           const live = await fetchLiveOrderStatus(provider, providerOrderId, ref);
           if (!live) {
@@ -1576,6 +1592,7 @@ Deno.serve(async (request) => {
           const updatedResponse = {
             ...stored,
             lastProviderStatus: live.status,
+            lastProviderState: live.state,
             livePayload: live.payload || null,
             syncedAt: new Date().toISOString(),
           };
@@ -1583,8 +1600,18 @@ Deno.serve(async (request) => {
             ? 'successful'
             : live.state === 'failed' || live.state === 'cancelled'
               ? 'failed'
-              : String(order.status || 'processing');
+              : String(order.status) === 'successful' ? 'processing' : String(order.status || 'processing');
           const isOpen = ['pending_payment', 'processing'].includes(String(order.status));
+          if (live.state === 'processing' && String(order.status) === 'successful') {
+            await admin.from('public_data_orders').update({
+              status: 'processing',
+              completed_at: null,
+              provider_reference: order.provider_reference || live.providerOrderId || null,
+              provider_response: updatedResponse,
+            }).eq('id', order.id).eq('status', 'successful');
+          } else if (live.state !== 'successful' && String(order.status) === 'successful') {
+            await admin.from('public_data_orders').update({ status: 'processing', completed_at: null }).eq('id', order.id).eq('status', 'successful');
+          }
 
           if (nextStatus === 'failed' && isOpen && order.agent_id) {
             const { error: refundError } = await admin.rpc('refund_agent_wallet', {
@@ -1598,6 +1625,7 @@ Deno.serve(async (request) => {
 
           const { error: updateError } = await admin.from('public_data_orders').update({
             status: nextStatus,
+            provider_reference: order.provider_reference || live.providerOrderId || null,
             provider_response: updatedResponse,
             completed_at: nextStatus === 'successful' || nextStatus === 'failed' ? new Date().toISOString() : null,
           }).eq('id', order.id).in('status', ['pending_payment', 'processing']);
@@ -1620,6 +1648,150 @@ Deno.serve(async (request) => {
             orderState: nextStatus,
             message: `Public data synchronized with ${provider}: ${live.status}`,
           });
+        }
+
+        if (orderType === 'store_order' || orderType === 'store_orders') {
+          const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const select = 'id, agent_id, reference, short_code, provider, provider_reference, provider_response, fulfilment_status, payment_status, platform_price, refund_amount, wallet_debited';
+          let order: Record<string, unknown> | null = null;
+          let fetchErr: unknown = null;
+          const candidates = uuidPattern.test(orderId)
+            ? [
+                admin.from('store_orders').select(select).eq('id', orderId),
+                admin.from('store_orders').select(select).eq('reference', orderId),
+                admin.from('store_orders').select(select).eq('short_code', orderId),
+              ]
+            : [
+                admin.from('store_orders').select(select).eq('reference', orderId),
+                admin.from('store_orders').select(select).eq('short_code', orderId),
+              ];
+
+          for (const candidate of candidates) {
+            const result = await candidate.maybeSingle();
+            if (result.error) {
+              fetchErr = fetchErr || result.error;
+              continue;
+            }
+            if (result.data) {
+              order = result.data as Record<string, unknown>;
+              break;
+            }
+          }
+          if (fetchErr && !order) throw fetchErr;
+          if (!order) return json({ success: false, error: 'Store order not found' }, 404);
+
+          const stored = (order.provider_response && typeof order.provider_response === 'object')
+            ? order.provider_response as Record<string, unknown>
+            : {};
+          const provider = String(order.provider || stored.provider || 'swift').trim().toLowerCase();
+          const providerOrderId = String(
+            order.provider_reference || stored.providerOrderId || stored.orderId || stored.providerReference || '',
+          );
+          const reference = String(order.reference || '');
+          const live = await fetchLiveOrderStatus(provider, providerOrderId, reference);
+          if (!live) {
+            return json({
+              success: false,
+              message: `Provider (${provider}) did not return a definitive status. Order remains in its current state.`,
+              status: order.fulfilment_status,
+              provider,
+            });
+          }
+
+          const updatedResponse = {
+            ...stored,
+            lastProviderStatus: live.status,
+            lastProviderState: live.state,
+            livePayload: live.payload || null,
+            syncedAt: new Date().toISOString(),
+          };
+          const currentStatus = String(order.fulfilment_status || 'processing');
+          if (currentStatus === 'successful' && live.state !== 'successful') {
+            await admin.from('store_orders').update({
+              fulfilment_status: 'processing',
+              completed_at: null,
+              provider_response: updatedResponse,
+            }).eq('id', order.id).eq('fulfilment_status', 'successful');
+          }
+          const isOpen = ['pending', 'processing'].includes(currentStatus) || (currentStatus === 'successful' && live.state !== 'successful');
+          const providerReference = providerOrderId || live.providerOrderId || null;
+
+          if (live.state === 'processing') {
+            if (isOpen) {
+              const { error: updateError } = await admin.from('store_orders').update({
+                provider_reference: providerReference,
+                provider_response: updatedResponse,
+                updated_at: new Date().toISOString(),
+              }).eq('id', order.id).in('fulfilment_status', ['pending', 'processing']);
+              if (updateError) throw updateError;
+            }
+            await recordProviderStatus(admin, {
+              orderType: 'store_orders',
+              orderId: String(order.id),
+              agentId: String(order.agent_id || ''),
+              provider,
+              providerStatus: live.status,
+              internalStatus: isOpen && currentStatus === 'successful' ? 'processing' : currentStatus,
+              payload: live.payload,
+            });
+            return json({ success: true, provider, providerStatus: live.status, orderState: currentStatus });
+          }
+
+          if (!isOpen) {
+            return json({ success: true, provider, providerStatus: live.status, orderState: currentStatus });
+          }
+
+          const checkedAt = new Date().toISOString();
+          if (live.state === 'successful') {
+            const { error: updateError } = await admin.from('store_orders').update({
+              fulfilment_status: 'successful',
+              provider_reference: providerReference,
+              provider_response: updatedResponse,
+              failure_reason: null,
+              completed_at: checkedAt,
+              updated_at: checkedAt,
+            }).eq('id', order.id).in('fulfilment_status', ['pending', 'processing']);
+            if (updateError) throw updateError;
+            const { error: profitError } = await admin.rpc('credit_store_order_profit', { p_order_id: order.id });
+            if (profitError) throw profitError;
+          } else {
+            const debitAmount = Number(order.platform_price || 0);
+            let paymentStatus = String(order.payment_status || 'paid');
+            let refundAmount = Number(order.refund_amount || 0);
+            let failureReason = `Provider ${live.state}: ${live.status}`;
+            if (order.wallet_debited && paymentStatus !== 'refunded' && refundAmount <= 0 && debitAmount > 0) {
+              try {
+                await refundWallet(String(order.agent_id), reference, debitAmount, `Refund for failed store order ${reference}`);
+                paymentStatus = 'refunded';
+                refundAmount = debitAmount;
+              } catch (refundError) {
+                failureReason = `${failureReason}. Refund pending: ${refundError instanceof Error ? refundError.message : String(refundError)}`;
+              }
+            }
+            const { error: updateError } = await admin.from('store_orders').update({
+              payment_status: paymentStatus,
+              fulfilment_status: 'failed',
+              refund_amount: refundAmount,
+              provider_reference: providerReference,
+              provider_response: updatedResponse,
+              failure_reason: failureReason,
+              completed_at: checkedAt,
+              updated_at: checkedAt,
+            }).eq('id', order.id).in('fulfilment_status', ['pending', 'processing']);
+            if (updateError) throw updateError;
+          }
+
+          const nextState = live.state === 'successful' ? 'successful' : 'failed';
+          await recordProviderStatus(admin, {
+            orderType: 'store_orders',
+            orderId: String(order.id),
+            agentId: String(order.agent_id || ''),
+            provider,
+            providerStatus: live.status,
+            internalStatus: nextState,
+            payload: live.payload,
+          });
+          return json({ success: true, provider, providerStatus: live.status, orderState: nextState });
         }
 
         return json({ success: false, error: `Unsupported sync order type: ${orderType}` }, 400);

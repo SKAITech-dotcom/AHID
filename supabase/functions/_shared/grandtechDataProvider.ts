@@ -46,6 +46,36 @@ export interface GrandTechBuyResult {
   failureReason?: string;
 }
 
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+/** GrandTech has returned order data both at the root and inside payload/data. */
+function nestedOrderContainers(source: Record<string, unknown>): Record<string, unknown>[] {
+  const containers: Record<string, unknown>[] = [source];
+  for (const key of ['payload', 'data', 'result', 'order']) {
+    const nested = recordValue(source[key]);
+    if (nested) containers.push(nested);
+    const deeper = nested ? recordValue(nested.payload) || recordValue(nested.data) : null;
+    if (deeper) containers.push(deeper);
+  }
+  return containers;
+}
+
+function extractGrandTechOrderId(payload: Record<string, unknown> | null | undefined): string | undefined {
+  const source = recordValue(payload);
+  if (!source) return undefined;
+  for (const container of nestedOrderContainers(source)) {
+    for (const key of ['orderId', 'order_id', 'providerOrderId']) {
+      const value = container[key];
+      if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+    }
+  }
+  return undefined;
+}
+
 /**
  * Strips everything we do not need out of a provider response before it is
  * logged or written to the database.
@@ -60,6 +90,9 @@ export function sanitizeGrandTechPayload(
 ): Record<string, unknown> {
   const source = payload && typeof payload === 'object' ? payload : {};
   const safe: Record<string, unknown> = {};
+
+  const orderId = extractGrandTechOrderId(source);
+  if (orderId) safe.orderId = orderId;
 
   for (const key of ['orderId', 'totalPrice', 'status', 'createdAt', 'message', 'error']) {
     const value = source[key];
@@ -228,7 +261,7 @@ export function mapGrandTechOrderState(status: string): GrandTechOrderState {
 function resolveGrandTechMatchState(match: Record<string, unknown>): { state: GrandTechOrderState; status: string; createdAt: string | null } {
   const packages = Array.isArray(match.packages) ? match.packages as Record<string, unknown>[] : [];
   const packageStatuses = packages.map((p) => String(p.status ?? ''));
-  const orderRawStatus = String(match.status ?? '').trim();
+  const orderRawStatus = typeof match.status === 'boolean' ? '' : String(match.status ?? '').trim();
   const orderState = orderRawStatus ? mapGrandTechOrderState(orderRawStatus) : null;
 
   let state: GrandTechOrderState = 'processing';
@@ -272,7 +305,13 @@ export async function fetchGrandTechOrderStatus(
     const singleRes = await fetch(`${baseUrl}/api/orders/${encodeURIComponent(providerOrderId)}`, { headers });
     if (singleRes.ok) {
       const singleJson = await singleRes.json().catch(() => ({}));
-      const candidate = singleJson?.payload || singleJson?.data || singleJson?.order || (singleJson?.orderId ? singleJson : null);
+      const root = recordValue(singleJson);
+      const candidate = root
+        ? nestedOrderContainers(root).find((item) =>
+          extractGrandTechOrderId(item) &&
+          String(extractGrandTechOrderId(item)) === String(providerOrderId),
+        ) || (extractGrandTechOrderId(root) ? root : null)
+        : null;
       if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
         return { ...resolveGrandTechMatchState(candidate as Record<string, unknown>), payload: singleJson as Record<string, unknown> };
       }
@@ -288,7 +327,11 @@ export async function fetchGrandTechOrderStatus(
       const searchJson = await searchRes.json().catch(() => ({}));
       const rows = Array.isArray(searchJson?.payload) ? searchJson.payload : Array.isArray(searchJson?.data) ? searchJson.data : null;
       if (rows && rows.length) {
-        const found = rows.find((o: Record<string, unknown>) => String(o.orderId ?? o.id ?? '') === String(providerOrderId)) || rows[0];
+        // A search response is a list. Never use rows[0] when the provider did
+        // not return our exact order; that can report another customer's status.
+        const found = rows.find((o: Record<string, unknown>) =>
+          String(extractGrandTechOrderId(o) ?? o.id ?? '') === String(providerOrderId),
+        );
         if (found) return { ...resolveGrandTechMatchState(found as Record<string, unknown>), payload: searchJson as Record<string, unknown> };
       }
     }
@@ -305,7 +348,7 @@ export async function fetchGrandTechOrderStatus(
       if (!response.ok || !Array.isArray(payload?.payload)) break;
 
       const orders = payload.payload as Record<string, unknown>[];
-      const match = orders.find((o) => String(o.orderId ?? o.id ?? '') === String(providerOrderId));
+      const match = orders.find((o) => String(extractGrandTechOrderId(o) ?? o.id ?? '') === String(providerOrderId));
       if (match) {
         return { ...resolveGrandTechMatchState(match), payload };
       }
@@ -317,6 +360,54 @@ export async function fetchGrandTechOrderStatus(
     }
   }
 
+  return null;
+}
+
+/**
+ * Finds a legacy GrandTech order when our database predates provider_order_id.
+ * Matching is deliberately strict so a history scan can never attach another
+ * customer's order merely because it was the first row returned.
+ */
+export async function findGrandTechOrderId(
+  networkType: string,
+  volumeInMB: number,
+  phone: string,
+  createdAt: string,
+): Promise<string | null> {
+  const wantedPhone = String(phone || '').replace(/\D/g, '');
+  const wantedNetwork = normalizeDataNetwork(networkType);
+  const wantedSize = Number(volumeInMB) / 1024;
+  const wantedTime = Date.parse(createdAt);
+  if (!wantedPhone || !wantedNetwork || !Number.isFinite(wantedSize)) return null;
+
+  const headers = { 'x-api-key': grandtechApiKey(), Accept: 'application/json' };
+  const baseUrl = grandtechDataBaseUrl();
+  for (let page = 1; page <= 10; page += 1) {
+    const response = await fetch(`${baseUrl}/api/orders?page=${page}&limit=100`, { headers });
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok || !Array.isArray(payload.payload)) break;
+
+    let best: { id: string; distance: number } | null = null;
+    for (const rowValue of payload.payload as unknown[]) {
+      const row = recordValue(rowValue);
+      if (!row) continue;
+      const pkg = Array.isArray(row.packages) && recordValue(row.packages[0]) ? recordValue(row.packages[0])! : {};
+      const rowPhone = String(pkg.phone ?? row.phone ?? row.recipientPhone ?? '').replace(/\D/g, '');
+      const rowNetwork = normalizeDataNetwork(String(pkg.network ?? row.network ?? ''));
+      const rowSize = Number(pkg.size ?? row.size);
+      const rowTime = Date.parse(String(pkg.createdAt ?? row.createdAt ?? ''));
+      const distance = Number.isFinite(wantedTime) && Number.isFinite(rowTime)
+        ? Math.abs(wantedTime - rowTime)
+        : Number.POSITIVE_INFINITY;
+      if (rowPhone !== wantedPhone || rowNetwork !== wantedNetwork || !Number.isFinite(rowSize) || Math.abs(rowSize - wantedSize) >= 0.000001 || distance > 15 * 60_000) continue;
+      const id = extractGrandTechOrderId(row);
+      if (id && (!best || distance < best.distance)) best = { id, distance };
+    }
+    if (best) return best.id;
+
+    const totalPages = Number(payload.totalPages ?? 1);
+    if (!Number.isFinite(totalPages) || page >= totalPages) break;
+  }
   return null;
 }
 
@@ -356,9 +447,10 @@ export async function buyGrandTechPackage(
     })) as Record<string, unknown>;
 
     const success = response.ok;
+    const orderId = extractGrandTechOrderId(payload);
     return {
       success,
-      orderId: payload.orderId ? String(payload.orderId) : undefined,
+      orderId,
       totalPrice: Number.isFinite(Number(payload.totalPrice))
         ? Number(payload.totalPrice)
         : undefined,

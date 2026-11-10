@@ -102,11 +102,6 @@ Deno.serve(async (req) => {
   });
 
   const { status: mapped, failure } = mapStatus(rawStatus);
-  const patch: Record<string, unknown> = {
-    status: mapped,
-    updated_at: new Date().toISOString(),
-  };
-  if (failure) patch.failure_reason = failure;
 
   // Match on the provider id we stored at submission time. Fall back to the most
   // recent registration for that name so an early callback still lands.
@@ -132,12 +127,31 @@ Deno.serve(async (req) => {
     return json({ success: false, error: 'Registration not found' }, 404);
   }
 
+  const currentStatus = String(found.status || 'Processing');
+  const protectedStatus = ['Completed', 'Cancelled'].includes(currentStatus) && mapped !== 'Completed'
+    ? currentStatus
+    : mapped;
+  const providerUpdatedAt = updatedAt && Number.isFinite(Date.parse(String(updatedAt)))
+    ? new Date(String(updatedAt)).toISOString()
+    : new Date().toISOString();
+  const patch: Record<string, unknown> = {
+    status: protectedStatus,
+    provider_status: String(rawStatus ?? protectedStatus),
+    provider_updated_at: providerUpdatedAt,
+    ...(afaId ? { provider_reference: afaId } : {}),
+    updated_at: new Date().toISOString(),
+  };
+  if (failure && protectedStatus !== 'Completed') patch.failure_reason = failure;
+
   const previousProviderResponse = found.provider_response && typeof found.provider_response === 'object'
     ? found.provider_response as Record<string, unknown>
     : {};
   patch.provider_response = {
     ...previousProviderResponse,
     webhook: body,
+    lastProviderStatus: String(rawStatus ?? mapped),
+    lastProviderState: mapped,
+    lastStatusCheckedAt: new Date().toISOString(),
     ...(updatedAt ? { provider_updated_at: updatedAt } : {}),
   };
 
@@ -152,7 +166,7 @@ Deno.serve(async (req) => {
   }
 
   let refunded = false;
-  if (mapped === 'Cancelled' && found.agent_id && !['Completed', 'Cancelled'].includes(String(found.status))) {
+  if (protectedStatus === 'Cancelled' && found.agent_id && !['Completed', 'Cancelled'].includes(String(found.status))) {
     try {
       await refundWallet(
         String(found.agent_id),
@@ -169,8 +183,8 @@ Deno.serve(async (req) => {
   }
 
   console.log(
-    `afa-webhook: ${found.reference} ${found.status} -> ${mapped} (afaId=${afaId || 'n/a'})`,
+    `afa-webhook: ${found.reference} ${found.status} -> ${protectedStatus} (afaId=${afaId || 'n/a'})`,
   );
 
-  return json({ success: true, reference: found.reference, status: mapped, refunded });
+  return json({ success: true, reference: found.reference, status: protectedStatus, refunded });
 });

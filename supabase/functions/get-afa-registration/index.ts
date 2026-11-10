@@ -10,7 +10,7 @@ Deno.serve(async (request) => {
 
     const { data, error } = await adminClient()
       .from('afa_registrations')
-      .select('reference, full_name, phone, town, id_type, id_number, amount, status, created_at')
+      .select('reference, full_name, phone, town, id_type, id_number, amount, status, provider_reference, provider_response, failure_reason, updated_at, created_at')
       .or(`phone.ilike.${term},id_number.ilike.${term},reference.ilike.${term},full_name.ilike.${term}`)
       .order('created_at', { ascending: false })
       .limit(10);
@@ -18,7 +18,12 @@ Deno.serve(async (request) => {
     if (error) throw error;
     if (!data || data.length === 0) return json({ error: 'No active AFA registration matched.' }, 404);
 
-    return json({ registrations: data });
+    return json({ registrations: (data || []).map((row) => ({
+      ...row,
+      provider_status: row.provider_response && typeof row.provider_response === 'object'
+        ? (row.provider_response as Record<string, unknown>).lastProviderStatus || null
+        : null,
+    })) });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : 'Unable to retrieve registration.' }, 500);
   }
