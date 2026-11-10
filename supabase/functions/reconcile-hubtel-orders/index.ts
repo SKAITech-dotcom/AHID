@@ -5,6 +5,7 @@ import {
   settleHubtelUtilityOrder,
 } from '../_shared/hubtelSettlement.ts';
 import { activeDataProvider, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
+import { fulfilStoreOrder } from '../_shared/storeOrderFulfillment.ts';
 
 /**
  * Sweeps the Hubtel orders whose callback never arrived.
@@ -74,8 +75,9 @@ Deno.serve(async (request) => {
     const airtime = await sweepAirtimeOrders(admin, graceCutoff, ageFloor);
     const utility = await sweepUtilityOrders(admin, graceCutoff, ageFloor);
     const publicData = await sweepPublicDataOrders(admin, graceCutoff, ageFloor);
-    const changed = airtime.changed + utility.changed + publicData.changed;
-    const unreadable = [airtime, utility, publicData].filter((result) => result.failed).length;
+    const publicStore = await sweepPublicStoreOrders(admin, graceCutoff, ageFloor);
+    const changed = airtime.changed + utility.changed + publicData.changed + publicStore.changed;
+    const unreadable = [airtime, utility, publicData, publicStore].filter((result) => result.failed).length;
 
     // Reconciliation is not a row write of its own, so record it explicitly.
     // Auditing must never break the sweep, and a Supabase query builder is
@@ -84,7 +86,7 @@ Deno.serve(async (request) => {
       try {
         await admin.rpc('log_activity', {
           p_summary: `Reconciled ${changed} Hubtel order${changed === 1 ? '' : 's'} that no callback settled`,
-          p_meta: { airtime, utility, publicData },
+          p_meta: { airtime, utility, publicData, publicStore },
           p_actor_user_id: null,
         });
       } catch (logError) {
@@ -96,10 +98,10 @@ Deno.serve(async (request) => {
     // 0` every minute is exactly what a working sweep looks like, so a broken
     // one has to be visibly different from the outside, not only in the logs.
     if (unreadable > 0) {
-      return json({ success: false, changed, unreadable, airtime, utility, publicData }, 500);
+      return json({ success: false, changed, unreadable, airtime, utility, publicData, publicStore }, 500);
     }
 
-    return json({ success: true, changed, airtime, utility, publicData });
+    return json({ success: true, changed, airtime, utility, publicData, publicStore });
   } catch (error) {
     console.error('reconcile-hubtel-orders failed:', error);
     return json({ error: 'Reconciliation failed.' }, 500);
@@ -314,6 +316,45 @@ async function sweepPublicDataOrders(
     } catch (sweepError) {
       console.error('Public data order sweep request failed:', {
         reference,
+        error: sweepError instanceof Error ? sweepError.message : String(sweepError),
+      });
+    }
+  }
+
+  return { checked: (orders ?? []).length, changed, failed: false };
+}
+
+/** Reconciles customer purchases made through public agent store links. */
+async function sweepPublicStoreOrders(
+  admin: ReturnType<typeof adminClient>,
+  graceCutoff: string,
+  ageFloor: string,
+): Promise<SweepResult> {
+  const { data: orders, error } = await admin
+    .from('store_orders')
+    .select('id, reference, payment_status, fulfilment_status, created_at, meta')
+    .eq('product_type', 'data_bundle')
+    .contains('meta', { source: 'public_storefront' })
+    .in('payment_status', ['pending', 'paid'])
+    .in('fulfilment_status', ['pending', 'processing'])
+    .lt('created_at', graceCutoff)
+    .gt('created_at', ageFloor)
+    .order('created_at', { ascending: true })
+    .limit(MAX_ORDERS_PER_SWEEP);
+
+  if (error) {
+    console.error('Public store order sweep read failed:', error);
+    return { checked: 0, changed: 0, failed: true };
+  }
+
+  let changed = 0;
+  for (const order of orders ?? []) {
+    try {
+      const result = await fulfilStoreOrder(String(order.reference));
+      if (['successful', 'failed'].includes(result.fulfilmentStatus)) changed += 1;
+    } catch (sweepError) {
+      console.error('Public store order sweep failed:', {
+        reference: order.reference,
         error: sweepError instanceof Error ? sweepError.message : String(sweepError),
       });
     }

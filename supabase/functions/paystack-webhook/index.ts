@@ -17,9 +17,38 @@ Deno.serve(async (request) => {
   if (request.headers.get('x-paystack-signature') !== await signatureFor(payload, secret)) return json({ error: 'Invalid signature' }, 401);
   try {
     const event = JSON.parse(payload);
-    if (event.event !== 'charge.success') return json({ received: true });
     const reference = event.data?.reference;
     const admin = adminClient();
+
+    // A declined/abandoned Paystack checkout must close its durable order but
+    // must never enter any provider-dispatch path. Paystack does not send
+    // charge.success for these events, so handle them before the success-only
+    // fulfilment branches below.
+    if (['charge.failed', 'charge.abandoned'].includes(String(event.event || '').toLowerCase())) {
+      const ref = String(reference || '');
+      const metadataType = String(event.data?.metadata?.payment_type || '').toLowerCase();
+      if (metadataType === 'public_data' || /^PUB(?:[0-9a-f]{29}|-GUEST-[0-9a-f-]{36})$/i.test(ref)) {
+        await admin.from('public_data_orders').update({
+          status: 'failed',
+          provider_response: { paystack: event.data || {}, paymentStatus: 'failed' },
+          completed_at: new Date().toISOString(),
+        }).eq('payment_reference', ref).in('status', ['pending_payment', 'processing']);
+      } else if (metadataType === 'store_order' || /^STR(?:[0-9a-f]{29}|-[0-9a-f-]{36})$/i.test(ref)) {
+        await admin.from('store_orders').update({
+          payment_status: 'failed',
+          fulfilment_status: 'failed',
+          provider_response: { paystack: event.data || {}, paymentStatus: 'failed' },
+          failure_reason: 'Paystack payment was not approved.',
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq('reference', ref).eq('payment_status', 'pending');
+      } else if (metadataType === 'wallet_topup') {
+        await admin.from('wallet_topups').update({ status: 'failed' }).eq('payment_reference', ref).eq('status', 'pending_payment');
+      }
+      return json({ received: true });
+    }
+
+    if (event.event !== 'charge.success') return json({ received: true });
 
     // 0. Store Data Bundle Order (direct customer purchase with agent profit margin credit)
     if (event.data?.metadata?.payment_type === 'store_order' || /^STR(?:[0-9a-f]{29}|-[0-9a-f-]{36})$/i.test(String(reference))) {

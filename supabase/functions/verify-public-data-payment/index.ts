@@ -37,6 +37,32 @@ async function currentOrder(admin: ReturnType<typeof adminClient>, reference: st
   return data;
 }
 
+async function markPaymentFailed(
+  admin: ReturnType<typeof adminClient>,
+  order: Record<string, any>,
+  reason: string,
+  gatewayPayload?: unknown,
+) {
+  const stored = order.provider_response && typeof order.provider_response === 'object'
+    ? order.provider_response as Record<string, unknown>
+    : {};
+  const { error } = await admin.from('public_data_orders').update({
+    status: 'failed',
+    provider_response: {
+      ...stored,
+      paymentVerification: {
+        status: 'failed',
+        reason,
+        payload: gatewayPayload && typeof gatewayPayload === 'object' ? gatewayPayload : null,
+        checkedAt: new Date().toISOString(),
+      },
+      lastError: reason,
+    },
+    completed_at: new Date().toISOString(),
+  }).eq('id', order.id).in('status', ['pending_payment', 'processing']);
+  if (error) throw error;
+}
+
 /** Verifies a guest Hubtel payment and dispatches the same provider path used by the return flow. */
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
@@ -71,7 +97,9 @@ Deno.serve(async (request) => {
         // The authenticated Hubtel callback is sufficient. The status endpoint
         // is only a recovery path for a callback that has not arrived yet.
       } else if (callbackPayload?.state === 'failed') {
-        return json({ success: false, status: 'failed', message: 'Hubtel payment was not successful.' });
+        const message = 'Hubtel payment was not approved. The order was recorded as failed and was not sent to the provider.';
+        await markPaymentFailed(admin, order, message, order.provider_response);
+        return json({ success: false, status: 'failed', message });
       } else {
         const verified = hubtelPaymentsVerifyConfigured()
           ? await verifyHubtelCollection(reference)
@@ -79,7 +107,12 @@ Deno.serve(async (request) => {
         if (!verified || verified.state === 'pending') {
           return json({ success: false, status: 'pending_payment', message: 'Payment is not confirmed yet. Please wait a moment and try again.' });
         }
-        if (verified.state === 'failed' || verified.amountGhs === undefined
+        if (verified.state === 'failed') {
+          const message = 'Hubtel payment was not approved. The order was recorded as failed and was not sent to the provider.';
+          await markPaymentFailed(admin, order, message, verified);
+          return json({ success: false, status: 'failed', message });
+        }
+        if (verified.amountGhs === undefined
           || !hubtelWalletAmountMatches(verified.amountGhs, Number(order.sale_amount), Number(order.payment_gross_amount))) {
           return json({ success: false, status: 'pending_payment', message: 'Payment is still being confirmed.' });
         }
@@ -94,7 +127,13 @@ Deno.serve(async (request) => {
       const feeRateValue = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.0195');
       const feeRate = Number.isFinite(feeRateValue) && feeRateValue >= 0 && feeRateValue < 1 ? feeRateValue : 0.0195;
       const expectedGross = Math.round(roundMoney(Number(order.sale_amount) * (1 + feeRate)) * 100);
-      if (!verified.ok || transaction.data?.status !== 'success' || transaction.data.amount !== expectedGross || transaction.data.currency !== 'GHS') {
+      const transactionStatus = String(transaction.data?.status || '').toLowerCase();
+      if (verified.ok && transactionStatus && transactionStatus !== 'success') {
+        const message = 'Paystack payment was not approved. The order was recorded as failed and was not sent to the provider.';
+        await markPaymentFailed(admin, order, message, transaction.data);
+        return json({ success: false, status: 'failed', message });
+      }
+      if (!verified.ok || transactionStatus !== 'success' || transaction.data.amount !== expectedGross || transaction.data.currency !== 'GHS') {
         return json({ success: false, status: 'pending_payment', message: 'Payment is not confirmed yet. Please wait a moment and try again.' });
       }
     }

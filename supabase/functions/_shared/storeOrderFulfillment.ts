@@ -1,5 +1,5 @@
 import { adminClient } from './supabase.ts';
-import { buyDataPackage, resolveDataPackage, type DataBuyResult } from './dataProvider.ts';
+import { buyDataPackage, fetchDataOrderStatus, resolveDataPackage, type DataBuyResult } from './dataProvider.ts';
 import { hubtelPaymentsVerifyConfigured, verifyHubtelCollection } from './hubtelPayments.ts';
 import { hubtelWalletAmountMatches, normalizeHubtel } from './paymentGateway.ts';
 import { refundWallet } from './wallet.ts';
@@ -8,8 +8,15 @@ import { volumeForBundleId } from './dataCatalog.ts';
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 async function creditStoreProfit(admin: ReturnType<typeof adminClient>, orderId: string) {
-  const { error } = await admin.rpc('credit_store_order_profit', { p_order_id: orderId });
-  if (error) console.error('Store profit credit failed:', error);
+  const { data, error } = await admin.rpc('credit_store_order_profit', { p_order_id: orderId });
+  if (error) {
+    console.error('Store profit credit failed:', error);
+    throw new Error(`Store commission could not be credited: ${error.message || 'wallet RPC failed'}`);
+  }
+  if (data && typeof data === 'object' && (data as Record<string, unknown>).success === false) {
+    throw new Error(`Store commission could not be credited: ${String((data as Record<string, unknown>).reason || 'order is not eligible')}`);
+  }
+  return data;
 }
 
 export interface StoreOrderFulfillmentResult {
@@ -45,21 +52,126 @@ export async function fulfilStoreOrder(reference: string): Promise<StoreOrderFul
 
   const paymentProvider = String(order.payment_provider || 'paystack').trim().toLowerCase();
 
-  // Idempotency: once payment has been settled and fulfilment has reached a
-  // terminal/processing state, do not dispatch or refund the same payment a
-  // second time. This must not depend on wallet_debited because public
-  // storefront orders intentionally do not debit the owner's wallet.
-  if (order.payment_status === 'paid' && order.fulfilment_status !== 'pending') {
-    if (order.fulfilment_status === 'successful') await creditStoreProfit(admin, order.id);
+  // Never dispatch an order whose payment was declined, abandoned, refunded,
+  // or otherwise failed. This guard is deliberately before every provider call.
+  if (order.fulfilment_status === 'failed' || ['failed', 'refunded'].includes(String(order.payment_status))) {
     return {
-      success: order.fulfilment_status !== 'failed',
+      success: false,
       orderReference: order.reference,
       paymentStatus: order.payment_status,
       fulfilmentStatus: order.fulfilment_status,
       profitMargin: Number(order.agent_earning || 0),
-      message: order.fulfilment_status === 'failed'
-        ? (order.failure_reason || 'Order delivery could not be completed.')
-        : `Order fulfilled. Bundle delivered to ${order.recipient}.`,
+      message: order.failure_reason || 'This order was not paid successfully and was not sent to the provider.',
+      recipient: order.recipient,
+      bundleTitle: order.product_label,
+    };
+  }
+
+  // A paid store order can be called repeatedly by the browser, webhook, and
+  // scheduled reconciliation. If it is already processing, ask the provider
+  // for the live state instead of dispatching a duplicate bundle.
+  if (order.payment_status === 'paid' && order.fulfilment_status === 'processing') {
+    const stored = order.provider_response && typeof order.provider_response === 'object'
+      ? order.provider_response as Record<string, unknown>
+      : {};
+    const providerValue = String(order.provider || stored.provider || '').trim().toLowerCase();
+    const provider = providerValue.includes('grandtech')
+      ? 'grandtech'
+      : providerValue.includes('swift')
+        ? 'swift'
+        : providerValue;
+    const providerOrderId = String(
+      order.provider_reference || stored.providerOrderId || stored.orderId || stored.providerReference || '',
+    ).trim();
+    const live = providerOrderId && (provider === 'swift' || provider === 'grandtech')
+      ? await fetchDataOrderStatus(provider as 'swift' | 'grandtech', providerOrderId, String(order.reference || '')).catch((error) => {
+        console.error('Store provider status check failed:', { reference: order.reference, error });
+        return null;
+      })
+      : null;
+    const checkedAt = new Date().toISOString();
+    const providerResponse = {
+      ...stored,
+      provider,
+      lastProviderStatus: live?.status || stored.lastProviderStatus || 'UNKNOWN',
+      lastProviderState: live?.state || stored.lastProviderState || 'processing',
+      lastStatusCheckedAt: checkedAt,
+    };
+
+    if (live?.state === 'successful') {
+      const { error: updateError } = await admin.from('store_orders').update({
+        fulfilment_status: 'successful',
+        provider_response: providerResponse,
+        failure_reason: null,
+        completed_at: checkedAt,
+        updated_at: checkedAt,
+      }).eq('id', order.id).eq('fulfilment_status', 'processing');
+      if (updateError) throw updateError;
+      await creditStoreProfit(admin, order.id);
+      return {
+        success: true,
+        orderReference: order.reference,
+        paymentStatus: 'paid',
+        fulfilmentStatus: 'successful',
+        profitMargin: Number(order.agent_earning || 0),
+        message: `Bundle delivered to ${order.recipient}. Store commission has been credited.`,
+        recipient: order.recipient,
+        bundleTitle: order.product_label,
+      };
+    }
+
+    if (live?.state === 'failed' || live?.state === 'cancelled') {
+      const paystackSecret = Deno.env.get('PAYSTACK_SECRET_KEY')?.trim();
+      const paystackRefunded = paymentProvider === 'paystack' && paystackSecret
+        ? await requestPaystackRefund(paystackSecret, String(order.reference))
+        : false;
+      const { error: updateError } = await admin.from('store_orders').update({
+        payment_status: paystackRefunded ? 'refunded' : order.payment_status,
+        fulfilment_status: 'failed',
+        provider_response: providerResponse,
+        failure_reason: `Provider ${live.state}: ${live.status}${paystackRefunded ? ' Customer payment refund initiated.' : ''}`,
+        completed_at: checkedAt,
+        updated_at: checkedAt,
+      }).eq('id', order.id).eq('fulfilment_status', 'processing');
+      if (updateError) throw updateError;
+      return {
+        success: false,
+        orderReference: order.reference,
+        paymentStatus: paystackRefunded ? 'refunded' : order.payment_status,
+        fulfilmentStatus: 'failed',
+        profitMargin: 0,
+        message: paystackRefunded
+          ? 'The provider rejected the bundle. Customer payment refund initiated.'
+          : 'The provider rejected the bundle. Please contact support if the customer was charged.',
+        recipient: order.recipient,
+        bundleTitle: order.product_label,
+      };
+    }
+
+    await admin.from('store_orders').update({ provider_response: providerResponse, updated_at: checkedAt }).eq('id', order.id).eq('fulfilment_status', 'processing');
+    return {
+      success: true,
+      orderReference: order.reference,
+      paymentStatus: 'paid',
+      fulfilmentStatus: 'processing',
+      profitMargin: Number(order.agent_earning || 0),
+      message: `Payment confirmed. Provider status: ${String(live?.status || 'PROCESSING')}. The bundle is still being delivered.`,
+      recipient: order.recipient,
+      bundleTitle: order.product_label,
+    };
+  }
+
+  // A successful order is terminal, but the commission RPC is idempotent and
+  // is retried here if an earlier webhook/update failed after delivery.
+  if (order.payment_status === 'paid' && order.fulfilment_status === 'successful') {
+    await creditStoreProfit(admin, order.id);
+    return {
+      success: true,
+      orderReference: order.reference,
+      paymentStatus: 'paid',
+      fulfilmentStatus: 'successful',
+      profitMargin: Number(order.agent_earning || 0),
+      message: `Bundle delivered to ${order.recipient}. Store commission has been credited.`,
       recipient: order.recipient,
       bundleTitle: order.product_label,
     };

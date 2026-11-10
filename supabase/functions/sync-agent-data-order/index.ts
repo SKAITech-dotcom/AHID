@@ -183,10 +183,10 @@ async function syncStoreDataOrders(
 ): Promise<number> {
   let query = supabase
     .from('store_orders')
-    .select('id, reference, short_code, agent_id, network, product_ref, product_label, platform_price, refund_amount, wallet_debited, payment_status, fulfilment_status, provider, provider_reference, provider_response, created_at')
+    .select('id, reference, short_code, agent_id, network, product_ref, product_label, platform_price, refund_amount, wallet_debited, payment_status, fulfilment_status, commission_credited, meta, provider, provider_reference, provider_response, created_at')
     .eq('agent_id', agentId)
     .eq('product_type', 'data_bundle')
-    .in('fulfilment_status', ['pending', 'processing'])
+    .in('fulfilment_status', ['pending', 'processing', 'successful'])
     .order('created_at', { ascending: true })
     .limit(MAX_ORDERS_PER_SYNC);
 
@@ -201,6 +201,24 @@ async function syncStoreDataOrders(
   let changed = 0;
 
   for (const order of orders ?? []) {
+    const isPublicStoreOrder = order.meta && typeof order.meta === 'object'
+      && String((order.meta as Record<string, unknown>).source || '') === 'public_storefront';
+    if (order.fulfilment_status === 'successful') {
+      // A provider may have delivered successfully while the commission RPC
+      // was temporarily unavailable. Keep successful but uncredited rows in
+      // this reconciliation queue until the idempotent credit succeeds.
+      if (isPublicStoreOrder && !order.commission_credited) {
+        const { error: profitError } = await supabase.rpc('credit_store_order_profit', {
+          p_order_id: order.id,
+        });
+        if (profitError) {
+          console.error('Store profit retry failed:', profitError);
+        } else {
+          changed += 1;
+        }
+      }
+      continue;
+    }
     const stored = (order.provider_response && typeof order.provider_response === 'object')
       ? order.provider_response as Record<string, unknown>
       : {};
@@ -242,10 +260,12 @@ async function syncStoreDataOrders(
       if (updateError) console.error('Wallet store success update failed:', updateError);
       else {
         changed += 1;
-        const { error: profitError } = await supabase.rpc('credit_store_order_profit', {
-          p_order_id: order.id,
-        });
-        if (profitError) console.error('Store profit credit failed during reconciliation:', profitError);
+        if (isPublicStoreOrder) {
+          const { error: profitError } = await supabase.rpc('credit_store_order_profit', {
+            p_order_id: order.id,
+          });
+          if (profitError) console.error('Store profit credit failed during reconciliation:', profitError);
+        }
         await recordStatusEvent(supabase, {
           orderType: 'store_orders',
           orderId: String(order.id),

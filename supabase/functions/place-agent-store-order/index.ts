@@ -136,6 +136,20 @@ Deno.serve(async (request) => {
     }
     if (!dataPackage) return json({ error: 'This bundle is temporarily unavailable from the provider.' }, 409);
 
+    // Fail before creating any order or contacting a provider when the agent
+    // has no available wallet balance. The atomic charge below remains the
+    // final race-safe guard if another purchase happens at the same time.
+    const availableBalance = await getWalletBalance(user.id);
+    if (!Number.isFinite(availableBalance)) {
+      return json({ error: 'Your wallet balance is temporarily unavailable. Please try again.' }, 503);
+    }
+    if (availableBalance < round2(platformPrice)) {
+      return json({
+        error: `Insufficient wallet balance. Available: GHS ${availableBalance.toFixed(2)}; required: GHS ${round2(platformPrice).toFixed(2)}.`,
+        walletBalance: availableBalance,
+      }, 402);
+    }
+
     const storeIdResult = await admin.rpc('ensure_agent_store', { p_agent_id: user.id });
     if (storeIdResult.error) throw storeIdResult.error;
     const storeId = String(storeIdResult.data || '');
