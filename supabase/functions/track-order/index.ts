@@ -1,4 +1,5 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
+import { activeDataProvider, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
 
 interface OrderMatch {
   trackingId: string;
@@ -30,6 +31,55 @@ function dataOrderLabel(status: unknown): string {
   if (value === 'pending_payment') return 'Awaiting Payment';
   if (value === 'processing') return 'Processing';
   return 'Pending';
+}
+
+async function liveDataStatus(admin: ReturnType<typeof adminClient>, row: Record<string, unknown>) {
+  const current = String(row.status || '').toLowerCase();
+  // A previous frontend could have marked an accepted order as completed
+  // before the provider settled it. Re-check every non-failed order so the
+  // customer sees the provider's current state instead of a stale local one.
+  if (['failed', 'cancelled', 'refunded'].includes(current)) return null;
+  const stored = row.provider_response && typeof row.provider_response === 'object'
+    ? row.provider_response as Record<string, unknown>
+    : {};
+  const providerValue = String(row.provider_name || stored.provider || activeDataProvider(
+    String(row.network_type || ''),
+    Number(row.volume_mb || 0),
+  )).trim().toLowerCase();
+  const provider = providerValue.includes('grandtech')
+    ? 'grandtech'
+    : providerValue.includes('swift')
+      ? 'swift'
+      : providerValue;
+  const providerOrderId = String(
+    row.provider_order_id
+      || stored.providerOrderId
+      || stored.orderId
+      || row.provider_reference
+      || stored.providerReference
+      || '',
+  ).trim();
+  const reference = String(row.provider_reference || '').trim();
+  if (!providerOrderId && !reference) return null;
+  if (provider !== 'swift' && provider !== 'grandtech') return null;
+
+  const live = await fetchDataOrderStatus(
+    provider as 'swift' | 'grandtech',
+    providerOrderId,
+    reference,
+  ).catch(() => null);
+  if (!live) return null;
+  await admin.from(row.order_table === 'public_data_orders' ? 'public_data_orders' : 'agent_data_orders')
+    .update({
+      provider_response: {
+        ...stored,
+        lastProviderStatus: live.status,
+        lastProviderState: live.state,
+        lastStatusCheckedAt: new Date().toISOString(),
+      },
+    })
+    .eq('id', row.id);
+  return live;
 }
 
 Deno.serve(async (request) => {
@@ -72,12 +122,37 @@ Deno.serve(async (request) => {
 
       // 2. Check agent data orders
       if (!match) {
+        const { data: publicData, error } = await admin
+          .from('public_data_orders')
+          .select('id, payment_reference, short_code, provider_name, provider_reference, provider_response, network_type, volume_mb, customer_phone, sale_amount, status, created_at')
+          .eq('short_code', ref)
+          .maybeSingle();
+        if (!error && publicData) {
+          const live = await liveDataStatus(admin, { ...publicData, order_table: 'public_data_orders' });
+          match = {
+            trackingId: publicData.short_code,
+            shortCode: publicData.short_code,
+            type: 'data',
+            network: (publicData.network_type || '').toUpperCase(),
+            package: `${publicData.volume_mb >= 1024 ? `${(publicData.volume_mb / 1024)}GB` : `${publicData.volume_mb}MB`} ${clean(publicData.network_type).toUpperCase()}`,
+            price: money(publicData.sale_amount),
+            name: 'Customer',
+            phone: publicData.customer_phone || '',
+            status: live ? dataOrderLabel(live.state) : dataOrderLabel(publicData.status),
+            date: dateOf(publicData.created_at),
+          };
+        }
+      }
+
+      // 3. Check agent data orders
+      if (!match) {
         const { data, error } = await admin
           .from('agent_data_orders')
-          .select('id, provider_reference, short_code, network_type, phone, volume_mb, amount, status, created_at')
+          .select('id, provider_reference, provider_name, provider_order_id, provider_response, short_code, network_type, phone, volume_mb, amount, status, created_at')
           .eq('short_code', ref)
           .maybeSingle();
         if (!error && data) {
+          const live = await liveDataStatus(admin, { ...data, order_table: 'agent_data_orders' });
           match = {
             trackingId: data.provider_reference,
             shortCode: data.short_code,
@@ -87,13 +162,13 @@ Deno.serve(async (request) => {
             price: money(data.amount),
             name: 'Agent Order',
             phone: data.phone || '',
-            status: dataOrderLabel(data.status),
+            status: live ? dataOrderLabel(live.state) : dataOrderLabel(data.status),
             date: dateOf(data.created_at),
           };
         }
       }
 
-      // 3. Check utility orders
+      // 4. Check utility orders
       if (!match) {
         const { data: utilData } = await admin
           .from('utility_orders')
@@ -117,14 +192,16 @@ Deno.serve(async (request) => {
       }
     }
 
-    // Public data bundles
-    if (ref.startsWith('PUB-')) {
+    // Public data bundles. New guest references start with PUB (without the
+    // historical hyphen), so accept both formats.
+    if (ref.startsWith('PUB')) {
       const { data, error } = await admin
         .from('public_data_orders')
-        .select('payment_reference, short_code, network_type, volume_mb, sale_amount, customer_name, customer_phone, customer_email, status, created_at')
+        .select('id, payment_reference, short_code, provider_name, provider_reference, provider_response, network_type, volume_mb, sale_amount, customer_name, customer_phone, customer_email, status, created_at')
         .eq('payment_reference', ref)
         .maybeSingle();
       if (!error && data) {
+        const live = await liveDataStatus(admin, { ...data, order_table: 'public_data_orders' });
         const packageLabel = `${data.volume_mb >= 1024 ? `${(data.volume_mb / 1024)}GB` : `${data.volume_mb}MB`} ${clean(data.network_type).toUpperCase()}`;
         match = {
           trackingId: data.payment_reference,
@@ -135,7 +212,7 @@ Deno.serve(async (request) => {
           price: money(data.sale_amount),
           name: data.customer_name || 'Customer',
           phone: data.customer_phone || '',
-          status: dataOrderLabel(data.status),
+          status: live ? dataOrderLabel(live.state) : dataOrderLabel(data.status),
           date: dateOf(data.created_at),
         };
       }
@@ -168,10 +245,11 @@ Deno.serve(async (request) => {
     if (ref.startsWith('DATA-')) {
       const { data, error } = await admin
         .from('agent_data_orders')
-        .select('provider_reference, short_code, network_type, phone, volume_mb, amount, status, created_at')
+        .select('id, provider_reference, provider_name, provider_order_id, provider_response, short_code, network_type, phone, volume_mb, amount, status, created_at')
         .eq('provider_reference', ref)
         .maybeSingle();
       if (!error && data) {
+        const live = await liveDataStatus(admin, { ...data, order_table: 'agent_data_orders' });
         match = {
           trackingId: data.provider_reference,
           shortCode: data.short_code,
@@ -181,7 +259,7 @@ Deno.serve(async (request) => {
           price: money(data.amount),
           name: 'Agent Order',
           phone: data.phone || '',
-          status: dataOrderLabel(data.status),
+          status: live ? dataOrderLabel(live.state) : dataOrderLabel(data.status),
           date: dateOf(data.created_at),
         };
       }

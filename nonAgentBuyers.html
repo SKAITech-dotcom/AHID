@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <base href="/">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Buy MTN, Telecel and AirtelTigo data bundles without creating an agent account.">
-  <link rel="canonical" href="https://skaitechgh.wasmer.app/nonAgentBuyers.html">
-  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
+  <link rel="canonical" href="https://skaitechgh.com/nonAgentBuyers.html">
+  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg?v=20261110-assets">
   <title>Buy Data Bundles | Skaitech</title>
   <style>
     :root { --navy:#0f172a; --blue:#2563eb; --muted:#64748b; --line:#e2e8f0; --bg:#f8fafc; }
@@ -77,7 +78,7 @@
 <body>
   <main class="page">
     <header class="topbar">
-      <a class="brand" href="index.html"><img src="img/akaitech%20more%20final%20logo.jpeg" alt="Skaitech logo"><span>SKAITECH</span></a>
+      <a class="brand" href="index.html"><img src="img/akaitech%20more%20final%20logo.jpeg?v=20261110-assets" alt="Skaitech logo"><span>SKAITECH</span></a>
       <div class="topbar-actions"><a href="#orders">Orders</a><a href="login.html">Sign in / Create agent account</a></div>
     </header>
     <div class="public-body">
@@ -104,19 +105,17 @@
         <nav class="side-nav"><a href="#catalog" class="active">Buy data</a><a href="#orders">Orders</a></nav>
         <section id="orders" class="orders-panel" aria-labelledby="ordersTitle">
           <h2 id="ordersTitle">Track your orders</h2>
-          <p>Enter the 5-character order ID and recipient phone number to see the latest delivery status.</p>
+          <p>Enter the recipient phone number to see all guest data orders and their latest delivery details.</p>
           <div class="orders-form">
-            <label for="orderCodeInput">Order ID</label>
-            <input id="orderCodeInput" type="text" inputmode="text" autocomplete="off" maxlength="5" placeholder="e.g. K7P2Q">
             <label for="orderPhoneInput">Recipient phone number</label>
             <input id="orderPhoneInput" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="0241234567">
-            <button id="trackOrderButton" class="track-order" type="button">Track order</button>
+            <button id="trackOrderButton" class="track-order" type="button">Find my orders</button>
           </div>
           <div id="ordersList" class="orders-list" aria-live="polite"><div class="orders-empty">Your recent guest orders will appear here.</div></div>
         </section>
       </aside>
     </div>
   </main>
-  <script type="module" src="nonAgentBuyers.js?v=20261110-guest-history"></script>
+  <script type="module" src="nonAgentBuyers.js?v=20261110-phone-tracking"></script>
 </body>
 </html>

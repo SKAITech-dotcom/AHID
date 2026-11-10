@@ -37,6 +37,10 @@ function rememberGuestOrder(order) {
     accessToken: String(order.accessToken || '').trim(),
     phone: String(order.phone || '').trim(),
     status: String(order.status || 'pending_payment'),
+    statusLabel: String(order.statusLabel || '').trim(),
+    network: String(order.network || '').trim(),
+    volumeMb: Number(order.volumeMb || 0),
+    amount: Number(order.amount || 0),
     updatedAt: new Date().toISOString(),
   };
   if (!next.orderCode && !next.reference) return;
@@ -56,10 +60,13 @@ function renderGuestOrders() {
   }
   list.innerHTML = guestOrders.map((item, index) => {
     const status = String(item.status || 'pending_payment').replaceAll('_', ' ');
+    const bundle = item.network
+      ? `${String(item.network).toUpperCase()} · ${Number(item.volumeMb) >= 1024 ? `${Number(item.volumeMb) / 1024}GB` : `${item.volumeMb}MB`}`
+      : 'Data bundle';
     return `<article class="order-item">
       <strong>Order ${escapeHtml(item.orderCode || '—')}</strong>
-      <div class="order-meta">Recipient: ${escapeHtml(item.phone || '—')}</div>
-      <div class="order-state">${escapeHtml(status)}</div>
+      <div class="order-meta">Recipient: ${escapeHtml(item.phone || '—')}<br>${escapeHtml(bundle)}${item.amount ? ` · GHS ${Number(item.amount).toFixed(2)}` : ''}</div>
+      <div class="order-state">${escapeHtml(item.statusLabel || status)}</div>
       <button type="button" data-refresh-order="${index}">Refresh status</button>
     </article>`;
   }).join('');
@@ -208,6 +215,10 @@ async function refreshGuestOrder(index, button) {
     if (!order) throw new Error('Order was not found. Check the order ID and recipient number.');
     payment.orderCode = String(order.short_code || payment.orderCode || '').toUpperCase();
     payment.status = String(order.status || 'processing');
+    payment.statusLabel = '';
+    payment.network = order.network_type || payment.network || '';
+    payment.volumeMb = Number(order.volume_mb || payment.volumeMb || 0);
+    payment.amount = Number(order.sale_amount || payment.amount || 0);
     payment.updatedAt = new Date().toISOString();
     persistGuestOrders();
     renderGuestOrders();
@@ -219,23 +230,43 @@ async function refreshGuestOrder(index, button) {
 }
 
 async function trackGuestOrder() {
-  const code = $('orderCodeInput').value.trim().toUpperCase();
   const phone = $('orderPhoneInput').value.trim();
-  if (!/^[A-Z0-9]{5}$/.test(code)) return showMessage('Enter the 5-character order ID.', 'error');
   if (!/^0\d{9}$/.test(phone)) return showMessage('Enter the valid 10-digit Ghana recipient number.', 'error');
   const button = $('trackOrderButton');
   button.disabled = true;
-  button.textContent = 'Checking…';
+  button.textContent = 'Finding orders…';
   try {
-    const order = await getOrderStatus({ orderCode: code, phone });
-    if (!order) throw new Error('Order was not found. Check the order ID and recipient number.');
-    rememberGuestOrder({ orderCode: order.short_code || code, phone, status: order.status || 'processing' });
-    showMessage(`Order ${order.short_code || code} is ${String(order.status || 'processing').replaceAll('_', ' ')}.`, 'success');
+    const { data, error } = await supabase.functions.invoke('list-public-data-orders', { body: { phone } });
+    if (error) {
+      const details = await readFunctionError(error);
+      throw new Error(details.message || 'Unable to load your orders.');
+    }
+    const rows = Array.isArray(data?.orders) ? data.orders : [];
+    if (!rows.length) {
+      guestOrders = guestOrders.filter((item) => item.phone !== phone);
+      persistGuestOrders();
+      renderGuestOrders();
+      showMessage('No guest data orders were found for that phone number.', 'info');
+      return;
+    }
+    const tracked = rows.map((row) => ({
+      orderCode: row.orderCode,
+      phone,
+      status: row.status,
+      statusLabel: row.statusLabel,
+      network: row.network,
+      volumeMb: row.volumeMb,
+      amount: row.amount,
+    }));
+    guestOrders = [...tracked, ...guestOrders.filter((old) => !tracked.some((item) => item.orderCode === old.orderCode))].slice(0, 10);
+    persistGuestOrders();
+    renderGuestOrders();
+    showMessage(`${rows.length} order${rows.length === 1 ? '' : 's'} found for ${phone}.`, 'success');
   } catch (error) {
     showMessage(error.message || 'Unable to track this order.', 'error');
   } finally {
     button.disabled = false;
-    button.textContent = 'Track order';
+    button.textContent = 'Find my orders';
   }
 }
 

@@ -308,7 +308,7 @@ Deno.serve(async (request) => {
     // Historical STR-{uuid} references remain valid for Paystack verification.
     const reference = `STR${crypto.randomUUID().replaceAll('-', '').slice(0, 29)}`;
     const payerEmail = customerEmail || `${recipient}@skaitechgh.com`;
-    const siteUrl = Deno.env.get('SITE_URL') || 'https://skaitechgh.wasmer.app';
+    const siteUrl = Deno.env.get('SITE_URL') || 'https://skaitechgh.com';
     const callbackUrl = `${siteUrl}/storefront.html?ref=${encodeURIComponent(rawSlug || store.slug)}&agent=${encodeURIComponent(rawSlug || store.slug)}&reference=${encodeURIComponent(reference)}&gateway=${paymentProvider}`;
 
     // Create pending store order record

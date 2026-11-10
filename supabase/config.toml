@@ -53,6 +53,9 @@ verify_jwt = false
 [functions.get-public-data-order]
 verify_jwt = false
 
+[functions.list-public-data-orders]
+verify_jwt = false
+
 [functions.request-cashout-deposit]
 verify_jwt = true
 
@@ -99,8 +102,8 @@ verify_jwt = true
 verify_jwt = true
 
 [auth]
-site_url = "https://skaitechgh.wasmer.app"
-additional_redirect_urls = ["https://skaitechgh.wasmer.app/**"]
+site_url = "https://skaitechgh.com"
+additional_redirect_urls = ["https://skaitechgh.com/**", "https://skaitechgh.wasmer.app/**"]
 
 [auth.mfa.totp]
 enroll_enabled = true

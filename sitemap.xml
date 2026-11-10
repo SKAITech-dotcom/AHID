@@ -1,47 +1,47 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://skaitechgh.wasmer.app/</loc>
+    <loc>https://skaitechgh.com/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://skaitechgh.wasmer.app/nonAgentBuyers.html</loc>
+    <loc>https://skaitechgh.com/nonAgentBuyers.html</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://skaitechgh.wasmer.app/utilityBills.html</loc>
+    <loc>https://skaitechgh.com/utilityBills.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://skaitechgh.wasmer.app/resultsChecker.html</loc>
+    <loc>https://skaitechgh.com/resultsChecker.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://skaitechgh.wasmer.app/AFA.html</loc>
+    <loc>https://skaitechgh.com/AFA.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://skaitechgh.wasmer.app/nonAgentTrachOrder.html</loc>
+    <loc>https://skaitechgh.com/nonAgentTrachOrder.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://skaitechgh.wasmer.app/nonagentdashboard.html</loc>
+    <loc>https://skaitechgh.com/nonagentdashboard.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://skaitechgh.wasmer.app/ourHelpDesk.html</loc>
+    <loc>https://skaitechgh.com/ourHelpDesk.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://skaitechgh.wasmer.app/login.html</loc>
+    <loc>https://skaitechgh.com/login.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>

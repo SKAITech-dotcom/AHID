@@ -518,18 +518,25 @@ async function processPurchase() {
 
       const newOrder = {
         id: data.orderReference,
+        shortId: data.shortCode || '',
+        type: 'data',
         network: currentOrder.network,
         phone,
         package: currentOrder.size,
         price: Number(data.amount ?? currentOrder.price).toFixed(2),
-        status: 'successful',
+        // Provider acceptance is not delivery confirmation. Keep the local
+        // order in the exact state returned by the server until reconciliation
+        // receives a terminal provider status.
+        status: data.status || 'processing',
+        providerStatus: data.providerStatus || data.status || 'processing',
+        providerRef: data.providerReference || '',
         date: new Date().toLocaleDateString()
       };
       const existingOrders = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
       existingOrders.unshift(newOrder);
       localStorage.setItem('skaitechOrders', JSON.stringify(existingOrders));
 
-      alert(`Order completed successfully!\nNetwork: ${newOrder.network}\nSize: ${newOrder.package}\nPhone: ${phone}`);
+      alert(`Order submitted!\nNetwork: ${newOrder.network}\nSize: ${newOrder.package}\nPhone: ${phone}${newOrder.shortId ? `\nOrder ID: ${newOrder.shortId}` : ''}\n\nThe bundle is being delivered. Track it under Orders.`);
       closeBuyModal();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to complete the data order. Your wallet was not charged if the provider failed.';
@@ -738,17 +745,10 @@ async function loadStoredOrders() {
     updatePaginationUI(filteredOrders.length);
 }
 
-// SIMULATED AUTOMATIC STATUS PROGRESSION
+// Provider status is authoritative. Never simulate a successful completion in
+// browser storage; orders.html reconciles open orders against the provider.
 function triggerAutoApiFlow(orderId) {
-  // Move to Processing after 4 seconds
-  setTimeout(() => {
-    updateOrderStatusInMemory(orderId, 'processing');
-  }, 4000);
-
-  // Move to Completed after 10 seconds
-  setTimeout(() => {
-    updateOrderStatusInMemory(orderId, 'completed');
-  }, 10000);
+  return orderId;
 }
 
 function updateOrderStatusInMemory(orderId, newStatus) {

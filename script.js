@@ -725,6 +725,11 @@ async function processPurchase() {
       }
       if (!data?.success) throw new Error(data?.error || 'The data order was not completed.');
 
+      const rawStatus = String(data.status || '').toLowerCase();
+      const rawProviderStatus = String(data.providerStatus || '').toLowerCase();
+      const providerStillProcessing = data.pending === true
+        || ['pending', 'processing', 'queued', 'accepted'].includes(rawStatus)
+        || ['pending', 'processing', 'queued', 'accepted'].includes(rawProviderStatus);
       const newOrder = {
         id: data.orderReference,
         shortId: data.shortCode || '',
@@ -735,7 +740,7 @@ async function processPurchase() {
         price: Number(data.amount ?? currentOrder.price).toFixed(2),
         // The provider only reserves the order at this point; the real status
         // comes from sync-agent-data-order, so never assume it is delivered.
-        status: data.status || ORDER_STATUS.PROCESSING,
+        status: providerStillProcessing ? ORDER_STATUS.PROCESSING : (data.status || ORDER_STATUS.PROCESSING),
         providerStatus: data.providerStatus || data.status || ORDER_STATUS.PROCESSING,
         providerRef: data.providerReference || '',
         date: new Date().toLocaleDateString()

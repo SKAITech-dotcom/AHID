@@ -112,7 +112,7 @@ Deno.serve(async (request) => {
       await resolveCommissionConfig(admin, commissionService),
     );
     walletChargeAmount = commission.walletChargeAmount;
-    customerEmail = customerEmail || user.email || 'agent@skaitechgh.wasmer.app';
+    customerEmail = customerEmail || user.email || 'agent@skaitechgh.com';
     serviceName = network === 'at' ? 'AT' : network.charAt(0).toUpperCase() + network.slice(1);
 
     // 2b. Fallback Auto-provision: ensure profiles, agents, and wallets rows exist

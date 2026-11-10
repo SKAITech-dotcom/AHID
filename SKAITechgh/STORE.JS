@@ -343,7 +343,7 @@ window.addEventListener('hashchange', () => {
     }
 });
 
-const PUBLIC_STORE_ORIGIN = 'https://skaitechgh.wasmer.app';
+const PUBLIC_STORE_ORIGIN = 'https://skaitechgh.com';
 
 // Builds the public storefront URL for local previews or the live custom domain.
 function storeBaseUrl() {

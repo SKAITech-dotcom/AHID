@@ -1,24 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <base href="/">
   <meta name="description" content="Your Skaitech Ghana customer dashboard. Check data and airtime order status, review your purchases and track deliveries.">
-  <link rel="canonical" href="https://skaitechgh.wasmer.app/nonagentdashboard.html">
+  <link rel="canonical" href="https://skaitechgh.com/nonagentdashboard.html">
   <meta name="robots" content="index, follow">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Skaitech Ghana">
-  <meta property="og:url" content="https://skaitechgh.wasmer.app/nonagentdashboard.html">
+  <meta property="og:url" content="https://skaitechgh.com/nonagentdashboard.html">
   <meta property="og:title" content="Customer Dashboard - Skaitech">
   <meta property="og:description" content="Your Skaitech Ghana customer dashboard. Check data and airtime order status, review your purchases and track deliveries.">
-  <meta property="og:image" content="https://skaitechgh.wasmer.app/img/akaitech%20more%20final%20logo.jpeg">
+  <meta property="og:image" content="https://skaitechgh.com/img/akaitech%20more%20final%20logo.jpeg?v=20261110-assets">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Customer Dashboard - Skaitech">
   <meta name="twitter:description" content="Your Skaitech Ghana customer dashboard. Check data and airtime order status, review your purchases and track deliveries.">
-  <meta name="twitter:image" content="https://skaitechgh.wasmer.app/img/akaitech%20more%20final%20logo.jpeg">
+  <meta name="twitter:image" content="https://skaitechgh.com/img/akaitech%20more%20final%20logo.jpeg?v=20261110-assets">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Customer Dashboard - Skaitech</title>
-  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg?v=20261110-assets">
+  <link rel="stylesheet" href="css/style.css?v=20261110-assets">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     .customer-dash-wrap {
@@ -108,18 +109,18 @@
   <!-- TOP HEADER NAVBAR (Same as Agent Dashboard) -->
   <header class="gt-header">
   <meta name="description" content="Your Skaitech Ghana customer dashboard. Check data and airtime order status, review your purchases and track deliveries.">
-  <link rel="canonical" href="https://skaitechgh.wasmer.app/nonagentdashboard.html">
+  <link rel="canonical" href="https://skaitechgh.com/nonagentdashboard.html">
   <meta name="robots" content="index, follow">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Skaitech Ghana">
-  <meta property="og:url" content="https://skaitechgh.wasmer.app/nonagentdashboard.html">
+  <meta property="og:url" content="https://skaitechgh.com/nonagentdashboard.html">
   <meta property="og:title" content="Customer Dashboard - Skaitech">
   <meta property="og:description" content="Your Skaitech Ghana customer dashboard. Check data and airtime order status, review your purchases and track deliveries.">
-  <meta property="og:image" content="https://skaitechgh.wasmer.app/img/akaitech%20more%20final%20logo.jpeg">
+  <meta property="og:image" content="https://skaitechgh.com/img/akaitech%20more%20final%20logo.jpeg?v=20261110-assets">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Customer Dashboard - Skaitech">
   <meta name="twitter:description" content="Your Skaitech Ghana customer dashboard. Check data and airtime order status, review your purchases and track deliveries.">
-  <meta name="twitter:image" content="https://skaitechgh.wasmer.app/img/akaitech%20more%20final%20logo.jpeg">
+  <meta name="twitter:image" content="https://skaitechgh.com/img/akaitech%20more%20final%20logo.jpeg?v=20261110-assets">
     <div class="gt-header-left">
       <button class="hamburger-btn" onclick="toggleDrawer()">
         <i class="fa-solid fa-bars"></i>
@@ -141,7 +142,7 @@
   <aside id="sideDrawer" class="side-drawer">
     <div class="drawer-header">
       <div class="drawer-brand">
-        <img src="img/akaitech%20more%20final%20logo.jpeg" alt="Skaitech" class="drawer-logo">
+        <img src="img/akaitech%20more%20final%20logo.jpeg?v=20261110-assets" alt="Skaitech" class="drawer-logo">
         <span class="drawer-brand-name">SKAITECH</span>
       </div>
       <button type="button" class="drawer-close-btn" onclick="toggleDrawer()" aria-label="Close menu">&times;</button>
@@ -285,8 +286,14 @@
     <div class="recent-orders-card">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <h3 style="margin: 0; font-size: 1.1rem; color: #1e293b;">Your Recent Orders</h3>
-        <a href="nonAgentTrachOrder.html" style="font-size: 0.85rem; color: #2563eb; text-decoration: none; font-weight: 600;">Track by ID →</a>
+        <a href="nonAgentTrachOrder.html" style="font-size: 0.85rem; color: #2563eb; text-decoration: none; font-weight: 600;">Track by phone →</a>
       </div>
+      <form id="guestPhoneTrackingForm" style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px;">
+        <label for="guestOrderPhone" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Recipient phone number</label>
+        <input id="guestOrderPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="Recipient phone number (e.g. 0241234567)" pattern="0[0-9]{9}" maxlength="10" required style="flex: 1 1 220px; min-width: 0; border: 1px solid #cbd5e1; border-radius: 10px; padding: 11px 12px; font: inherit;">
+        <button id="guestFindOrders" type="submit" style="border: 0; border-radius: 10px; background: #2563eb; color: #fff; padding: 11px 16px; font-weight: 700; cursor: pointer;">Find my orders</button>
+      </form>
+      <div id="guestPhoneOrders" aria-live="polite" style="margin-top: 10px;"></div>
       <div id="recentOrdersContainer" style="margin-top: 12px;">
         <p style="color: #94a3b8; font-size: 0.9rem; margin: 16px 0;">Loading recent orders...</p>
       </div>
@@ -359,7 +366,58 @@
       if (modal) modal.classList.remove('active');
     }
 
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[character]));
+
+    async function trackGuestOrdersByPhone() {
+      const phoneInput = document.getElementById('guestOrderPhone');
+      const result = document.getElementById('guestPhoneOrders');
+      const button = document.getElementById('guestFindOrders');
+      const phone = phoneInput?.value.trim() || '';
+      if (!/^0\d{9}$/.test(phone)) {
+        if (result) result.innerHTML = '<p style="color: #b91c1c; margin: 8px 0;">Enter a valid 10-digit Ghana phone number.</p>';
+        phoneInput?.focus();
+        return;
+      }
+
+      if (button) {
+        button.disabled = true;
+        button.textContent = 'Loading...';
+      }
+      if (result) result.innerHTML = '<p style="color: #64748b; margin: 8px 0;">Checking your latest orders...</p>';
+      try {
+        const { data, error } = await supabase.functions.invoke('list-public-data-orders', { body: { phone } });
+        if (error || !data?.success) throw new Error(data?.error || error?.message || 'Unable to load orders.');
+        const orders = Array.isArray(data.orders) ? data.orders : [];
+        if (!orders.length) {
+          result.innerHTML = '<p style="color: #64748b; margin: 8px 0;">No data orders were found for this phone number.</p>';
+          return;
+        }
+        result.innerHTML = `<div style="display: grid; gap: 8px;">${orders.map((order) => `
+          <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; background: #f8fafc;">
+            <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+              <strong>${escapeHtml(order.orderCode || '-')}</strong>
+              <span style="font-weight: 700; color: #1d4ed8;">${escapeHtml(order.statusLabel || order.status || 'Pending')}</span>
+            </div>
+            <div style="color: #475569; font-size: 0.88rem; margin-top: 4px;">${escapeHtml(order.network || '')} · ${escapeHtml(order.volumeMb ? `${order.volumeMb >= 1024 ? (order.volumeMb / 1024).toFixed(2) + 'GB' : order.volumeMb + 'MB'}` : 'Data bundle')} · GHS ${Number(order.amount || 0).toFixed(2)}</div>
+            <div style="color: #64748b; font-size: 0.8rem; margin-top: 3px;">${escapeHtml(order.createdAt ? new Date(order.createdAt).toLocaleString() : '')}</div>
+          </div>`).join('')}</div>`;
+      } catch (error) {
+        if (result) result.innerHTML = `<p style="color: #b91c1c; margin: 8px 0;">${escapeHtml(error?.message || 'Unable to load orders.')}</p>`;
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = 'Find my orders';
+        }
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
+      document.getElementById('guestPhoneTrackingForm')?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        trackGuestOrdersByPhone();
+      });
       const container = document.getElementById('recentOrdersContainer');
       const cached = JSON.parse(localStorage.getItem('skaitech_orders') || '[]');
       if (cached.length === 0) {

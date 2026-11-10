@@ -398,7 +398,7 @@ export async function handleAirtimeSubmit(event) {
       network: selectedNetwork,
       phone,
       amount: netAmount,
-      email: emailInput || `${phone}@customer.skaitechgh.wasmer.app`
+      email: emailInput || `${phone}@customer.skaitechgh.com`
     }));
 
     const { data, error } = await supabase.functions.invoke('create-airtime-payment', {

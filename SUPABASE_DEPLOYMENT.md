@@ -64,7 +64,7 @@ For account password recovery, open **Authentication > URL Configuration** in
 the Supabase Dashboard and add the website URL below to **Redirect URLs**:
 
 ```text
-https://skaitechgh.wasmer.app/**
+https://skaitechgh.com/**
 ```
 
 The login page's **Forgot password?** link sends the reset email to the account's
