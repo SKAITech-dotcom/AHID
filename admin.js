@@ -17,6 +17,7 @@ let cachedDataOrders = [];
 let cachedDataStockItems = [];
 let cachedAirtimeOrders = [];
 let cachedUtilityOrders = [];
+let cachedNonAgentHistory = [];
 let cachedWallets = [];
 let cachedAdmins = [];
 let selectedWalletUser = null;
@@ -204,6 +205,7 @@ function switchSection(sectionId) {
     'utility-module': { title: 'Utility Bills & Subscriptions', sub: 'ECG Prepaid/Postpaid, Ghana Water (GWCL), DStv, GOtv, and StarTimes' },
     'pricing-control-module': { title: 'Prices & Commission Control', sub: 'Live Standard Data prices and airtime/utility commission sharing' },
     'non-agent-prices-module': { title: 'Non-Agent Prices', sub: 'Guest checkout prices and availability for public data buyers' },
+    'non-agent-history-module': { title: 'Non-Agent History', sub: 'Guest data purchases, recipient numbers, and live provider delivery status' },
     'afa-module': { title: 'AFA Portal Management', sub: 'Track and manage nationwide Ghana Card (AFA) registration requests' },
     'checkers-module': { title: 'Results Checker Stock & Upload', sub: 'Bulk import BECE or shared WASSCE / NOV/DEC PINs and audit sales' },
     'agents-module': { title: 'Agent Directory & Access Control', sub: 'Inspect registered agents, manage privileges, and cancel/suspend accounts' },
@@ -239,6 +241,7 @@ async function refreshActiveSection() {
     else if (activeSection === 'utility-module') await loadUtilityData();
     else if (activeSection === 'pricing-control-module') await loadPricingControlData();
     else if (activeSection === 'non-agent-prices-module') await loadNonAgentPricesData();
+    else if (activeSection === 'non-agent-history-module') await loadNonAgentHistoryData();
     else if (activeSection === 'afa-module') await loadAfaData();
     else if (activeSection === 'checkers-module') await loadCheckerData();
     else if (activeSection === 'agents-module') await loadAgentsModuleData();
@@ -810,6 +813,66 @@ async function saveNonAgentPrice(bundleId) {
     console.error('saveNonAgentPrice error:', error);
     showToast(error.message || 'Unable to save non-agent price.', 'error');
   }
+}
+
+// -----------------------------------------------------------------------------
+// NON-AGENT ORDER HISTORY (GUEST DATA CHECKOUT)
+// -----------------------------------------------------------------------------
+async function loadNonAgentHistoryData() {
+  const tbody = document.getElementById('nonAgentHistoryTbody');
+  if (!tbody) return;
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-public-data-history', { body: {} });
+    if (error || !data?.success) throw new Error(data?.error || error?.message || 'Unable to load non-agent history.');
+    cachedNonAgentHistory = Array.isArray(data.orders) ? data.orders : [];
+    renderNonAgentHistory();
+  } catch (error) {
+    console.error('loadNonAgentHistoryData error:', error);
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#f87171;padding:16px;">Failed to load non-agent history: ${escapeHtml(error.message || 'Database error')}</td></tr>`;
+    showToast(error.message || 'Unable to load non-agent history.', 'error');
+  }
+}
+
+function filterNonAgentHistory() {
+  renderNonAgentHistory();
+}
+
+function renderNonAgentHistory() {
+  const tbody = document.getElementById('nonAgentHistoryTbody');
+  if (!tbody) return;
+  const search = String(document.getElementById('nonAgentHistorySearch')?.value || '').trim().toLowerCase();
+  const statusFilter = String(document.getElementById('nonAgentHistoryStatus')?.value || 'all').toLowerCase();
+  const rows = cachedNonAgentHistory.filter((row) => {
+    const status = String(row.status || '').toLowerCase();
+    const statusMatches = statusFilter === 'all'
+      || (statusFilter === 'pending' ? ['pending_payment', 'pending', 'processing'].includes(status) : status === statusFilter);
+    const searchMatches = !search || [row.orderCode, row.recipientPhone, row.network, row.providerOrderId]
+      .some((value) => String(value || '').toLowerCase().includes(search));
+    return statusMatches && searchMatches;
+  });
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:16px;">No non-agent orders match this filter.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((row) => {
+    const status = String(row.status || 'pending_payment').toLowerCase();
+    const providerStatus = safeProviderStatus(row.providerStatus || row.providerState || status);
+    const statusClass = ['successful', 'completed', 'delivered'].includes(status) ? 'badge-success'
+      : ['failed', 'cancelled'].includes(status) ? 'badge-failed' : 'badge-pending';
+    const providerClass = ['successful', 'completed', 'delivered', 'approved', 'success'].includes(String(row.providerState || providerStatus).toLowerCase())
+      ? 'badge-success' : ['failed', 'cancelled', 'rejected'].includes(String(row.providerState || providerStatus).toLowerCase()) ? 'badge-failed' : 'badge-pending';
+    return `<tr>
+      <td><strong>${escapeHtml(fiveCharacterAdminOrderCode(row.orderCode))}</strong></td>
+      <td>${escapeHtml(row.recipientPhone || '—')}</td>
+      <td>${escapeHtml(String(row.network || '').toUpperCase())} · ${escapeHtml(formatVolumeInGb(`${row.volumeMb}MB`, row.volumeMb))}</td>
+      <td>${money(row.amount)}</td>
+      <td>${escapeHtml(String(row.provider || '—').toUpperCase())}</td>
+      <td><code>${escapeHtml(row.providerOrderId || 'Pending provider ID')}</code></td>
+      <td><span class="badge ${providerClass}">${escapeHtml(providerStatus.toUpperCase())}</span>${row.checkedAt ? `<br><small style="color:var(--text-muted);">${escapeHtml(new Date(row.checkedAt).toLocaleString())}</small>` : ''}</td>
+      <td><span class="badge ${statusClass}">${escapeHtml(status.replaceAll('_', ' ').toUpperCase())}</span></td>
+      <td style="font-size:.75rem;color:var(--text-muted);">${row.createdAt ? escapeHtml(new Date(row.createdAt).toLocaleString()) : '—'}</td>
+    </tr>`;
+  }).join('');
 }
 
 async function savePricingCommissionRow(serviceName) {
@@ -3017,6 +3080,8 @@ window.loadPricingControlData = loadPricingControlData;
 window.savePricingCommissionRow = savePricingCommissionRow;
 window.loadNonAgentPricesData = loadNonAgentPricesData;
 window.saveNonAgentPrice = saveNonAgentPrice;
+window.loadNonAgentHistoryData = loadNonAgentHistoryData;
+window.filterNonAgentHistory = filterNonAgentHistory;
 window.filterWallets = filterWallets;
 window.openWalletModal = openWalletModal;
 window.closeWalletModal = closeWalletModal;

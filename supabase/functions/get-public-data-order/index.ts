@@ -15,9 +15,14 @@ Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   try {
-    const { reference, email, phone, accessToken } = await request.json();
-    if (!reference || (!email && !phone && !accessToken)) {
-      return json({ error: 'Reference and customer verification are required.' }, 400);
+    const body = await request.json().catch(() => ({}));
+    const reference = String(body.reference || '').trim();
+    const orderCode = String(body.orderCode || '').trim().toUpperCase();
+    const email = String(body.email || '').trim();
+    const phone = String(body.phone || '').trim();
+    const accessToken = String(body.accessToken || '').trim();
+    if ((!reference && !orderCode) || (!email && !phone && !accessToken)) {
+      return json({ error: 'Order ID and customer verification are required.' }, 400);
     }
 
     const supabase = adminClient();
@@ -27,8 +32,11 @@ Deno.serve(async (request) => {
     // delivery confirmation and the auto-refund with it.
     let query = supabase
       .from('public_data_orders')
-      .select('id, payment_reference, public_access_token, agent_id, customer_phone, network_type, volume_mb, sale_amount, status, created_at, provider_response, provider_name, provider_reference, payment_provider, paystack_refund_status')
-      .eq('payment_reference', String(reference));
+      .select('id, payment_reference, public_access_token, short_code, agent_id, customer_phone, network_type, volume_mb, sale_amount, status, created_at, provider_response, provider_name, provider_reference, payment_provider, paystack_refund_status')
+      .limit(1);
+    query = reference
+      ? query.eq('payment_reference', reference)
+      : query.eq('short_code', orderCode);
     if (accessToken) query = query.eq('public_access_token', String(accessToken));
     else if (phone) query = query.eq('customer_phone', String(phone).trim());
     else query = query.eq('customer_email', String(email).trim().toLowerCase());
@@ -41,7 +49,13 @@ Deno.serve(async (request) => {
     if (status === 'processing') {
       const stored = (data.provider_response || {}) as Record<string, unknown>;
       const provider = String(stored.provider || activeDataProvider(data.network_type, Number(data.volume_mb)));
-      const providerOrderId = String(data.provider_reference || (stored.providerOrderId ?? stored.providerReference ?? ''));
+      const providerOrderId = String(
+        stored.providerOrderId
+          ?? stored.orderId
+          ?? data.provider_reference
+          ?? stored.providerReference
+          ?? '',
+      );
 
       const live = providerOrderId
         ? await fetchDataOrderStatus(provider as 'grandtech' | 'swift', providerOrderId, String(data.payment_reference))
@@ -111,7 +125,7 @@ Deno.serve(async (request) => {
 
     const { data: fresh } = await supabase
       .from('public_data_orders')
-      .select('payment_reference, network_type, volume_mb, sale_amount, status, created_at')
+      .select('payment_reference, short_code, network_type, volume_mb, sale_amount, status, created_at')
       .eq('id', data.id)
       .single();
 

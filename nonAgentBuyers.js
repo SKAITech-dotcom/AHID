@@ -6,6 +6,8 @@ const params = new URLSearchParams(window.location.search);
 let network = NETWORKS.includes(params.get('network')) ? params.get('network') : 'mtn';
 let bundles = [];
 let selectedBundle = null;
+let guestOrders = [];
+const GUEST_ORDER_HISTORY_KEY = 'skaitech_guest_data_orders';
 
 const $ = (id) => document.getElementById(id);
 const money = (value) => `GHS ${Number(value || 0).toFixed(2)}`;
@@ -18,6 +20,62 @@ function showMessage(text, type = 'info') {
   if (!element) return;
   element.textContent = text;
   element.className = `message show ${type}`;
+}
+
+function persistGuestOrders() {
+  try {
+    localStorage.setItem(GUEST_ORDER_HISTORY_KEY, JSON.stringify(guestOrders.slice(0, 10)));
+  } catch (error) {
+    console.warn('Unable to save guest order history:', error);
+  }
+}
+
+function rememberGuestOrder(order) {
+  const next = {
+    orderCode: String(order.orderCode || '').trim().toUpperCase(),
+    reference: String(order.reference || '').trim(),
+    accessToken: String(order.accessToken || '').trim(),
+    phone: String(order.phone || '').trim(),
+    status: String(order.status || 'pending_payment'),
+    updatedAt: new Date().toISOString(),
+  };
+  if (!next.orderCode && !next.reference) return;
+  guestOrders = [next, ...guestOrders.filter((item) => (
+    next.orderCode ? item.orderCode !== next.orderCode : item.reference !== next.reference
+  ))].slice(0, 10);
+  persistGuestOrders();
+  renderGuestOrders();
+}
+
+function renderGuestOrders() {
+  const list = $('ordersList');
+  if (!list) return;
+  if (!guestOrders.length) {
+    list.innerHTML = '<div class="orders-empty">Your recent guest orders will appear here.</div>';
+    return;
+  }
+  list.innerHTML = guestOrders.map((item, index) => {
+    const status = String(item.status || 'pending_payment').replaceAll('_', ' ');
+    return `<article class="order-item">
+      <strong>Order ${escapeHtml(item.orderCode || '—')}</strong>
+      <div class="order-meta">Recipient: ${escapeHtml(item.phone || '—')}</div>
+      <div class="order-state">${escapeHtml(status)}</div>
+      <button type="button" data-refresh-order="${index}">Refresh status</button>
+    </article>`;
+  }).join('');
+  list.querySelectorAll('[data-refresh-order]').forEach((button) => button.addEventListener('click', () => {
+    refreshGuestOrder(Number(button.dataset.refreshOrder), button);
+  }));
+}
+
+function loadGuestOrderHistory() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(GUEST_ORDER_HISTORY_KEY) || '[]');
+    guestOrders = Array.isArray(parsed) ? parsed.filter((item) => item && (item.orderCode || item.reference)) : [];
+  } catch {
+    guestOrders = [];
+  }
+  renderGuestOrders();
 }
 
 function renderTabs() {
@@ -104,9 +162,17 @@ async function startCheckout() {
     sessionStorage.setItem('skaitech_guest_data_payment', JSON.stringify({
       reference: data.reference,
       accessToken: data.accessToken,
+      orderCode: data.orderCode || '',
       phone,
       bundleId: selectedBundle.bundleId,
     }));
+    rememberGuestOrder({
+      reference: data.reference,
+      accessToken: data.accessToken,
+      orderCode: data.orderCode,
+      phone,
+      status: 'pending_payment',
+    });
     window.location.assign(data.authorizationUrl);
   } catch (error) {
     console.error(error);
@@ -118,13 +184,59 @@ async function startCheckout() {
 
 async function getOrderStatus(payment) {
   const { data, error } = await supabase.functions.invoke('get-public-data-order', {
-    body: { reference: payment.reference, accessToken: payment.accessToken, phone: payment.phone },
+    body: {
+      reference: payment.reference,
+      orderCode: payment.orderCode,
+      accessToken: payment.accessToken,
+      phone: payment.phone,
+    },
   });
   if (error) {
     const details = await readFunctionError(error);
     throw new Error(details.message || 'Unable to read order status.');
   }
   return data?.order || null;
+}
+
+async function refreshGuestOrder(index, button) {
+  const payment = guestOrders[index];
+  if (!payment) return;
+  button.disabled = true;
+  button.textContent = 'Checking…';
+  try {
+    const order = await getOrderStatus(payment);
+    if (!order) throw new Error('Order was not found. Check the order ID and recipient number.');
+    payment.orderCode = String(order.short_code || payment.orderCode || '').toUpperCase();
+    payment.status = String(order.status || 'processing');
+    payment.updatedAt = new Date().toISOString();
+    persistGuestOrders();
+    renderGuestOrders();
+  } catch (error) {
+    showMessage(error.message || 'Unable to refresh this order.', 'error');
+    button.disabled = false;
+    button.textContent = 'Refresh status';
+  }
+}
+
+async function trackGuestOrder() {
+  const code = $('orderCodeInput').value.trim().toUpperCase();
+  const phone = $('orderPhoneInput').value.trim();
+  if (!/^[A-Z0-9]{5}$/.test(code)) return showMessage('Enter the 5-character order ID.', 'error');
+  if (!/^0\d{9}$/.test(phone)) return showMessage('Enter the valid 10-digit Ghana recipient number.', 'error');
+  const button = $('trackOrderButton');
+  button.disabled = true;
+  button.textContent = 'Checking…';
+  try {
+    const order = await getOrderStatus({ orderCode: code, phone });
+    if (!order) throw new Error('Order was not found. Check the order ID and recipient number.');
+    rememberGuestOrder({ orderCode: order.short_code || code, phone, status: order.status || 'processing' });
+    showMessage(`Order ${order.short_code || code} is ${String(order.status || 'processing').replaceAll('_', ' ')}.`, 'success');
+  } catch (error) {
+    showMessage(error.message || 'Unable to track this order.', 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Track order';
+  }
 }
 
 async function verifyPayment(payment) {
@@ -146,7 +258,7 @@ async function showPaymentResult() {
   }
   $('statusCard').classList.add('show');
   $('statusText').textContent = 'Confirming payment and sending your bundle…';
-  $('statusReference').textContent = `Payment reference: ${reference}`;
+  $('statusReference').textContent = payment.orderCode ? `Order ID: ${payment.orderCode}` : 'Your 5-character order ID is being prepared…';
   try { await verifyPayment(payment); } catch (error) { console.warn(error.message); }
 
   let attempts = 0;
@@ -154,9 +266,14 @@ async function showPaymentResult() {
     attempts += 1;
     try {
       const order = await getOrderStatus(payment);
+      if (order?.short_code && !payment.orderCode) {
+        payment.orderCode = order.short_code;
+        rememberGuestOrder({ ...payment, status: order.status });
+        $('statusReference').textContent = `Order ID: ${payment.orderCode}`;
+      }
       const state = String(order?.status || 'pending_payment').toLowerCase();
       if (state === 'successful') {
-        $('statusText').textContent = `Bundle delivered to ${payment.phone}. You can keep this reference for support.`;
+        $('statusText').textContent = `Bundle delivered to ${payment.phone}. Keep your 5-character order ID for tracking.`;
         $('statusText').style.color = '#065f46';
         return;
       }
@@ -177,5 +294,7 @@ async function showPaymentResult() {
 
 $('payButton').addEventListener('click', startCheckout);
 $('cancelButton').addEventListener('click', closeCheckout);
+$('trackOrderButton').addEventListener('click', trackGuestOrder);
+loadGuestOrderHistory();
 loadCatalog();
 showPaymentResult();

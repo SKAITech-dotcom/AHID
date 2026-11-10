@@ -16,6 +16,25 @@
     .brand { display:flex; align-items:center; gap:10px; color:var(--navy); font-weight:800; text-decoration:none; letter-spacing:.03em; }
     .brand img { width:42px; height:42px; border-radius:12px; object-fit:cover; }
     .topbar a { color:var(--blue); font-weight:700; text-decoration:none; font-size:.92rem; }
+    .topbar-actions { display:flex; align-items:center; gap:16px; flex-wrap:wrap; justify-content:flex-end; }
+    .public-body { display:grid; grid-template-columns:minmax(0,1fr) 270px; gap:24px; align-items:start; }
+    .public-sidebar { position:sticky; top:18px; display:grid; gap:12px; }
+    .side-nav, .orders-panel { background:#fff; border:1px solid var(--line); border-radius:18px; padding:14px; box-shadow:0 8px 24px rgba(15,23,42,.04); }
+    .side-nav a { display:block; color:var(--navy); text-decoration:none; font-weight:800; padding:10px 12px; border-radius:10px; }
+    .side-nav a:hover, .side-nav a.active { background:#eff6ff; color:var(--blue); }
+    .orders-panel h2 { margin:0 0 5px; font-size:1.08rem; }
+    .orders-panel p { color:var(--muted); font-size:.8rem; line-height:1.45; margin:0 0 13px; }
+    .orders-form { display:grid; gap:9px; }
+    .orders-form input { min-width:0; }
+    .track-order { width:100%; border:0; border-radius:10px; padding:11px; background:var(--navy); color:#fff; font-weight:800; cursor:pointer; }
+    .track-order:disabled { opacity:.6; cursor:wait; }
+    .orders-list { display:grid; gap:9px; margin-top:14px; }
+    .order-item { border:1px solid var(--line); border-radius:12px; padding:11px; font-size:.78rem; }
+    .order-item strong { color:var(--navy); }
+    .order-item .order-meta { color:var(--muted); margin-top:4px; line-height:1.45; }
+    .order-item .order-state { margin-top:7px; font-weight:800; text-transform:capitalize; }
+    .order-item button { margin-top:8px; border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 9px; font-weight:700; cursor:pointer; }
+    .orders-empty { color:var(--muted); font-size:.8rem; line-height:1.45; }
     .hero { display:grid; grid-template-columns:1.2fr .8fr; gap:28px; align-items:end; margin-bottom:26px; }
     h1 { margin:0 0 10px; font-size:clamp(2rem,5vw,3.5rem); line-height:1.02; letter-spacing:-.05em; }
     .hero p { color:var(--muted); max-width:580px; line-height:1.6; margin:0; }
@@ -51,33 +70,53 @@
     .status-card h2 { margin:0 0 8px; }
     .status-card p { color:var(--muted); line-height:1.5; }
     .track { color:var(--blue); font-weight:800; }
-    @media (max-width:700px) { .hero { grid-template-columns:1fr; gap:16px; } .checkout-row { flex-direction:column; align-items:stretch; } .checkout button { width:100%; } .topbar { margin-bottom:25px; } }
+    @media (max-width:850px) { .public-body { grid-template-columns:1fr; } .public-sidebar { position:static; } .side-nav { display:flex; gap:6px; overflow:auto; } .side-nav a { white-space:nowrap; } }
+    @media (max-width:700px) { .hero { grid-template-columns:1fr; gap:16px; } .checkout-row { flex-direction:column; align-items:stretch; } .checkout button { width:100%; } .topbar { margin-bottom:25px; } .topbar-actions { gap:10px; } }
   </style>
 </head>
 <body>
   <main class="page">
     <header class="topbar">
       <a class="brand" href="index.html"><img src="img/akaitech%20more%20final%20logo.jpeg" alt="Skaitech logo"><span>SKAITECH</span></a>
-      <a href="login.html">Sign in / Create agent account</a>
+      <div class="topbar-actions"><a href="#orders">Orders</a><a href="login.html">Sign in / Create agent account</a></div>
     </header>
-    <section class="hero">
-      <div><h1>Buy data without an agent account.</h1><p>Choose a live bundle, enter the customer's number, and pay securely with Skaipay or Paystack. You do not need to register to buy.</p></div>
-      <div class="hero-note"><strong>Simple checkout</strong><br>Only the recipient phone number is required. Prices are controlled from Skaitech's live data catalogue.</div>
-    </section>
-    <div id="message" class="message"></div>
-    <div id="networkTabs" class="network-tabs" aria-label="Choose network"></div>
-    <section id="catalog" class="catalog" aria-live="polite"><div class="message show info">Loading available bundles…</div></section>
-    <section id="checkout" class="checkout" aria-labelledby="checkoutTitle">
-      <h2 id="checkoutTitle">Enter customer number</h2>
-      <p id="selectedBundle" class="selected"></p>
-      <div class="checkout-row">
-        <div style="flex:1"><label for="customerPhone">Customer phone number</label><input id="customerPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="0241234567" maxlength="10"></div>
-        <button id="payButton" class="pay" type="button">Continue to payment</button><button id="cancelButton" class="cancel" type="button">Cancel</button>
+    <div class="public-body">
+      <div class="public-content">
+        <section class="hero">
+          <div><h1>Buy data without an agent account.</h1><p>Choose a live bundle, enter the customer's number, and pay securely with Skaipay or Paystack. You do not need to register to buy.</p></div>
+          <div class="hero-note"><strong>Simple checkout</strong><br>Only the recipient phone number is required. Prices are controlled from Skaitech's live data catalogue.</div>
+        </section>
+        <div id="message" class="message"></div>
+        <div id="networkTabs" class="network-tabs" aria-label="Choose network"></div>
+        <section id="catalog" class="catalog" aria-live="polite"><div class="message show info">Loading available bundles…</div></section>
+        <section id="checkout" class="checkout" aria-labelledby="checkoutTitle">
+          <h2 id="checkoutTitle">Enter customer number</h2>
+          <p id="selectedBundle" class="selected"></p>
+          <div class="checkout-row">
+            <div style="flex:1"><label for="customerPhone">Customer phone number</label><input id="customerPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="0241234567" maxlength="10"></div>
+            <button id="payButton" class="pay" type="button">Continue to payment</button><button id="cancelButton" class="cancel" type="button">Cancel</button>
+          </div>
+          <p class="help" id="paymentHelp">Your bundle is sent after payment is confirmed.</p>
+        </section>
+        <section id="statusCard" class="status-card" aria-live="polite"><h2>Order status</h2><p id="statusText"></p><div id="statusReference" class="track"></div></section>
       </div>
-      <p class="help" id="paymentHelp">Your bundle is sent after payment is confirmed.</p>
-    </section>
-    <section id="statusCard" class="status-card" aria-live="polite"><h2>Order status</h2><p id="statusText"></p><div id="statusReference" class="track"></div></section>
+      <aside class="public-sidebar" aria-label="Guest order navigation">
+        <nav class="side-nav"><a href="#catalog" class="active">Buy data</a><a href="#orders">Orders</a></nav>
+        <section id="orders" class="orders-panel" aria-labelledby="ordersTitle">
+          <h2 id="ordersTitle">Track your orders</h2>
+          <p>Enter the 5-character order ID and recipient phone number to see the latest delivery status.</p>
+          <div class="orders-form">
+            <label for="orderCodeInput">Order ID</label>
+            <input id="orderCodeInput" type="text" inputmode="text" autocomplete="off" maxlength="5" placeholder="e.g. K7P2Q">
+            <label for="orderPhoneInput">Recipient phone number</label>
+            <input id="orderPhoneInput" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="0241234567">
+            <button id="trackOrderButton" class="track-order" type="button">Track order</button>
+          </div>
+          <div id="ordersList" class="orders-list" aria-live="polite"><div class="orders-empty">Your recent guest orders will appear here.</div></div>
+        </section>
+      </aside>
+    </div>
   </main>
-  <script type="module" src="nonAgentBuyers.js?v=20261110-gateway-rules"></script>
+  <script type="module" src="nonAgentBuyers.js?v=20261110-guest-history"></script>
 </body>
 </html>

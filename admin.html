@@ -822,6 +822,10 @@
         <i class="fa-solid fa-user-clock"></i>
         <span>Non-Agent Prices</span>
       </div>
+      <div class="nav-item" data-section="non-agent-history-module">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span>Non-Agent History</span>
+      </div>
 
       <div class="nav-label">Special Services</div>
       <div class="nav-item" data-section="afa-module">
@@ -979,6 +983,50 @@
             <table>
               <thead><tr><th>Package</th><th>Network</th><th>Agent Price</th><th>Non-Agent Price</th><th>Public Status</th><th>Updated</th><th>Action</th></tr></thead>
               <tbody id="nonAgentPricesTbody"><tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:16px;">Loading non-agent prices…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="section-non-agent-history-module" class="admin-section">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title"><i class="fa-solid fa-clock-rotate-left"></i> Non-Agent Order History</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+                Guest purchases are permanent records. Open orders are checked against Swift or GrandTech when this module refreshes.
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="loadNonAgentHistoryData()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+            <input id="nonAgentHistorySearch" class="form-input" type="search" placeholder="Search order ID or phone…" oninput="filterNonAgentHistory()" style="max-width:240px;">
+            <select id="nonAgentHistoryStatus" class="form-select" onchange="filterNonAgentHistory()" style="max-width:170px;">
+              <option value="all">All statuses</option>
+              <option value="pending">Pending / Processing</option>
+              <option value="successful">Successful</option>
+              <option value="failed">Failed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Recipient phone</th>
+                  <th>Bundle</th>
+                  <th>Amount</th>
+                  <th>Provider</th>
+                  <th>Live provider order ID</th>
+                  <th>Live provider status</th>
+                  <th>Order status</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody id="nonAgentHistoryTbody">
+                <tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:16px;">Open Non-Agent History to load guest orders…</td></tr>
+              </tbody>
             </table>
           </div>
         </div>
@@ -2214,6 +2262,6 @@
 <!-- TOAST -->
 <div id="toast"><i class="fa-solid fa-circle-check" id="toastIcon"></i> <span id="toastMessage"></span></div>
 
-<script type="module" src="admin.js?v=2026110503"></script>
+<script type="module" src="admin.js?v=20261110-guest-history"></script>
 </body>
 </html>
