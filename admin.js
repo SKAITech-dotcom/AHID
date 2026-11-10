@@ -1404,6 +1404,9 @@ function renderStoreOrders(orders) {
 // -----------------------------------------------------------------------------
 async function loadWalletsData() {
   try {
+    const { data: lifetimeTotals, error: lifetimeTotalsError } = await supabase.rpc('get_admin_wallet_lifetime_totals');
+    if (lifetimeTotalsError) throw lifetimeTotalsError;
+
     const [walletsRes, agentsRes, profilesRes] = await Promise.all([
       supabase.from('wallets').select('id, balance, sales, deposits, commission_balance, total_commission_earned, updated_at'),
       supabase.from('agents').select('id, full_name, phone, agent_code, role, created_at'),
@@ -1437,18 +1440,11 @@ async function loadWalletsData() {
       };
     });
 
-    const agentWallets = cachedWallets.filter((wallet) => String(wallet.role || 'agent').toLowerCase() === 'agent');
-    const totals = agentWallets.reduce((summary, wallet) => ({
-      balance: summary.balance + Number(wallet.balance || 0),
-      commissionBalance: summary.commissionBalance + Number(wallet.commissionBalance || 0),
-      deposits: summary.deposits + Number(wallet.deposits || 0),
-      sales: summary.sales + Number(wallet.sales || 0),
-    }), { balance: 0, commissionBalance: 0, deposits: 0, sales: 0 });
     const summaryFields = {
-      walletsTotalBalance: totals.balance,
-      walletsTotalCommission: totals.commissionBalance,
-      walletsTotalDeposits: totals.deposits,
-      walletsTotalSales: totals.sales,
+      walletsTotalBalance: Number(lifetimeTotals?.balance || 0),
+      walletsTotalCommission: Number(lifetimeTotals?.commissionBalance || 0),
+      walletsTotalDeposits: Number(lifetimeTotals?.deposits || 0),
+      walletsTotalSales: Number(lifetimeTotals?.sales || 0),
     };
     Object.entries(summaryFields).forEach(([id, value]) => {
       const element = document.getElementById(id);
