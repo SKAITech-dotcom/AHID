@@ -99,36 +99,25 @@ Deno.serve(async (request) => {
       }
     }
 
-    const companyAgentId = Deno.env.get('PUBLIC_DATA_AGENT_ID')?.trim();
-    if (!companyAgentId) throw new Error('Public data provider funding is not configured.');
     const dataPackage = await resolveDataPackage(String(order.network_type), Number(order.volume_mb));
     if (!dataPackage || !Number.isFinite(dataPackage.costGhs) || dataPackage.costGhs <= 0) {
       throw new Error('The selected bundle is no longer available from its provider.');
     }
 
-    // Do this before claiming the row. If the public provider wallet is empty,
-    // leave the paid callback retryable instead of moving it into a state that
-    // cannot create the provider order.
-    const { data: fundingWallet, error: fundingWalletError } = await admin
-      .from('wallets')
-      .select('balance')
-      .eq('id', companyAgentId)
-      .maybeSingle();
-    if (fundingWalletError) throw fundingWalletError;
-    if (!fundingWallet || Number(fundingWallet.balance || 0) < Number(dataPackage.costGhs)) {
-      console.error('Guest data dispatch waiting for public provider funding', {
-        reference,
-        companyAgentId,
-        provider: dataPackage.provider,
-        providerCost: Number(dataPackage.costGhs),
-        walletBalance: Number(fundingWallet?.balance || 0),
-      });
-      return json({
-        success: false,
-        status: 'pending_payment',
-        retryable: true,
-        message: 'Payment received. Your bundle is waiting for provider funding and will be retried automatically.',
-      });
+    // Guest purchases are paid for through the configured Swift/GrandTech
+    // reseller accounts. They are not agent-wallet purchases, so do not route
+    // them through reserve_agent_data_order or the internal Skaitech wallet.
+    // That wallet is intentionally only for authenticated agent orders.
+    // Recover a legacy guest row that was left processing before dispatch and
+    // has no provider reference. A row with a provider reference must remain
+    // processing so a retry cannot create a duplicate provider order.
+    if (String(order.status) === 'processing' && !order.provider_reference) {
+      const { error: resetError } = await admin.from('public_data_orders')
+        .update({ status: 'pending_payment', completed_at: null })
+        .eq('id', order.id)
+        .eq('status', 'processing')
+        .is('provider_reference', null);
+      if (resetError) throw resetError;
     }
 
     const { data: claimed, error: claimError } = await admin.rpc('claim_public_data_order', { p_order_id: order.id });
@@ -137,32 +126,6 @@ Deno.serve(async (request) => {
       const fresh = await currentOrder(admin, reference);
       return json({ success: fresh?.status === 'successful', status: fresh?.status || 'processing', order: fresh });
     }
-
-    const providerReference = `PUB-DATA-${crypto.randomUUID()}`;
-    const { data: providerOrderId, error: reserveError } = await admin.rpc('reserve_agent_data_order', {
-      p_agent_id: companyAgentId,
-      p_reference: providerReference,
-      p_network_type: order.network_type,
-      p_phone: order.customer_phone,
-      p_volume_mb: order.volume_mb,
-      p_amount: roundMoney(dataPackage.costGhs),
-    });
-    if (reserveError) throw reserveError;
-
-    const reservationPayload = {
-      ...(order.provider_response && typeof order.provider_response === 'object' ? order.provider_response : {}),
-      provider: dataPackage.provider,
-      providerReference,
-      providerOrderId: null,
-      reservedAt: new Date().toISOString(),
-    };
-    const { error: reservationLinkError } = await admin.from('public_data_orders').update({
-      provider_name: dataPackage.provider,
-      provider_package_id: dataPackage.id,
-      provider_reference: providerReference,
-      provider_response: reservationPayload,
-    }).eq('id', order.id).eq('status', 'processing');
-    if (reservationLinkError) throw reservationLinkError;
 
     let dispatch;
     try {
@@ -177,18 +140,13 @@ Deno.serve(async (request) => {
       };
     }
 
+    const providerReference = dispatch.providerReference || dispatch.orderId || null;
     const providerPayload = {
       ...(dispatch.payload || {}),
       provider: dataPackage.provider,
       providerOrderId: dispatch.orderId || null,
-      providerReference: dispatch.providerReference || providerReference,
+      providerReference,
     };
-    const { error: completeError } = await admin.rpc('complete_agent_data_order', {
-      p_order_id: providerOrderId,
-      p_success: dispatch.success,
-      p_provider_response: providerPayload,
-    });
-    if (completeError) throw completeError;
 
     if (dispatch.success) {
       const { error: publicMarkError } = await admin.rpc('mark_public_data_order', {
@@ -199,7 +157,11 @@ Deno.serve(async (request) => {
         p_provider_response: providerPayload,
       });
       if (publicMarkError) throw publicMarkError;
-      await admin.from('public_data_orders').update({ provider_name: dataPackage.provider, provider_package_id: dataPackage.id }).eq('id', order.id);
+      const { error: providerMetadataError } = await admin.from('public_data_orders').update({
+        provider_name: dataPackage.provider,
+        provider_package_id: dataPackage.id,
+      }).eq('id', order.id);
+      if (providerMetadataError) throw providerMetadataError;
       return json({ success: true, status: 'processing', orderReference: reference, orderCode: order.short_code });
     }
 
@@ -248,8 +210,8 @@ Deno.serve(async (request) => {
           lastErrorAt: new Date().toISOString(),
         },
       };
-      // Keep a paid order retryable when no provider reservation was linked.
-      // Once a reservation exists, keep it processing so status reconciliation
+      // Keep a paid order retryable when no provider order was linked. Once a
+      // real provider reference exists, keep it processing so status polling
       // can finish the already-created provider order instead of duplicating it.
       if (current?.status === 'processing' && !current.provider_reference) {
         errorUpdate.status = 'pending_payment';

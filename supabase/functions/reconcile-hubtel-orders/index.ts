@@ -4,6 +4,7 @@ import {
   settleHubtelAirtimeOrder,
   settleHubtelUtilityOrder,
 } from '../_shared/hubtelSettlement.ts';
+import { activeDataProvider, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
 
 /**
  * Sweeps the Hubtel orders whose callback never arrived.
@@ -232,9 +233,9 @@ async function sweepPublicDataOrders(
 ): Promise<SweepResult> {
   const { data: orders, error } = await admin
     .from('public_data_orders')
-    .select('id, payment_reference')
+    .select('id, payment_reference, status, provider_name, provider_reference, network_type, volume_mb, provider_response')
     .eq('payment_provider', 'hubtel')
-    .eq('status', 'pending_payment')
+    .in('status', ['pending_payment', 'processing'])
     .lt('created_at', graceCutoff)
     .gt('created_at', ageFloor)
     .order('created_at', { ascending: true })
@@ -256,6 +257,43 @@ async function sweepPublicDataOrders(
     const reference = String(order.payment_reference || '').trim();
     if (!reference) continue;
     try {
+      if (String(order.status) === 'processing') {
+        const stored = order.provider_response && typeof order.provider_response === 'object'
+          ? order.provider_response as Record<string, unknown>
+          : {};
+        const provider = String(order.provider_name || stored.provider || activeDataProvider(order.network_type, Number(order.volume_mb)));
+        const providerReference = String(order.provider_reference || stored.providerReference || stored.providerOrderId || '').trim();
+        if (!providerReference) continue;
+
+        const live = await fetchDataOrderStatus(
+          provider as 'grandtech' | 'swift',
+          providerReference,
+          String(stored.providerOrderId || ''),
+        ).catch((statusError) => {
+          console.error('Public data provider status check failed:', { reference, error: String(statusError) });
+          return null;
+        });
+        if (!live || live.state === 'processing') continue;
+
+        const nextStatus = live.state === 'successful' ? 'successful' : 'failed';
+        const { error: statusError } = await admin.rpc('mark_public_data_order', {
+          p_order_id: order.id,
+          p_status: nextStatus,
+          p_provider_amount: null,
+          p_provider_reference: providerReference,
+          p_provider_response: {
+            ...stored,
+            provider: provider,
+            lastProviderStatus: live.status,
+            lastProviderPayload: live.payload || {},
+            checkedAt: new Date().toISOString(),
+          },
+        });
+        if (statusError) throw statusError;
+        changed += 1;
+        continue;
+      }
+
       const response = await fetch(`${baseUrl.replace(/\/$/, '')}/functions/v1/verify-public-data-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

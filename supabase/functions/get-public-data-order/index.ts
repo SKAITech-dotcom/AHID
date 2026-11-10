@@ -69,7 +69,11 @@ Deno.serve(async (request) => {
         // Still in flight. If the provider has had long enough, treat the order
         // as dropped rather than leaving the customer paid and waiting.
         const ageMinutes = (Date.now() - new Date(data.created_at).getTime()) / 60000;
-        if (ageMinutes > dataOrderStuckMinutes()) {
+        // Hubtel guest payments are collected outside our database and there is
+        // no configured Hubtel refund API in this flow. Never label one as
+        // refunded or mark it failed just because delivery is slow; doing so
+        // would tell the customer their money was returned when it was not.
+        if (ageMinutes > dataOrderStuckMinutes() && data.payment_provider !== 'hubtel') {
           status = 'failed';
           note = 'The provider did not deliver this bundle in time and the order was refunded.';
           await supabase.rpc('mark_public_data_order', {
