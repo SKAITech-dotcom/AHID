@@ -27,7 +27,7 @@ Deno.serve(async (request) => {
     // delivery confirmation and the auto-refund with it.
     let query = supabase
       .from('public_data_orders')
-      .select('id, payment_reference, public_access_token, agent_id, customer_phone, network_type, volume_mb, sale_amount, status, created_at, provider_response, payment_provider, paystack_refund_status')
+      .select('id, payment_reference, public_access_token, agent_id, customer_phone, network_type, volume_mb, sale_amount, status, created_at, provider_response, provider_name, provider_reference, payment_provider, paystack_refund_status')
       .eq('payment_reference', String(reference));
     if (accessToken) query = query.eq('public_access_token', String(accessToken));
     else if (phone) query = query.eq('customer_phone', String(phone).trim());
@@ -41,7 +41,7 @@ Deno.serve(async (request) => {
     if (status === 'processing') {
       const stored = (data.provider_response || {}) as Record<string, unknown>;
       const provider = String(stored.provider || activeDataProvider(data.network_type, Number(data.volume_mb)));
-      const providerOrderId = String(stored.providerOrderId ?? stored.providerReference ?? '');
+      const providerOrderId = String(data.provider_reference || (stored.providerOrderId ?? stored.providerReference ?? ''));
 
       const live = providerOrderId
         ? await fetchDataOrderStatus(provider as 'grandtech' | 'swift', providerOrderId, String(data.payment_reference))

@@ -72,8 +72,9 @@ Deno.serve(async (request) => {
 
     const airtime = await sweepAirtimeOrders(admin, graceCutoff, ageFloor);
     const utility = await sweepUtilityOrders(admin, graceCutoff, ageFloor);
-    const changed = airtime.changed + utility.changed;
-    const unreadable = [airtime, utility].filter((result) => result.failed).length;
+    const publicData = await sweepPublicDataOrders(admin, graceCutoff, ageFloor);
+    const changed = airtime.changed + utility.changed + publicData.changed;
+    const unreadable = [airtime, utility, publicData].filter((result) => result.failed).length;
 
     // Reconciliation is not a row write of its own, so record it explicitly.
     // Auditing must never break the sweep, and a Supabase query builder is
@@ -82,7 +83,7 @@ Deno.serve(async (request) => {
       try {
         await admin.rpc('log_activity', {
           p_summary: `Reconciled ${changed} Hubtel order${changed === 1 ? '' : 's'} that no callback settled`,
-          p_meta: { airtime, utility },
+          p_meta: { airtime, utility, publicData },
           p_actor_user_id: null,
         });
       } catch (logError) {
@@ -94,10 +95,10 @@ Deno.serve(async (request) => {
     // 0` every minute is exactly what a working sweep looks like, so a broken
     // one has to be visibly different from the outside, not only in the logs.
     if (unreadable > 0) {
-      return json({ success: false, changed, unreadable, airtime, utility }, 500);
+      return json({ success: false, changed, unreadable, airtime, utility, publicData }, 500);
     }
 
-    return json({ success: true, changed, airtime, utility });
+    return json({ success: true, changed, airtime, utility, publicData });
   } catch (error) {
     console.error('reconcile-hubtel-orders failed:', error);
     return json({ error: 'Reconciliation failed.' }, 500);
@@ -217,6 +218,66 @@ async function sweepUtilityOrders(
       if (outcome !== 'processing') changed += 1;
     } catch (settleError) {
       console.error('Utility order sweep settle failed:', { reference, error: String(settleError) });
+    }
+  }
+
+  return { checked: (orders ?? []).length, changed, failed: false };
+}
+
+/** Public Hubtel checkouts must not depend on the customer's return browser. */
+async function sweepPublicDataOrders(
+  admin: ReturnType<typeof adminClient>,
+  graceCutoff: string,
+  ageFloor: string,
+): Promise<SweepResult> {
+  const { data: orders, error } = await admin
+    .from('public_data_orders')
+    .select('id, payment_reference')
+    .eq('payment_provider', 'hubtel')
+    .eq('status', 'pending_payment')
+    .lt('created_at', graceCutoff)
+    .gt('created_at', ageFloor)
+    .order('created_at', { ascending: true })
+    .limit(MAX_ORDERS_PER_SWEEP);
+
+  if (error) {
+    console.error('Public data order sweep read failed:', error);
+    return { checked: 0, changed: 0, failed: true };
+  }
+
+  const baseUrl = Deno.env.get('SUPABASE_URL')?.trim();
+  if (!baseUrl) {
+    console.error('Public data order sweep skipped: SUPABASE_URL is not configured.');
+    return { checked: (orders ?? []).length, changed: 0, failed: true };
+  }
+
+  let changed = 0;
+  for (const order of orders ?? []) {
+    const reference = String(order.payment_reference || '').trim();
+    if (!reference) continue;
+    try {
+      const response = await fetch(`${baseUrl.replace(/\/$/, '')}/functions/v1/verify-public-data-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.error) {
+        console.error('Public data order sweep settlement failed:', {
+          reference,
+          httpStatus: response.status,
+          response: payload,
+        });
+        continue;
+      }
+      if (payload?.success || ['processing', 'successful', 'failed'].includes(String(payload?.status || '').toLowerCase())) {
+        changed += 1;
+      }
+    } catch (sweepError) {
+      console.error('Public data order sweep request failed:', {
+        reference,
+        error: sweepError instanceof Error ? sweepError.message : String(sweepError),
+      });
     }
   }
 

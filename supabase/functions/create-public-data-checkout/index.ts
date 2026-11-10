@@ -58,6 +58,27 @@ Deno.serve(async (request) => {
       return json({ error: 'This bundle is temporarily unavailable from its provider. No payment was started.' }, 409);
     }
 
+    // Guest payments fund the provider purchase through the configured public
+    // provider wallet. Check that funding before opening Hubtel checkout; a
+    // customer must never be charged when the provider reservation cannot be
+    // created afterwards.
+    const providerCost = Number(dataPackage.costGhs);
+    const { data: fundingWallet, error: fundingWalletError } = await admin
+      .from('wallets')
+      .select('balance')
+      .eq('id', companyAgentId)
+      .maybeSingle();
+    if (fundingWalletError) throw fundingWalletError;
+    if (!fundingWallet || Number(fundingWallet.balance || 0) < providerCost) {
+      console.error('Guest data checkout blocked: public provider wallet is not funded', {
+        companyAgentId,
+        provider: dataPackage.provider,
+        providerCost,
+        walletBalance: Number(fundingWallet?.balance || 0),
+      });
+      return json({ error: 'Guest data checkout is temporarily unavailable. Please try again later.' }, 503);
+    }
+
     // Hubtel limits clientReference to 32 characters. Keep the guest reference
     // short while retaining the old PUB-GUEST format for historical Paystack
     // orders handled by the verification route.

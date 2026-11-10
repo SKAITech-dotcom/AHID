@@ -7,6 +7,15 @@ function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message) return message;
+  }
+  return fallback;
+}
+
 async function refundPaystack(reference: string) {
   const secret = Deno.env.get('PAYSTACK_SECRET_KEY')?.trim();
   if (!secret) return { requested: false, ok: false };
@@ -21,7 +30,7 @@ async function refundPaystack(reference: string) {
 
 async function currentOrder(admin: ReturnType<typeof adminClient>, reference: string) {
   const { data, error } = await admin.from('public_data_orders')
-    .select('id, payment_reference, public_access_token, short_code, customer_phone, network_type, volume_mb, sale_amount, status, provider_response, payment_provider, payment_gross_amount, created_at')
+    .select('id, payment_reference, public_access_token, short_code, customer_phone, network_type, volume_mb, sale_amount, status, provider_response, provider_name, provider_package_id, provider_reference, payment_provider, payment_gross_amount, created_at')
     .eq('payment_reference', reference)
     .maybeSingle();
   if (error) throw error;
@@ -90,18 +99,43 @@ Deno.serve(async (request) => {
       }
     }
 
-    const { data: claimed, error: claimError } = await admin.rpc('claim_public_data_order', { p_order_id: order.id });
-    if (claimError) throw claimError;
-    if (!claimed) {
-      const fresh = await currentOrder(admin, reference);
-      return json({ success: fresh?.status === 'successful', status: fresh?.status || 'processing', order: fresh });
-    }
-
     const companyAgentId = Deno.env.get('PUBLIC_DATA_AGENT_ID')?.trim();
     if (!companyAgentId) throw new Error('Public data provider funding is not configured.');
     const dataPackage = await resolveDataPackage(String(order.network_type), Number(order.volume_mb));
     if (!dataPackage || !Number.isFinite(dataPackage.costGhs) || dataPackage.costGhs <= 0) {
       throw new Error('The selected bundle is no longer available from its provider.');
+    }
+
+    // Do this before claiming the row. If the public provider wallet is empty,
+    // leave the paid callback retryable instead of moving it into a state that
+    // cannot create the provider order.
+    const { data: fundingWallet, error: fundingWalletError } = await admin
+      .from('wallets')
+      .select('balance')
+      .eq('id', companyAgentId)
+      .maybeSingle();
+    if (fundingWalletError) throw fundingWalletError;
+    if (!fundingWallet || Number(fundingWallet.balance || 0) < Number(dataPackage.costGhs)) {
+      console.error('Guest data dispatch waiting for public provider funding', {
+        reference,
+        companyAgentId,
+        provider: dataPackage.provider,
+        providerCost: Number(dataPackage.costGhs),
+        walletBalance: Number(fundingWallet?.balance || 0),
+      });
+      return json({
+        success: false,
+        status: 'pending_payment',
+        retryable: true,
+        message: 'Payment received. Your bundle is waiting for provider funding and will be retried automatically.',
+      });
+    }
+
+    const { data: claimed, error: claimError } = await admin.rpc('claim_public_data_order', { p_order_id: order.id });
+    if (claimError) throw claimError;
+    if (!claimed) {
+      const fresh = await currentOrder(admin, reference);
+      return json({ success: fresh?.status === 'successful', status: fresh?.status || 'processing', order: fresh });
     }
 
     const providerReference = `PUB-DATA-${crypto.randomUUID()}`;
@@ -114,6 +148,21 @@ Deno.serve(async (request) => {
       p_amount: roundMoney(dataPackage.costGhs),
     });
     if (reserveError) throw reserveError;
+
+    const reservationPayload = {
+      ...(order.provider_response && typeof order.provider_response === 'object' ? order.provider_response : {}),
+      provider: dataPackage.provider,
+      providerReference,
+      providerOrderId: null,
+      reservedAt: new Date().toISOString(),
+    };
+    const { error: reservationLinkError } = await admin.from('public_data_orders').update({
+      provider_name: dataPackage.provider,
+      provider_package_id: dataPackage.id,
+      provider_reference: providerReference,
+      provider_response: reservationPayload,
+    }).eq('id', order.id).eq('status', 'processing');
+    if (reservationLinkError) throw reservationLinkError;
 
     let dispatch;
     try {
@@ -142,13 +191,14 @@ Deno.serve(async (request) => {
     if (completeError) throw completeError;
 
     if (dispatch.success) {
-      await admin.rpc('mark_public_data_order', {
+      const { error: publicMarkError } = await admin.rpc('mark_public_data_order', {
         p_order_id: order.id,
         p_status: 'processing',
         p_provider_amount: roundMoney(dataPackage.costGhs),
         p_provider_reference: providerReference,
         p_provider_response: providerPayload,
       });
+      if (publicMarkError) throw publicMarkError;
       await admin.from('public_data_orders').update({ provider_name: dataPackage.provider, provider_package_id: dataPackage.id }).eq('id', order.id);
       return json({ success: true, status: 'processing', orderReference: reference, orderCode: order.short_code });
     }
@@ -156,13 +206,14 @@ Deno.serve(async (request) => {
     const refund = paymentProvider === 'paystack'
       ? await refundPaystack(reference)
       : { requested: false, ok: false };
-    await admin.rpc('mark_public_data_order', {
+    const { error: failedMarkError } = await admin.rpc('mark_public_data_order', {
       p_order_id: order.id,
       p_status: 'failed',
       p_provider_amount: roundMoney(dataPackage.costGhs),
       p_provider_reference: providerReference,
       p_provider_response: { ...providerPayload, refundRequested: refund.requested, refundSucceeded: refund.ok },
     });
+    if (failedMarkError) throw failedMarkError;
     const paymentUpdate: Record<string, unknown> = {
       provider_name: dataPackage.provider,
       provider_package_id: dataPackage.id,
@@ -180,18 +231,36 @@ Deno.serve(async (request) => {
           : 'The bundle could not be delivered. Refund processing needs administrator attention.',
     });
   } catch (error) {
-    console.error('verify-public-data-payment failed:', error);
+    const message = errorMessage(error, 'Guest checkout failed.');
+    console.error('verify-public-data-payment failed:', { reference, error: message });
     if (reference) {
-      await admin.from('public_data_orders').update({
-        status: 'failed',
-        provider_response: { error: error instanceof Error ? error.message : 'Guest checkout failed.' },
-        completed_at: new Date().toISOString(),
-      }).eq('payment_reference', reference).eq('status', 'processing');
+      const { data: current } = await admin.from('public_data_orders')
+        .select('status, provider_reference, provider_response')
+        .eq('payment_reference', reference)
+        .maybeSingle();
+      const existingResponse = current?.provider_response && typeof current.provider_response === 'object'
+        ? current.provider_response as Record<string, unknown>
+        : {};
+      const errorUpdate: Record<string, unknown> = {
+        provider_response: {
+          ...existingResponse,
+          lastError: message,
+          lastErrorAt: new Date().toISOString(),
+        },
+      };
+      // Keep a paid order retryable when no provider reservation was linked.
+      // Once a reservation exists, keep it processing so status reconciliation
+      // can finish the already-created provider order instead of duplicating it.
+      if (current?.status === 'processing' && !current.provider_reference) {
+        errorUpdate.status = 'pending_payment';
+        errorUpdate.completed_at = null;
+      }
+      await admin.from('public_data_orders').update(errorUpdate).eq('payment_reference', reference);
       if (paymentProvider === 'paystack') {
         const refund = await refundPaystack(reference).catch(() => ({ requested: false, ok: false }));
         if (refund.ok) await admin.from('public_data_orders').update({ paystack_refund_status: 'initiated' }).eq('payment_reference', reference);
       }
     }
-    return json({ error: error instanceof Error ? error.message : 'Unable to complete this purchase.' }, 500);
+    return json({ error: message, retryable: true }, 503);
   }
 });

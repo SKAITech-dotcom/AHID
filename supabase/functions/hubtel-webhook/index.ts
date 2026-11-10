@@ -89,7 +89,7 @@ Deno.serve(async (request) => {
       const admin = adminClient();
       const { data: publicOrder, error: publicOrderError } = await admin
         .from('public_data_orders')
-        .select('id, status')
+        .select('id, status, sale_amount, payment_gross_amount, payment_provider')
         .eq('payment_reference', reference)
         .maybeSingle();
       if (publicOrderError) {
@@ -110,6 +110,51 @@ Deno.serve(async (request) => {
         .update(publicUpdate)
         .eq('id', publicOrder.id);
       if (publicSaveError) console.error('[Hubtel guest callback] Callback persistence failed', publicSaveError);
+
+      // Do not depend on the browser return page to create the provider order.
+      // Hubtel has already authenticated this callback and the amount is bound
+      // to the durable order, so settle/dispatch through the same idempotent
+      // verification path used by the customer return flow.
+      const callbackAmountMatches = hubtelWalletAmountMatches(
+        amount,
+        Number(publicOrder.sale_amount),
+        Number(publicOrder.payment_gross_amount),
+      );
+      if (isSuccessfulCallback && callbackAmountMatches
+        && ['pending_payment', 'processing'].includes(String(publicOrder.status))) {
+        const baseUrl = Deno.env.get('SUPABASE_URL')?.trim();
+        if (!baseUrl) {
+          console.error('[Hubtel guest callback] SUPABASE_URL is not configured; dispatch deferred', { reference });
+        } else {
+          try {
+            const dispatchResponse = await fetch(`${baseUrl.replace(/\/$/, '')}/functions/v1/verify-public-data-payment`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reference }),
+            });
+            const dispatchPayload = await dispatchResponse.json().catch(() => ({}));
+            if (!dispatchResponse.ok || dispatchPayload?.error) {
+              console.error('[Hubtel guest callback] Automatic provider dispatch did not complete', {
+                reference,
+                httpStatus: dispatchResponse.status,
+                response: dispatchPayload,
+              });
+            }
+          } catch (dispatchError) {
+            console.error('[Hubtel guest callback] Automatic provider dispatch request failed', {
+              reference,
+              error: dispatchError instanceof Error ? dispatchError.message : String(dispatchError),
+            });
+          }
+        }
+      } else if (isSuccessfulCallback && !callbackAmountMatches) {
+        console.error('[Hubtel guest callback] Amount mismatch; provider dispatch deferred', {
+          reference,
+          callbackAmount: amount,
+          expectedSaleAmount: Number(publicOrder.sale_amount),
+          expectedGrossAmount: Number(publicOrder.payment_gross_amount),
+        });
+      }
       return json({ received: true, settled: false }, 200);
     }
 
