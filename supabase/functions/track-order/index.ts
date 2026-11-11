@@ -11,6 +11,7 @@ interface OrderMatch {
   name: string;
   phone: string;
   status: string;
+  providerStatus?: string;
   date: string;
 }
 
@@ -123,12 +124,13 @@ Deno.serve(async (request) => {
       // 1. Check airtime orders
       const { data: airtimeData } = await admin
         .from('airtime_orders')
-        .select('payment_reference, short_code, network, amount, customer_name, recipient_phone, payment_status, airtime_status, created_at')
+        .select('payment_reference, short_code, network, amount, customer_name, recipient_phone, payment_status, airtime_status, provider_response, created_at')
         .eq('short_code', ref)
         .maybeSingle();
       if (airtimeData) {
         const status = airtimeData.airtime_status === 'delivered' ? 'Delivered'
           : airtimeData.airtime_status === 'failed' ? 'Failed'
+          : airtimeData.payment_status === 'pending_payment' ? 'Awaiting Payment'
           : airtimeData.payment_status === 'paid' ? 'Processing' : (airtimeData.payment_status || 'Pending');
         match = {
           trackingId: airtimeData.short_code,
@@ -140,6 +142,7 @@ Deno.serve(async (request) => {
           name: airtimeData.customer_name || 'Airtime',
           phone: airtimeData.recipient_phone || '',
           status,
+          providerStatus: String(airtimeData.provider_response?.lastProviderStatus || airtimeData.airtime_status || status),
           date: dateOf(airtimeData.created_at),
         };
       }
@@ -313,15 +316,16 @@ Deno.serve(async (request) => {
     }
 
     // Airtime orders (public + agent)
-    if (ref.startsWith('AIR-')) {
+    if (ref.startsWith('AIR-') || ref.startsWith('PAI')) {
       const { data, error } = await admin
         .from('airtime_orders')
-        .select('payment_reference, short_code, network, amount, customer_name, recipient_phone, payment_status, airtime_status, created_at')
+        .select('payment_reference, short_code, network, amount, customer_name, recipient_phone, payment_status, airtime_status, provider_response, created_at')
         .eq('payment_reference', ref)
         .maybeSingle();
       if (!error && data) {
         const status = data.airtime_status === 'delivered' ? 'Delivered'
           : data.airtime_status === 'failed' ? 'Failed'
+          : data.payment_status === 'pending_payment' ? 'Awaiting Payment'
           : data.payment_status === 'paid' ? 'Processing' : (data.payment_status || 'Pending');
         match = {
           trackingId: data.payment_reference,
@@ -333,6 +337,7 @@ Deno.serve(async (request) => {
           name: data.customer_name || 'Airtime',
           phone: data.recipient_phone || '',
           status,
+          providerStatus: String(data.provider_response?.lastProviderStatus || data.airtime_status || status),
           date: dateOf(data.created_at),
         };
       }

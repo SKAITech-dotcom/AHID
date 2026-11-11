@@ -3,9 +3,6 @@ import { checkAgentAccessServer } from './agentAccessCheck.js';
 import { applyWalletBalance, refreshWalletBalance } from './walletBalance.js';
 import { commissionQuote, loadCommissionSettings } from './commissionConfig.js?v=2026110408';
 
-// Non-agents are sent to Sign In / Sign Up with an agent prompt.
-const AGENT_AUTH_URL = 'login.html?action=agent&notice=agent&register=true&redirect=airtime.html';
-
 // Prefix to network detection (Ghana numbering plan).
 const NETWORK_PREFIXES = {
   mtn: ['024', '025', '053', '054', '055', '059'],
@@ -26,6 +23,8 @@ let currentAmount = 10;
 let agentUser = null;
 let agentWalletBalance = 0;
 let agentVerified = false;
+
+const PUBLIC_AIRTIME_PAYMENT_KEY = 'skaitech_public_airtime_payment';
 
 function $(id) {
   return document.getElementById(id);
@@ -59,10 +58,14 @@ function syncAmountChips() {
 
 function renderAirtimeCommissionReview() {
   const amount = Math.max(0, Number($('airtimeAmount')?.value) || 0);
-  const quote = commissionQuote(amount, selectedNetwork);
+  const quote = agentVerified ? commissionQuote(amount, selectedNetwork) : { agentCommissionAmount: 0, walletChargeAmount: amount };
   const benefit = $('reviewCommissionBenefit');
   if (benefit) benefit.textContent = quote.agentCommissionAmount.toFixed(2);
   if ($('reviewTotal')) $('reviewTotal').textContent = quote.walletChargeAmount.toFixed(2);
+  const commissionRow = $('reviewCommissionRow');
+  if (commissionRow) commissionRow.style.display = agentVerified ? '' : 'none';
+  const paymentMethod = $('reviewPaymentMethod');
+  if (paymentMethod) paymentMethod.textContent = agentVerified ? 'Agent Wallet - 0% Fee' : 'Skaipay (Hubtel)';
 }
 
 // Prefix to Network Detection
@@ -298,6 +301,47 @@ function updateHistoryCountBadge() {
   }
 }
 
+async function startPublicAirtimeCheckout(phone, amount, submitBtn) {
+  try {
+    showProcessing('Preparing secure Skaipay checkout...');
+    const { data, error } = await supabase.functions.invoke('create-public-airtime-payment', {
+      body: { network: selectedNetwork, phone, amount },
+    });
+    hideProcessing();
+    if (error || data?.error || !data?.authorizationUrl || !data?.reference) {
+      throw new Error(data?.error || error?.message || 'Unable to start Skaipay checkout.');
+    }
+    const payment = {
+      reference: data.reference,
+      accessToken: data.accessToken || '',
+      orderCode: data.orderCode || '',
+      phone,
+      network: selectedNetwork,
+      amount,
+    };
+    sessionStorage.setItem(PUBLIC_AIRTIME_PAYMENT_KEY, JSON.stringify(payment));
+    saveOrderToLocalHistory({
+      reference: payment.orderCode || payment.reference,
+      orderId: payment.orderCode || payment.reference,
+      shortCode: payment.orderCode,
+      orderReference: payment.reference,
+      phone,
+      network: selectedNetwork,
+      amount,
+      paymentMethod: 'hubtel',
+      airtimeStatus: 'pending',
+      createdAt: new Date().toISOString(),
+    });
+    // Keep the checkout in this tab so Hubtel returns to this same airtime
+    // page and the payment-gated dispatch can finish here or by callback.
+    window.location.assign(data.authorizationUrl);
+  } catch (error) {
+    hideProcessing();
+    showNotice(error instanceof Error ? error.message : 'Unable to start Skaipay checkout.', true);
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
 // Form Submission
 export async function handleAirtimeSubmit(event) {
   event.preventDefault();
@@ -317,6 +361,11 @@ export async function handleAirtimeSubmit(event) {
 
   const submitBtn = $('submitAirtimeBtn');
   submitBtn.disabled = true;
+
+  if (!agentVerified) {
+    await startPublicAirtimeCheckout(phone, netAmount, submitBtn);
+    return;
+  }
 
   try {
     // Reload immediately before charging so an admin commission-share edit
@@ -587,13 +636,6 @@ async function initAuth() {
   }
 }
 
-// Non-agents are redirected to Sign In / Sign Up with an agent prompt.
-function enforceAgentAccess() {
-  if (!agentVerified) {
-    window.location.href = AGENT_AUTH_URL;
-  }
-}
-
 export function closeAirtimeAgentGate() {
   const modal = $('airtimeAgentGateModal');
   if (modal) modal.classList.remove('active');
@@ -680,12 +722,66 @@ export function closeAirtimeHistory() {
   if (modal) modal.classList.remove('active');
 }
 
+async function showPublicAirtimePaymentResult() {
+  const params = new URLSearchParams(window.location.search);
+  const reference = params.get('reference');
+  if (!reference) return;
+
+  let payment = {};
+  try { payment = JSON.parse(sessionStorage.getItem(PUBLIC_AIRTIME_PAYMENT_KEY) || '{}'); } catch { payment = {}; }
+  payment.reference = payment.reference || reference;
+  showResultNotice('Confirming Skaipay payment and sending your airtime…');
+
+  let attempts = 0;
+  const poll = async () => {
+    attempts += 1;
+    try {
+      const { data: verification, error: verificationError } = await supabase.functions.invoke('verify-public-airtime-payment', {
+        body: { reference: payment.reference },
+      });
+      if (verificationError && attempts === 1) console.warn('Guest airtime verification pending:', verificationError);
+
+      const lookup = payment.orderCode || payment.reference;
+      const { data: tracked } = await supabase.functions.invoke('track-order', { body: { reference: lookup } });
+      const order = tracked?.order;
+      const status = String(order?.status || verification?.status || 'pending_payment').toLowerCase();
+      if (order?.shortCode) payment.orderCode = order.shortCode;
+      if (order?.phone) payment.phone = order.phone;
+      if (order?.network) payment.network = order.network;
+      if (order?.price) payment.amount = Number(String(order.price).replace(/[^0-9.]/g, '')) || payment.amount;
+      if (status === 'delivered' || status === 'successful') {
+        saveOrderToLocalHistory({ ...payment, reference: payment.orderCode || payment.reference, airtimeStatus: 'delivered' });
+        showResultNotice(`Airtime was delivered to ${payment.phone || 'the recipient'}. Order ID: #${payment.orderCode || '—'}`);
+        return;
+      }
+      if (status === 'failed') {
+        saveOrderToLocalHistory({ ...payment, reference: payment.orderCode || payment.reference, airtimeStatus: 'failed' });
+        showResultNotice(verification?.message || 'The airtime order failed. Please use Track Order or contact support.', true);
+        return;
+      }
+      saveOrderToLocalHistory({ ...payment, reference: payment.orderCode || payment.reference, airtimeStatus: status });
+      showResultNotice(status === 'pending_payment'
+        ? 'Skaipay payment is still being confirmed…'
+        : 'Payment confirmed. Hubtel is processing the airtime delivery…');
+      if (attempts < 12) window.setTimeout(poll, 5000);
+    } catch (error) {
+      if (attempts < 12) window.setTimeout(poll, 5000);
+      else showResultNotice(error instanceof Error ? error.message : 'Use Track Order to check this purchase.', true);
+    }
+  };
+  poll();
+}
+
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', async () => {
   await initAuth();
-  await loadCommissionSettings();
-  enforceAgentAccess();
-  refreshWalletBalance();
+  if (agentVerified) {
+    await loadCommissionSettings();
+    refreshWalletBalance();
+  } else {
+    const walletPill = document.querySelector('.utility-wallet-pill');
+    if (walletPill) walletPill.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Secure payment · <strong>Skaipay (Hubtel)</strong>';
+  }
   updateHistoryCountBadge();
   syncAmountChips();
 
@@ -707,12 +803,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const refreshCommissionView = async () => {
     if (document.hidden) return;
-    await loadCommissionSettings();
+    if (agentVerified) await loadCommissionSettings();
     if ($('airtimeStepTwo')?.style.display !== 'none') renderAirtimeCommissionReview();
   };
   document.addEventListener('visibilitychange', refreshCommissionView);
   window.addEventListener('focus', refreshCommissionView);
   window.setInterval(refreshCommissionView, 30000);
+  showPublicAirtimePaymentResult();
 });
 
 // Wire the form submit

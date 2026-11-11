@@ -95,7 +95,7 @@
         
         <div class="track-card">
             <h2 style="margin-top: 0; font-size: 1.4rem; color: #1f2937;"><i class="fa-solid fa-magnifying-glass"></i> Track Your Order</h2>
-            <p style="font-size: 0.9rem; color: #6b7280; margin-bottom: 20px;">Enter the recipient phone number to see your guest data orders and live delivery status.</p>
+            <p style="font-size: 0.9rem; color: #6b7280; margin-bottom: 20px;">Enter the recipient phone number to see your guest data and airtime orders with live delivery status.</p>
             
             <input type="tel" id="trackingPhoneInput" inputmode="numeric" maxlength="10" placeholder="e.g., 0241234567" class="form-input">
             <button onclick="searchOrder()" class="action-btn">Find My Orders</button>
@@ -147,7 +147,7 @@
             const orders = Array.isArray(data?.orders) ? data.orders : [];
             if (!orders.length) {
                 resultBox.style.display = 'block';
-                resultBox.innerHTML = `<p style="color: #dc2626; font-weight: 600; margin: 0;">No guest data orders were found for ${escapeHtml(phone)}.</p>`;
+                resultBox.innerHTML = `<p style="color: #dc2626; font-weight: 600; margin: 0;">No guest data or airtime orders were found for ${escapeHtml(phone)}.</p>`;
                 return;
             }
 
@@ -157,8 +157,8 @@
             resultBox.innerHTML = `<div style="font-size: 0.9rem; color: #374151; line-height: 1.6;">${orders.map((order) => `
                 <div style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
                     <div style="font-weight: 700; color: #1f2937; margin-bottom: 5px;">Order ID: ${escapeHtml(order.orderCode || '—')}</div>
-                    <div><strong>Network:</strong> ${escapeHtml(String(order.network || '').toUpperCase())}</div>
-                    <div><strong>Bundle:</strong> ${escapeHtml(Number(order.volumeMb) >= 1024 ? `${Number(order.volumeMb) / 1024}GB` : `${order.volumeMb}MB`)} · GHS ${escapeHtml(Number(order.amount || 0).toFixed(2))}</div>
+                    <div><strong>Service:</strong> ${escapeHtml(order.type === 'airtime' ? `${String(order.network || '').toUpperCase()} Airtime` : `${String(order.network || '').toUpperCase()} Data Bundle`)}</div>
+                    <div><strong>Details:</strong> ${escapeHtml(order.type === 'airtime' ? `Airtime top-up · GHS ${Number(order.amount || 0).toFixed(2)}` : `${Number(order.volumeMb) >= 1024 ? `${Number(order.volumeMb) / 1024}GB` : `${order.volumeMb}MB`} · GHS ${Number(order.amount || 0).toFixed(2)}`)}</div>
                     <div><strong>Status:</strong> <span style="color: #d97706; font-weight: 700;">${escapeHtml(order.statusLabel || order.status || 'Pending')}</span></div>
                     <div><strong>Provider status:</strong> ${escapeHtml(order.providerStatus || 'Pending')}</div>
                     <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 6px;">Placed on: ${escapeHtml(order.createdAt ? new Date(order.createdAt).toLocaleString() : '—')}</div>

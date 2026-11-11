@@ -1484,22 +1484,15 @@ function closeAgentModal() {
     if (modal) modal.classList.remove('active');
 }
 
-/* ---- AIRTIME AGENT-ONLY GATING (server-verified) ---- */
+/* ---- PUBLIC AIRTIME NAVIGATION ---- */
 async function handleAirtimeClick(networkKey, event) {
     if (event) event.preventDefault();
     const target = networkKey ? `airtime.html?network=${encodeURIComponent(networkKey)}` : 'airtime.html';
-
-    try {
-        const { isAgent } = await checkAgentAccessServer();
-        if (isAgent) {
-            window.location.href = target;
-            return false;
-        }
-    } catch (err) {
-        console.warn('Agent check failed before airtime navigation:', err);
-    }
-
-    return redirectToAgentLogin(target);
+    // Airtime is available to guests through the phone-only Skaipay checkout;
+    // authenticated agents still enter the same page and keep their wallet
+    // payment path there.
+    window.location.href = target;
+    return false;
 }
 
 function openAirtimeAgentModal() {

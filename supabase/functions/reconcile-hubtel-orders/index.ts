@@ -73,11 +73,12 @@ Deno.serve(async (request) => {
     const ageFloor = new Date(now - MAX_POLL_AGE_HOURS * 3_600_000).toISOString();
 
     const airtime = await sweepAirtimeOrders(admin, graceCutoff, ageFloor);
+    const publicAirtime = await sweepPublicAirtimeOrders(admin, graceCutoff, ageFloor);
     const utility = await sweepUtilityOrders(admin, graceCutoff, ageFloor);
     const publicData = await sweepPublicDataOrders(admin, graceCutoff, ageFloor);
     const publicStore = await sweepPublicStoreOrders(admin, graceCutoff, ageFloor);
-    const changed = airtime.changed + utility.changed + publicData.changed + publicStore.changed;
-    const unreadable = [airtime, utility, publicData, publicStore].filter((result) => result.failed).length;
+    const changed = airtime.changed + publicAirtime.changed + utility.changed + publicData.changed + publicStore.changed;
+    const unreadable = [airtime, publicAirtime, utility, publicData, publicStore].filter((result) => result.failed).length;
 
     // Reconciliation is not a row write of its own, so record it explicitly.
     // Auditing must never break the sweep, and a Supabase query builder is
@@ -86,7 +87,7 @@ Deno.serve(async (request) => {
       try {
         await admin.rpc('log_activity', {
           p_summary: `Reconciled ${changed} Hubtel order${changed === 1 ? '' : 's'} that no callback settled`,
-          p_meta: { airtime, utility, publicData, publicStore },
+          p_meta: { airtime, publicAirtime, utility, publicData, publicStore },
           p_actor_user_id: null,
         });
       } catch (logError) {
@@ -98,10 +99,10 @@ Deno.serve(async (request) => {
     // 0` every minute is exactly what a working sweep looks like, so a broken
     // one has to be visibly different from the outside, not only in the logs.
     if (unreadable > 0) {
-      return json({ success: false, changed, unreadable, airtime, utility, publicData, publicStore }, 500);
+      return json({ success: false, changed, unreadable, airtime, publicAirtime, utility, publicData, publicStore }, 500);
     }
 
-    return json({ success: true, changed, airtime, utility, publicData, publicStore });
+    return json({ success: true, changed, airtime, publicAirtime, utility, publicData, publicStore });
   } catch (error) {
     console.error('reconcile-hubtel-orders failed:', error);
     return json({ error: 'Reconciliation failed.' }, 500);
@@ -123,7 +124,7 @@ async function sweepAirtimeOrders(
 ): Promise<SweepResult> {
   const { data: orders, error } = await admin
     .from('airtime_orders')
-    .select('id, agent_id, payment_reference, amount, wallet_charge_amount, provider_reference')
+    .select('id, agent_id, payment_reference, amount, wallet_charge_amount, provider_reference, payment_method')
     .in('airtime_status', ['pending', 'pending_provider', 'processing'])
     .lt('created_at', graceCutoff)
     .gt('created_at', ageFloor)
@@ -137,6 +138,10 @@ async function sweepAirtimeOrders(
 
   let changed = 0;
   for (const order of orders ?? []) {
+    // Guest Hubtel checkout rows are reconciled separately. The Commission
+    // Services status endpoint is for the delivery request, not the checkout
+    // payment, so querying it before payment confirmation is unsafe.
+    if (!order.agent_id && String(order.payment_method) === 'hubtel') continue;
     const reference = String(order.payment_reference);
 
     const verified = await fetchHubtelCommissionStatus(reference).catch((statusError) => {
@@ -161,6 +166,78 @@ async function sweepAirtimeOrders(
       changed += 1;
     } catch (settleError) {
       console.error('Airtime order sweep settle failed:', { reference, error: String(settleError) });
+    }
+  }
+
+  return { checked: (orders ?? []).length, changed, failed: false };
+}
+
+/** Reconciles guest Hubtel checkout confirmation and guest airtime delivery. */
+async function sweepPublicAirtimeOrders(
+  admin: ReturnType<typeof adminClient>,
+  graceCutoff: string,
+  ageFloor: string,
+): Promise<SweepResult> {
+  const { data: orders, error } = await admin
+    .from('airtime_orders')
+    .select('id, payment_reference, amount, gross_amount, payment_status, airtime_status, provider_reference, created_at')
+    .is('agent_id', null)
+    .eq('payment_method', 'hubtel')
+    .in('payment_status', ['pending_payment', 'paid'])
+    .in('airtime_status', ['pending', 'processing', 'pending_provider'])
+    .lt('created_at', graceCutoff)
+    .gt('created_at', ageFloor)
+    .order('created_at', { ascending: true })
+    .limit(MAX_ORDERS_PER_SWEEP);
+
+  if (error) {
+    console.error('Public airtime order sweep read failed:', error);
+    return { checked: 0, changed: 0, failed: true };
+  }
+
+  const baseUrl = Deno.env.get('SUPABASE_URL')?.trim();
+  if (!baseUrl) return { checked: (orders ?? []).length, changed: 0, failed: true };
+
+  let changed = 0;
+  for (const order of orders ?? []) {
+    const reference = String(order.payment_reference || '').trim();
+    if (!reference) continue;
+    try {
+      if (String(order.airtime_status) === 'pending_provider') {
+        const delivery = await fetchHubtelCommissionStatus(reference).catch(() => null);
+        if (!delivery || delivery.state === 'pending') continue;
+        await settleHubtelAirtimeOrder(admin, {
+          id: String(order.id),
+          agent_id: null,
+          payment_reference: reference,
+          amount: Number(order.amount),
+          wallet_charge_amount: Number(order.amount),
+          provider_reference: order.provider_reference ? String(order.provider_reference) : null,
+        }, {
+          state: delivery.state,
+          payload: delivery.payload,
+          providerReference: delivery.orderId ?? null,
+        });
+        changed += 1;
+        continue;
+      }
+
+      // This calls the same payment-gated dispatch path as the Hubtel callback
+      // and the browser return page. It is safe to retry because the claim RPC
+      // permits only a still-pending guest row.
+      const response = await fetch(`${baseUrl.replace(/\/$/, '')}/functions/v1/verify-public-airtime-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok && response.status !== 503) {
+        console.error('Public airtime payment sweep failed:', { reference, httpStatus: response.status, payload });
+        continue;
+      }
+      if (['delivered', 'failed', 'processing'].includes(String(payload?.status || '').toLowerCase())) changed += 1;
+    } catch (sweepError) {
+      console.error('Public airtime order sweep request failed:', { reference, error: String(sweepError) });
     }
   }
 

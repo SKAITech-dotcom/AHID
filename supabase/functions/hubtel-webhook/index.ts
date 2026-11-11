@@ -158,6 +158,81 @@ Deno.serve(async (request) => {
       return json({ received: true, settled: false }, 200);
     }
 
+    // Guest airtime uses the same authenticated Hubtel Online Checkout callback
+    // but must never dispatch before this payment callback is confirmed.
+    if (/^PAI[0-9a-f]{29}$/i.test(reference)) {
+      const admin = adminClient();
+      const { data: airtimeOrder, error: airtimeLookupError } = await admin
+        .from('airtime_orders')
+        .select('id, payment_reference, amount, gross_amount, payment_status, airtime_status')
+        .eq('payment_reference', reference)
+        .is('agent_id', null)
+        .maybeSingle();
+      if (airtimeLookupError) {
+        console.error('[Hubtel guest airtime callback] Order lookup failed', airtimeLookupError);
+        return json({ received: true, settled: false }, 200);
+      }
+      if (!airtimeOrder) {
+        console.error('[Hubtel guest airtime callback] No matching order', { reference, orderId });
+        return json({ received: true, settled: false }, 200);
+      }
+
+      const { error: saveError } = await admin.from('airtime_orders').update({
+        provider_response: payload,
+        provider_reference: orderId || null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', airtimeOrder.id);
+      if (saveError) console.error('[Hubtel guest airtime callback] Callback persistence failed', saveError);
+
+      if (isFailedCallback && ['pending_payment', 'paid'].includes(String(airtimeOrder.payment_status))) {
+        await admin.from('airtime_orders').update({
+          payment_status: 'failed',
+          airtime_status: 'failed',
+          failure_reason: 'Skaipay payment was not successful.',
+          updated_at: new Date().toISOString(),
+        }).eq('id', airtimeOrder.id).in('payment_status', ['pending_payment', 'paid']);
+        return json({ received: true, settled: false }, 200);
+      }
+
+      const amountMatches = hubtelWalletAmountMatches(
+        amount,
+        Number(airtimeOrder.amount),
+        Number(airtimeOrder.gross_amount),
+      );
+      if (isSuccessfulCallback && amountMatches
+        && String(airtimeOrder.airtime_status) === 'pending'
+        && String(airtimeOrder.payment_status) === 'pending_payment') {
+        const baseUrl = Deno.env.get('SUPABASE_URL')?.trim();
+        if (baseUrl) {
+          try {
+            const dispatchResponse = await fetch(`${baseUrl.replace(/\/$/, '')}/functions/v1/verify-public-airtime-payment`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reference }),
+            });
+            const dispatchPayload = await dispatchResponse.json().catch(() => ({}));
+            if (!dispatchResponse.ok || dispatchPayload?.error) {
+              console.error('[Hubtel guest airtime callback] Automatic dispatch did not complete', {
+                reference,
+                httpStatus: dispatchResponse.status,
+                response: dispatchPayload,
+              });
+            }
+          } catch (dispatchError) {
+            console.error('[Hubtel guest airtime callback] Automatic dispatch request failed', dispatchError);
+          }
+        }
+      } else if (isSuccessfulCallback && !amountMatches) {
+        console.error('[Hubtel guest airtime callback] Amount mismatch; dispatch deferred', {
+          reference,
+          callbackAmount: amount,
+          expectedAmount: Number(airtimeOrder.amount),
+          expectedGrossAmount: Number(airtimeOrder.gross_amount),
+        });
+      }
+      return json({ received: true, settled: false }, 200);
+    }
+
     // Public agent-store purchases can use Skaipay/Hubtel for low-value
     // bundles. Persist the authenticated callback on the store order; the
     // browser return (or a later retry) verifies the amount before dispatching.
