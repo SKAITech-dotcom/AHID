@@ -6,6 +6,8 @@ import {
 } from '../_shared/hubtelSettlement.ts';
 import { activeDataProvider, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
 import { fulfilStoreOrder } from '../_shared/storeOrderFulfillment.ts';
+import { hubtelPaymentsVerifyConfigured, verifyHubtelCollection } from '../_shared/hubtelPayments.ts';
+import { hubtelWalletAmountMatches, normalizeHubtel } from '../_shared/paymentGateway.ts';
 
 /**
  * Sweeps the Hubtel orders whose callback never arrived.
@@ -73,12 +75,13 @@ Deno.serve(async (request) => {
     const ageFloor = new Date(now - MAX_POLL_AGE_HOURS * 3_600_000).toISOString();
 
     const airtime = await sweepAirtimeOrders(admin, graceCutoff, ageFloor);
+    const walletTopups = await sweepWalletTopups(admin, graceCutoff, ageFloor);
     const publicAirtime = await sweepPublicAirtimeOrders(admin, graceCutoff, ageFloor);
     const utility = await sweepUtilityOrders(admin, graceCutoff, ageFloor);
     const publicData = await sweepPublicDataOrders(admin, graceCutoff, ageFloor);
     const publicStore = await sweepPublicStoreOrders(admin, graceCutoff, ageFloor);
-    const changed = airtime.changed + publicAirtime.changed + utility.changed + publicData.changed + publicStore.changed;
-    const unreadable = [airtime, publicAirtime, utility, publicData, publicStore].filter((result) => result.failed).length;
+    const changed = airtime.changed + walletTopups.changed + publicAirtime.changed + utility.changed + publicData.changed + publicStore.changed;
+    const unreadable = [airtime, walletTopups, publicAirtime, utility, publicData, publicStore].filter((result) => result.failed).length;
 
     // Reconciliation is not a row write of its own, so record it explicitly.
     // Auditing must never break the sweep, and a Supabase query builder is
@@ -87,7 +90,7 @@ Deno.serve(async (request) => {
       try {
         await admin.rpc('log_activity', {
           p_summary: `Reconciled ${changed} Hubtel order${changed === 1 ? '' : 's'} that no callback settled`,
-          p_meta: { airtime, publicAirtime, utility, publicData, publicStore },
+          p_meta: { airtime, walletTopups, publicAirtime, utility, publicData, publicStore },
           p_actor_user_id: null,
         });
       } catch (logError) {
@@ -99,10 +102,10 @@ Deno.serve(async (request) => {
     // 0` every minute is exactly what a working sweep looks like, so a broken
     // one has to be visibly different from the outside, not only in the logs.
     if (unreadable > 0) {
-      return json({ success: false, changed, unreadable, airtime, publicAirtime, utility, publicData, publicStore }, 500);
+      return json({ success: false, changed, unreadable, airtime, walletTopups, publicAirtime, utility, publicData, publicStore }, 500);
     }
 
-    return json({ success: true, changed, airtime, publicAirtime, utility, publicData, publicStore });
+    return json({ success: true, changed, airtime, walletTopups, publicAirtime, utility, publicData, publicStore });
   } catch (error) {
     console.error('reconcile-hubtel-orders failed:', error);
     return json({ error: 'Reconciliation failed.' }, 500);
@@ -114,6 +117,90 @@ interface SweepResult {
   changed: number;
   /** The queue itself could not be read, so this table was not swept at all. */
   failed: boolean;
+}
+
+/** Hubtel wallet top-ups, including callbacks that were never delivered. */
+async function sweepWalletTopups(
+  admin: ReturnType<typeof adminClient>,
+  graceCutoff: string,
+  ageFloor: string,
+): Promise<SweepResult> {
+  const { data: topups, error } = await admin
+    .from('wallet_topups')
+    .select('id, payment_reference, provider_order_id, amount, gross_amount, fee_amount, provider_response, status, created_at')
+    .eq('provider', 'hubtel')
+    .eq('status', 'pending_payment')
+    .lt('created_at', graceCutoff)
+    .gt('created_at', ageFloor)
+    .order('created_at', { ascending: true })
+    .limit(MAX_ORDERS_PER_SWEEP);
+
+  if (error) {
+    console.error('Wallet top-up sweep read failed:', error);
+    return { checked: 0, changed: 0, failed: true };
+  }
+
+  let changed = 0;
+  for (const topup of topups ?? []) {
+    const reference = String(topup.payment_reference || '').trim();
+    if (!reference) continue;
+
+    try {
+      const stored = topup.provider_response && typeof topup.provider_response === 'object'
+        ? topup.provider_response as Record<string, unknown>
+        : {};
+      const callback = normalizeHubtel(stored);
+      let state = callback.state;
+      let amountGhs = callback.amountGhs;
+      let payload: Record<string, unknown> = stored;
+
+      // A persisted successful callback is sufficient because hubtel-webhook
+      // already authenticated the callback token/source and bound its
+      // ClientReference to this row. The status API is only the recovery path
+      // for a callback that never arrived.
+      if (state === 'pending' || !amountGhs) {
+        const verified = hubtelPaymentsVerifyConfigured()
+          ? await verifyHubtelCollection(reference)
+          : null;
+        if (!verified) continue;
+        state = verified.state;
+        amountGhs = verified.amountGhs;
+        payload = { ...stored, reconciliation: verified.payload };
+      }
+
+      if (state === 'pending') continue;
+
+      if (state === 'failed') {
+        const { error: failedError } = await admin.from('wallet_topups')
+          .update({ status: 'failed' })
+          .eq('id', topup.id)
+          .eq('status', 'pending_payment');
+        if (failedError) throw failedError;
+        changed += 1;
+        continue;
+      }
+
+      if (state !== 'success' || amountGhs === undefined
+        || !hubtelWalletAmountMatches(amountGhs, Number(topup.amount), Number(topup.gross_amount))) {
+        continue;
+      }
+
+      const { error: saveError } = await admin.from('wallet_topups').update({
+        provider_response: payload,
+        gross_amount: Math.round(amountGhs * 100) / 100,
+        fee_amount: Math.round((amountGhs - Number(topup.amount)) * 100) / 100,
+      }).eq('id', topup.id).eq('status', 'pending_payment');
+      if (saveError) throw saveError;
+
+      const { error: fulfilError } = await admin.rpc('fulfil_wallet_topup', { p_topup_id: topup.id });
+      if (fulfilError) throw fulfilError;
+      changed += 1;
+    } catch (settleError) {
+      console.error('Wallet top-up sweep settlement failed:', { reference, error: String(settleError) });
+    }
+  }
+
+  return { checked: (topups ?? []).length, changed, failed: false };
 }
 
 /** Airtime orders, settled against `airtime_orders`. */

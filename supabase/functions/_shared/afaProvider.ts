@@ -79,12 +79,17 @@ export function grandtechApiKey(): string {
  */
 export function afaCallbackUrl(): string {
   const explicit = Deno.env.get('GRANDTECH_AFA_CALLBACK');
-  if (explicit) return explicit;
-
   const supabaseUrl = (Deno.env.get('SUPABASE_URL') || '').replace(/\/+$/, '');
-  if (supabaseUrl) return `${supabaseUrl}/functions/v1/afa-webhook`;
-
-  return 'https://mxovqblxizvjsmudjsjf.supabase.co/functions/v1/afa-webhook';
+  const base = explicit || (supabaseUrl ? `${supabaseUrl}/functions/v1/afa-webhook` : 'https://mxovqblxizvjsmudjsjf.supabase.co/functions/v1/afa-webhook');
+  const secret = Deno.env.get('AFA_WEBHOOK_SECRET')?.trim();
+  if (!secret) return base;
+  try {
+    const callback = new URL(base);
+    callback.searchParams.set('secret', secret);
+    return callback.toString();
+  } catch {
+    return `${base}${base.includes('?') ? '&' : '?'}secret=${encodeURIComponent(secret)}`;
+  }
 }
 
 /**

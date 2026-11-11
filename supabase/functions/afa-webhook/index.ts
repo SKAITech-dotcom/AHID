@@ -85,11 +85,10 @@ Deno.serve(async (req) => {
 
   const afaId = String(body.afaId ?? body.afa_id ?? '').trim();
   const rawStatus = body.status;
-  const fullName = String(body.fullName ?? body.full_name ?? '').trim();
   const updatedAt = body.updatedAt ?? body.updated_at ?? null;
 
-  if (!afaId && !fullName) {
-    return json({ success: false, error: 'Missing afaId and fullName' }, 400);
+  if (!afaId) {
+    return json({ success: false, error: 'Missing afaId' }, 400);
   }
 
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -103,16 +102,12 @@ Deno.serve(async (req) => {
 
   const { status: mapped, failure } = mapStatus(rawStatus);
 
-  // Match on the provider id we stored at submission time. Fall back to the most
-  // recent registration for that name so an early callback still lands.
-  let query = supabase.from('afa_registrations').select('id, reference, status, agent_id, amount, provider_response');
-  if (afaId) {
-    query = query.eq('provider_reference', afaId);
-  } else {
-    query = query.eq('full_name', fullName);
-  }
-
-  const { data: found, error: findError } = await query
+  // Match only the provider reference. A name-only fallback would allow an
+  // unauthenticated caller to alter the newest registration for that name.
+  const { data: found, error: findError } = await supabase
+    .from('afa_registrations')
+    .select('id, reference, status, created_by, amount, provider_response')
+    .eq('provider_reference', afaId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -123,7 +118,7 @@ Deno.serve(async (req) => {
   }
 
   if (!found) {
-    console.warn(`afa-webhook: no registration matched afaId=${afaId} name=${fullName}`);
+    console.warn(`afa-webhook: no registration matched afaId=${afaId}`);
     return json({ success: false, error: 'Registration not found' }, 404);
   }
 
@@ -166,10 +161,10 @@ Deno.serve(async (req) => {
   }
 
   let refunded = false;
-  if (protectedStatus === 'Cancelled' && found.agent_id && !['Completed', 'Cancelled'].includes(String(found.status))) {
+  if (protectedStatus === 'Cancelled' && found.created_by && !['Completed', 'Cancelled'].includes(String(found.status))) {
     try {
       await refundWallet(
-        String(found.agent_id),
+        String(found.created_by),
         String(found.reference),
         Number(found.amount),
         'AFA registration cancelled by provider',

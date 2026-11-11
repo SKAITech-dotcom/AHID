@@ -460,7 +460,7 @@ Deno.serve(async (request) => {
             .range(from, to)),
           fetchAllRows((from, to) => admin
             .from('public_data_orders')
-            .select('id, payment_reference, short_code, provider_name, provider_reference, provider_status, provider_state, provider_response, customer_phone, customer_name, network_type, volume_mb, sale_amount, status, created_at')
+            .select('id, payment_reference, short_code, provider_name, provider_reference, provider_status, provider_state, provider_response, customer_phone, customer_name, network_type, volume_mb, sale_amount, status, manual_review_required, manual_review_reason, created_at')
             .order('created_at', { ascending: false })
             .range(from, to)),
           fetchAllRows((from, to) => admin
@@ -470,7 +470,7 @@ Deno.serve(async (request) => {
             .range(from, to)),
           fetchAllRows((from, to) => admin
             .from('store_orders')
-            .select('id, reference, short_code, product_type, product_label, network, recipient, platform_price, fulfilment_status, payment_status, provider, provider_reference, provider_status, provider_state, provider_response, created_at')
+            .select('id, reference, short_code, product_type, product_label, network, recipient, platform_price, fulfilment_status, payment_status, provider, provider_reference, provider_status, provider_state, provider_response, manual_review_required, manual_review_reason, created_at')
             .eq('product_type', 'data_bundle')
             .order('created_at', { ascending: false })
             .range(from, to)),

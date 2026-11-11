@@ -309,7 +309,8 @@ Deno.serve(async (request) => {
       .eq('id', topup.id);
     if (callbackSaveError) {
       console.error('[Hubtel wallet callback] Callback persistence failed', callbackSaveError);
-      return json({ received: true, settled: false }, 200);
+      // Hubtel must retry when the callback could not be durably stored.
+      return json({ received: false, settled: false, retryable: true }, 503);
     }
 
     if (isFailedCallback) {
@@ -343,14 +344,17 @@ Deno.serve(async (request) => {
         .eq('id', topup.id);
       if (amountSaveError) {
         console.error('[Hubtel wallet callback] Gross amount persistence failed', amountSaveError);
-        return json({ received: true, settled: false }, 200);
+        return json({ received: false, settled: false, retryable: true }, 503);
       }
     }
 
     const { error: creditError } = await admin.rpc('fulfil_wallet_topup', { p_topup_id: topup.id });
     if (creditError) {
       console.error('[Hubtel wallet callback] Wallet credit RPC failed', creditError);
-      return json({ received: true, settled: false }, 200);
+      // The callback is persisted and `fulfil_wallet_topup` is idempotent, so
+      // retrying is safe and prevents a transient database failure from
+      // permanently stranding a successful deposit.
+      return json({ received: false, settled: false, retryable: true }, 503);
     }
     return json({ received: true, settled: true });
   } catch (error) {
