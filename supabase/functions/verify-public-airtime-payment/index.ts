@@ -81,6 +81,7 @@ Deno.serve(async (request) => {
 
     let paymentConfirmed = false;
     const storedPayload = asRecord(order.provider_response);
+    let paymentPayload: Record<string, unknown> = storedPayload;
     // The checkout-init response is stored under `checkout`; it is not proof
     // that the customer paid. Only a root/Data callback payload may settle.
     const isCallbackPayload = !storedPayload.checkout && (
@@ -108,8 +109,9 @@ Deno.serve(async (request) => {
           return json(responseFor(order, 'pending_payment', 'Hubtel returned an amount that does not match this order.'));
         }
         paymentConfirmed = true;
+        paymentPayload = { ...storedPayload, paymentVerification: verified.payload };
         await admin.from('airtime_orders').update({
-          provider_response: { ...storedPayload, paymentVerification: verified.payload, lastPaymentCheckAt: new Date().toISOString() },
+          provider_response: { ...paymentPayload, lastPaymentCheckAt: new Date().toISOString() },
           provider_reference: order.provider_reference || verified.orderId || null,
           updated_at: new Date().toISOString(),
         }).eq('id', order.id);
@@ -123,6 +125,22 @@ Deno.serve(async (request) => {
     if (!paymentConfirmed) {
       return json(responseFor(order, 'pending_payment', 'Payment is not confirmed yet. Please complete Skaipay and try again.'));
     }
+
+    // The callback/status check proves that Hubtel collected the money. Move
+    // the durable payment state to `paid` before the one-time dispatch claim;
+    // otherwise the claim correctly refuses a row that still says
+    // `pending_payment`, leaving a genuinely paid airtime order stuck forever.
+    const { error: paidUpdateError } = await admin.from('airtime_orders').update({
+      payment_status: 'paid',
+      provider_reference: order.provider_reference || callback?.orderId || null,
+      provider_response: {
+        ...storedPayload,
+        paymentVerification: paymentPayload,
+        paymentConfirmedAt: new Date().toISOString(),
+      },
+      updated_at: new Date().toISOString(),
+    }).eq('id', order.id).eq('payment_status', 'pending_payment');
+    if (paidUpdateError) throw paidUpdateError;
 
     const { data: claimed, error: claimError } = await admin.rpc('claim_public_airtime_order', { p_order_id: order.id });
     if (claimError) throw claimError;
