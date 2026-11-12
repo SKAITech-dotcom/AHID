@@ -90,7 +90,7 @@ async function reconcileGuestAirtime(admin: ReturnType<typeof adminClient>, row:
   return row;
 }
 
-/** Lists a guest customer's own public data orders by recipient phone. */
+/** Lists a guest customer's public-checkout and agent-store orders by phone. */
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -104,7 +104,11 @@ Deno.serve(async (request) => {
     const phone = phoneVariants[0];
 
     const admin = adminClient();
-    const [{ data: rows, error }, { data: airtimeRows, error: airtimeError }] = await Promise.all([
+    const [
+      { data: rows, error },
+      { data: airtimeRows, error: airtimeError },
+      { data: storeCandidates, error: storeError },
+    ] = await Promise.all([
       admin
         .from('public_data_orders')
         .select('id, short_code, customer_phone, network_type, volume_mb, sale_amount, status, provider_name, provider_reference, provider_response, created_at')
@@ -119,9 +123,20 @@ Deno.serve(async (request) => {
         .in('recipient_phone', phoneVariants)
         .order('created_at', { ascending: false })
         .limit(50),
+      // Storefront customers do not have an agent session, but the durable
+      // store order belongs to the store owner. Read the small data-bundle
+      // candidate set and match the recipient/customer phone below so store
+      // purchases appear in the same guest tracker.
+      admin
+        .from('store_orders')
+        .select('id, short_code, reference, product_type, product_label, network, recipient, customer_phone, sale_amount, payment_status, fulfilment_status, provider, provider_reference, provider_response, meta, created_at')
+        .eq('product_type', 'data_bundle')
+        .order('created_at', { ascending: false })
+        .limit(200),
     ]);
     if (error) throw error;
     if (airtimeError) throw airtimeError;
+    if (storeError) throw storeError;
 
     const orders = [];
     for (const row of rows || []) {
@@ -171,6 +186,71 @@ Deno.serve(async (request) => {
         recipientPhone: row.customer_phone,
         network: row.network_type,
         volumeMb: Number(row.volume_mb || 0),
+        amount: Number(row.sale_amount || 0),
+        status,
+        statusLabel: statusLabel(status),
+        providerStatus,
+        createdAt: row.created_at,
+      });
+    }
+
+    for (const row of (storeCandidates || []).filter((candidate) => {
+      const customerPhone = normalizePhoneVariants(candidate.customer_phone);
+      const recipientPhone = normalizePhoneVariants(candidate.recipient);
+      return customerPhone.includes(phone) || recipientPhone.includes(phone);
+    })) {
+      const stored = asRecord(row.provider_response);
+      const paymentStatus = String(row.payment_status || 'pending').toLowerCase();
+      const fulfilmentStatus = String(row.fulfilment_status || 'pending').toLowerCase();
+      const providerValue = String(row.provider || stored.provider || '').trim().toLowerCase();
+      const provider = providerValue.includes('grandtech')
+        ? 'grandtech'
+        : providerValue.includes('swift')
+          ? 'swift'
+          : providerValue;
+      const providerOrderId = String(
+        row.provider_reference
+          || stored.providerOrderId
+          || stored.orderId
+          || stored.providerReference
+          || '',
+      ).trim();
+      let status = paymentStatus !== 'paid' && fulfilmentStatus === 'pending'
+        ? 'pending_payment'
+        : fulfilmentStatus;
+      let providerStatus = String(stored.lastProviderStatus || stored.providerStatus || fulfilmentStatus);
+
+      if (status === 'processing' && providerOrderId && (provider === 'swift' || provider === 'grandtech')) {
+        const live = await fetchDataOrderStatus(
+          provider as 'swift' | 'grandtech',
+          providerOrderId,
+          String(row.reference || ''),
+        ).catch(() => null);
+        if (live) {
+          providerStatus = live.status || providerStatus;
+          if (['successful', 'failed', 'cancelled'].includes(live.state)) status = live.state;
+          await admin.from('store_orders').update({
+            provider_reference: live.providerOrderId || providerOrderId,
+            provider_status: providerStatus,
+            provider_state: live.state,
+            last_status_checked_at: new Date().toISOString(),
+            provider_response: {
+              ...stored,
+              lastProviderStatus: providerStatus,
+              lastProviderState: live.state,
+              lastStatusCheckedAt: new Date().toISOString(),
+            },
+          }).eq('id', row.id);
+        }
+      }
+
+      const meta = asRecord(row.meta);
+      orders.push({
+        type: 'data',
+        orderCode: row.short_code,
+        recipientPhone: row.customer_phone || row.recipient,
+        network: row.network,
+        volumeMb: Number(meta.volume_mb || 0),
         amount: Number(row.sale_amount || 0),
         status,
         statusLabel: statusLabel(status),
