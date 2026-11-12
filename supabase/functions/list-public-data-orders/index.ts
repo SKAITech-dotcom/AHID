@@ -28,6 +28,14 @@ function airtimeStatusLabel(paymentStatus: unknown, airtimeStatus: unknown): str
   return 'Processing';
 }
 
+function normalizePhoneVariants(value: unknown): string[] {
+  const raw = String(value ?? '').trim().replace(/[\s()-]/g, '');
+  if (/^0\d{9}$/.test(raw)) return [raw, `+233${raw.slice(1)}`];
+  if (/^\+233\d{9}$/.test(raw)) return [`0${raw.slice(4)}`, raw];
+  if (/^233\d{9}$/.test(raw)) return [`0${raw.slice(3)}`, `+${raw}`];
+  return [];
+}
+
 async function reconcileGuestAirtime(admin: ReturnType<typeof adminClient>, row: Record<string, unknown>) {
   const reference = String(row.payment_reference || '').trim();
   const baseUrl = Deno.env.get('SUPABASE_URL')?.trim();
@@ -89,25 +97,26 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const phone = String(body.phone || '').trim();
-    if (!/^0\d{9}$/.test(phone)) {
+    const phoneVariants = normalizePhoneVariants(body.phone);
+    if (!phoneVariants.length) {
       return json({ error: 'Enter a valid 10-digit Ghana recipient phone number.' }, 400);
     }
+    const phone = phoneVariants[0];
 
     const admin = adminClient();
     const [{ data: rows, error }, { data: airtimeRows, error: airtimeError }] = await Promise.all([
       admin
         .from('public_data_orders')
         .select('id, short_code, customer_phone, network_type, volume_mb, sale_amount, status, provider_name, provider_reference, provider_response, created_at')
-        .eq('customer_phone', phone)
+        .is('agent_id', null)
+        .in('customer_phone', phoneVariants)
         .order('created_at', { ascending: false })
         .limit(50),
       admin
         .from('airtime_orders')
         .select('id, payment_reference, short_code, recipient_phone, network, amount, payment_status, airtime_status, provider_reference, provider_response, created_at')
-        .eq('recipient_phone', phone)
         .is('agent_id', null)
-        .eq('payment_method', 'hubtel')
+        .in('recipient_phone', phoneVariants)
         .order('created_at', { ascending: false })
         .limit(50),
     ]);
