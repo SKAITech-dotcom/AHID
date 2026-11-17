@@ -29,7 +29,12 @@ async function loadAgentSummary(agentId: string) {
 
   const qualified = (referrals || []).filter((row) => row.status === 'qualified');
   const rewardTotal = (rewards || []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
-  const code = normalizeCode(agent?.agent_code);
+  let code = normalizeCode(agent?.agent_code);
+  if (!code && agent?.id) {
+    const generatedCode = `AG${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    const { error: codeError } = await admin.from('agents').update({ agent_code: generatedCode }).eq('id', agent.id);
+    if (!codeError) code = generatedCode;
+  }
   return {
     success: true,
     referralCode: code,
@@ -55,6 +60,14 @@ Deno.serve(async (request) => {
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const action = text(body.action, 40).toLowerCase();
+
+    // supabase.functions.invoke() defaults to POST when the caller does not
+    // pass a method. Treat an empty POST like the read-only agent summary so an
+    // older cached referral page cannot surface a generic non-2xx error.
+    if (!action) {
+      const { user } = await requireAgent(request);
+      return json(await loadAgentSummary(user.id));
+    }
 
     if (action === 'record') {
       const { user } = await requireAgent(request);

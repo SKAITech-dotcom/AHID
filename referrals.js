@@ -11,7 +11,7 @@ function money(value) {
 async function loadReferrals() {
   const history = document.getElementById('referralHistory');
   try {
-    const { data, error } = await supabase.functions.invoke('manage-agent-referrals');
+    const { data, error } = await supabase.functions.invoke('manage-agent-referrals', { method: 'GET' });
     if (error || !data?.success) throw new Error(error?.message || data?.error || 'Unable to load referrals.');
 
     document.getElementById('referralLink').value = data.referralLink || 'Referral link unavailable';
