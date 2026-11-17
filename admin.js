@@ -211,6 +211,7 @@ function switchSection(sectionId) {
     'agents-module': { title: 'Agent Directory & Access Control', sub: 'Inspect registered agents, manage privileges, and cancel/suspend accounts' },
     'notifications-module': { title: 'Agent Notifications', sub: 'Send targeted or platform-wide announcements that agents can dismiss' },
     'payouts-module': { title: 'Commission Withdrawals', sub: 'Review, disburse, or refund agent store commission withdrawal requests' },
+    'referrals-module': { title: 'Agent Referrals', sub: 'Count qualified referrals and credit audited rewards to agent wallets' },
     'stores-module': { title: 'Agent Store Management', sub: 'Monitor agent storefronts, configure commissions, and review store orders' },
     'wallets-module': { title: 'User & Agent Wallets', sub: 'Inspect ledger balances, credit/debit funds manually, and audit histories' },
     'admins-module': { title: 'Admin User Management', sub: 'Super Admin Console: register, edit, and audit administrator accounts' },
@@ -247,6 +248,7 @@ async function refreshActiveSection() {
     else if (activeSection === 'agents-module') await loadAgentsModuleData();
     else if (activeSection === 'notifications-module') await loadNotificationsModuleData();
     else if (activeSection === 'payouts-module') await loadPayoutsData();
+    else if (activeSection === 'referrals-module') await loadReferralsData();
     else if (activeSection === 'stores-module') await loadStoresData();
     else if (activeSection === 'wallets-module') await loadWalletsData();
     else if (activeSection === 'admins-module' && isSuperAdmin) await loadAdminsData();
@@ -424,7 +426,10 @@ async function loadDataModuleData(options = {}) {
         const status = String(o.status || '').toLowerCase();
         const providerStatus = String(o.providerStatus || '').toLowerCase();
         const staleTerminal = status === 'successful' && ['pending', 'processing', 'queued', 'submitted', 'accepted'].includes(providerStatus);
-        return o.kind !== 'legacy' && (['pending', 'processing'].includes(status) || staleTerminal);
+        return o.kind !== 'legacy'
+          && Boolean(o.providerReference)
+          && !['failed', 'cancelled'].includes(status)
+          && (['pending', 'processing'].includes(status) || staleTerminal || status === 'successful');
       });
       if (activeOrders.length) {
         const changed = await syncActiveDataOrders(activeOrders.slice(0, 15));
@@ -593,8 +598,9 @@ async function syncAllActiveDataOrders() {
   const pendingOrders = cachedDataOrders.filter(o => {
     const status = String(o.status || '').toLowerCase();
     const providerStatus = String(o.providerStatus || '').toLowerCase();
-    return o.kind !== 'legacy' && (status === 'pending' || status === 'processing' ||
-      (status === 'successful' && ['pending', 'processing', 'queued', 'submitted', 'accepted'].includes(providerStatus)));
+    return o.kind !== 'legacy' && Boolean(o.providerReference) && !['failed', 'cancelled'].includes(status) &&
+      (status === 'pending' || status === 'processing' || status === 'successful' ||
+        ['pending', 'processing', 'queued', 'submitted', 'accepted'].includes(providerStatus));
   });
   if (!pendingOrders.length) {
     showToast('No active pending/processing orders to sync.', 'info');
@@ -2822,6 +2828,67 @@ async function sendAdminNotification(event) {
 }
 
 // -----------------------------------------------------------------------------
+// MODULE: AGENT REFERRALS
+// -----------------------------------------------------------------------------
+let cachedReferralAgents = [];
+
+async function loadReferralsData() {
+  const tbody = document.getElementById('adminReferralsTbody');
+  if (!tbody) return;
+  try {
+    const { data, error } = await supabase.functions.invoke('manage-agent-referrals', {
+      body: { action: 'admin-list' },
+    });
+    if (error || !data?.success) throw new Error(error?.message || data?.error || 'Unable to load referrals.');
+    cachedReferralAgents = Array.isArray(data.agents) ? data.agents : [];
+    if (!cachedReferralAgents.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:16px;">No agents found.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = cachedReferralAgents.map((agent) => {
+      const qualified = Number(agent.referralCount || 0);
+      const rewarded = Number(agent.rewardedReferralCount || 0);
+      const canReward = qualified > rewarded;
+      const agentName = escapeHtml(agent.full_name || 'Agent');
+      const code = escapeHtml(agent.agent_code || '—');
+      return `<tr>
+        <td><strong>${agentName}</strong></td>
+        <td><span style="font-family:monospace;">${code}</span></td>
+        <td>${escapeHtml(agent.phone || '—')}</td>
+        <td><strong>${qualified}</strong></td>
+        <td>${rewarded}</td>
+        <td style="color:#10b981;font-weight:700;">${money(agent.rewardTotal || 0)}</td>
+        <td style="font-size:.76rem;color:var(--text-dim);">${agent.lastReferralAt ? escapeHtml(new Date(agent.lastReferralAt).toLocaleString()) : '—'}</td>
+        <td>${canReward
+          ? `<button class="btn btn-primary btn-sm" onclick="rewardReferralAgent('${agent.id}', '${agentName}', ${qualified - rewarded})"><i class="fa-solid fa-gift"></i> Reward</button>`
+          : '<span style="color:var(--text-dim);font-size:.76rem;">Up to date</span>'}</td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    console.error('loadReferralsData error:', err);
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#ef4444;padding:16px;">${escapeHtml(err.message || 'Failed to load referrals.')}</td></tr>`;
+  }
+}
+
+async function rewardReferralAgent(agentId, agentName, newReferralCount) {
+  const amount = Number(window.prompt(`Reward ${agentName} for ${newReferralCount} new qualified referral${newReferralCount === 1 ? '' : 's'} (GHS):`, '0'));
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  const reason = window.prompt('Reward reason:', `Referral reward for ${newReferralCount} qualified referral${newReferralCount === 1 ? '' : 's'}`);
+  if (!reason?.trim()) return;
+  try {
+    const { data, error } = await supabase.functions.invoke('manage-agent-referrals', {
+      body: { action: 'reward', agentId, amount, reason: reason.trim() },
+    });
+    if (error || !data?.success) throw new Error(error?.message || data?.error || 'Referral reward failed.');
+    showToast(`Referral reward credited. Reference: ${data.data?.reference || 'created'}`, 'success');
+    await loadReferralsData();
+  } catch (err) {
+    console.error('rewardReferralAgent error:', err);
+    showToast(err.message || 'Referral reward failed.', 'error');
+  }
+}
+
+// -----------------------------------------------------------------------------
 // MODULE: COMMISSION WITHDRAWALS (STORE PAYOUTS)
 // -----------------------------------------------------------------------------
 let cachedPayoutsList = [];
@@ -3079,6 +3146,8 @@ window.submitManageAgent = submitManageAgent;
 window.loadNotificationsModuleData = loadNotificationsModuleData;
 window.sendAdminNotification = sendAdminNotification;
 window.loadPayoutsData = loadPayoutsData;
+window.loadReferralsData = loadReferralsData;
+window.rewardReferralAgent = rewardReferralAgent;
 window.filterPayouts = filterPayouts;
 window.openPayoutModal = openPayoutModal;
 window.closePayoutModal = closePayoutModal;

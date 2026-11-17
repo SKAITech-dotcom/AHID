@@ -851,6 +851,10 @@
         <i class="fa-solid fa-money-bill-transfer"></i>
         <span>Commission Withdrawals</span>
       </div>
+      <div class="nav-item" data-section="referrals-module">
+        <i class="fa-solid fa-user-group"></i>
+        <span>Agent Referrals</span>
+      </div>
       <div class="nav-item" data-section="stores-module">
         <i class="fa-solid fa-store"></i>
         <span>Agent Stores</span>
@@ -1711,6 +1715,33 @@
               </thead>
               <tbody id="payoutsTbody">
                 <tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 16px;">Loading commission withdrawal requests…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- MODULE: AGENT REFERRALS -->
+      <!-- ================================================================= -->
+      <section id="section-referrals-module" class="admin-section">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title"><i class="fa-solid fa-user-group"></i> Agent Referrals</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+                Qualified referrals are durable, counted once, and rewards are credited to the agent wallet with an audit reference.
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="loadReferralsData()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr><th>Agent</th><th>Code</th><th>Phone</th><th>Qualified</th><th>Rewarded</th><th>Reward total</th><th>Last referral</th><th>Action</th></tr>
+              </thead>
+              <tbody id="adminReferralsTbody">
+                <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:16px;">Open Agent Referrals to load data…</td></tr>
               </tbody>
             </table>
           </div>

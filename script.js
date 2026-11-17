@@ -223,6 +223,37 @@ function postAuthRedirect() {
   return queryRedirect || storedRedirect || 'dashboard.html';
 }
 
+function pendingReferralCode() {
+  const queryCode = new URLSearchParams(window.location.search).get('ref')
+    || new URLSearchParams(window.location.search).get('referral')
+    || '';
+  const code = String(queryCode || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+  try {
+    if (code) localStorage.setItem('skaitech_referral_code', code);
+    return code || localStorage.getItem('skaitech_referral_code') || '';
+  } catch (_) {
+    return code;
+  }
+}
+
+async function recordReferralAfterAuth(user) {
+  const referralCode = pendingReferralCode();
+  if (!referralCode || !user?.id) return;
+  try {
+    const { data, error } = await supabase.functions.invoke('manage-agent-referrals', {
+      body: { action: 'record', referralCode },
+    });
+    if (error) throw error;
+    if (data?.recorded || ['already_attributed', 'self_referral', 'referrer_not_found'].includes(data?.reason)) {
+      try { localStorage.removeItem('skaitech_referral_code'); } catch (_) {}
+    }
+  } catch (error) {
+    // Referral attribution must never prevent sign-in or account creation. The
+    // code remains in local storage so the next authenticated visit can retry.
+    console.warn('Referral attribution deferred:', error);
+  }
+}
+
 async function handleLogin(event) {
   if (event) event.preventDefault();
   const identifierInput = document.getElementById('loginEmail') || document.getElementById('regName');
@@ -307,6 +338,7 @@ async function handleLogin(event) {
     localStorage.setItem('agent_name', agentName);
     localStorage.setItem('currentAgentCode', effectiveAgentCode);
     localStorage.setItem('agent_role', effectiveRole);
+    await recordReferralAfterAuth(data.user);
 
     const explicitRedirect = safeAuthReturnTarget(new URLSearchParams(window.location.search).get('redirect'));
     const dest = explicitRedirect || (isPrimaryOwner || effectiveRole === 'super_admin' || effectiveRole === 'admin' ? 'admin.html' : postAuthRedirect());
@@ -360,6 +392,7 @@ async function handleRegistration(event) {
   }
 
   const generatedCode = generateAgentCode();
+  const referralCode = pendingReferralCode();
 
   try {
       const { data, error } = await supabase.auth.signUp({
@@ -370,7 +403,8 @@ async function handleRegistration(event) {
             full_name: agentName,
             phone: phone,
             agent_code: generatedCode,
-            role: 'agent'
+            role: 'agent',
+            referred_by_agent_code: referralCode || null,
           }
         }
       });
@@ -399,6 +433,7 @@ async function handleRegistration(event) {
       if (setupErrors.profileError || setupErrors.agentError || setupErrors.walletError) {
         console.warn('Profile/wallet setup was blocked; continuing with the authenticated session:', setupErrors);
       }
+      await recordReferralAfterAuth(data.user);
   } catch (err) {
     console.error('Supabase sign-up failed:', err);
     alert('Unable to create your account right now. Please try again.');
@@ -1567,6 +1602,7 @@ async function loadUserData() {
     currentPath.endsWith('agentWallet.html') ||
     currentPath.endsWith('deposit.html') ||
     currentPath.endsWith('store.html') ||
+    currentPath.endsWith('referrals.html') ||
     currentPath.endsWith('agentafa.html');
 
   // An existing authenticated user should not see the sign-in form again.

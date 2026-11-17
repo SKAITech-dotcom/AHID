@@ -21,6 +21,7 @@ const AGENT_PORTAL_ITEMS = [
   { page: 'deposit.html', icon: 'fa-money-bill-transfer', label: 'Deposit' },
   { page: 'agentAFA.HTML', icon: 'fa-users', label: 'Agent AFA' },
   { page: 'STORE.HTML', icon: 'fa-store', label: 'Store & Pricing' },
+  { page: 'referrals.html', icon: 'fa-user-group', label: 'Referrals' },
   { page: 'settings.html', icon: 'fa-user-gear', label: 'Settings' },
 ];
 

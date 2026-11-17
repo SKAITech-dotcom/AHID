@@ -161,7 +161,11 @@ Deno.serve(async (request) => {
       let status = String(row.status || 'pending_payment').toLowerCase();
       let providerStatus = String(stored.lastProviderStatus || stored.providerStatus || status);
 
-      if (['pending', 'processing'].includes(status) && providerOrderId && (provider === 'swift' || provider === 'grandtech')) {
+      // A customer lookup is also a live status check. Do not stop polling just
+      // because an older row was labelled successful; the provider may still
+      // report processing or a later failure. Payment remains a separate gate
+      // in verify-public-data-payment and is never inferred from this lookup.
+      if (!['failed', 'cancelled'].includes(status) && providerOrderId && (provider === 'swift' || provider === 'grandtech')) {
         const live = await fetchDataOrderStatus(
           provider as 'swift' | 'grandtech',
           providerOrderId,
@@ -220,7 +224,7 @@ Deno.serve(async (request) => {
         : fulfilmentStatus;
       let providerStatus = String(stored.lastProviderStatus || stored.providerStatus || fulfilmentStatus);
 
-      if (status === 'processing' && providerOrderId && (provider === 'swift' || provider === 'grandtech')) {
+      if (!['failed', 'cancelled'].includes(status) && providerOrderId && (provider === 'swift' || provider === 'grandtech')) {
         const live = await fetchDataOrderStatus(
           provider as 'swift' | 'grandtech',
           providerOrderId,

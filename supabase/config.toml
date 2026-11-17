@@ -56,6 +56,9 @@ verify_jwt = false
 [functions.list-public-data-orders]
 verify_jwt = false
 
+[functions.manage-agent-referrals]
+verify_jwt = true
+
 [functions.request-cashout-deposit]
 verify_jwt = true
 

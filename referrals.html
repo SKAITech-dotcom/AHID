@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base href="/">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Referrals | Skaitech</title>
+  <link rel="icon" type="image/jpeg" href="img/akaitech%20more%20final%20logo.jpeg?v=20261110-assets">
+  <link rel="stylesheet" href="css/style.css?v=20261110-assets">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .referral-page { max-width: 1080px; margin: 0 auto; padding: 28px 18px 60px; }
+    .referral-hero { background: linear-gradient(135deg, #0f172a, #1e3a8a); color: #fff; border-radius: 18px; padding: 26px; margin-bottom: 18px; }
+    .referral-hero h1 { margin: 0 0 8px; font-size: clamp(1.5rem, 3vw, 2rem); }
+    .referral-hero p { margin: 0; color: #dbeafe; }
+    .referral-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .referral-stat, .referral-panel { background: var(--card-bg, #fff); border: 1px solid var(--border-color, #e5e7eb); border-radius: 14px; padding: 18px; box-shadow: 0 8px 24px rgba(15, 23, 42, .06); }
+    .referral-stat small { display: block; color: var(--text-muted, #64748b); margin-bottom: 8px; }
+    .referral-stat strong { font-size: 1.6rem; color: var(--text-main, #0f172a); }
+    .referral-link-row { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+    .referral-link-row input { flex: 1; min-width: 0; padding: 12px; border: 1px solid var(--border-color, #d1d5db); border-radius: 9px; background: var(--input-bg, #fff); color: var(--text-main, #111827); }
+    .referral-note { color: var(--text-muted, #64748b); font-size: .86rem; line-height: 1.5; margin: 10px 0 0; }
+    .referral-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    .referral-table th, .referral-table td { padding: 11px 8px; border-bottom: 1px solid var(--border-color, #e5e7eb); text-align: left; font-size: .86rem; }
+    .referral-table th { color: var(--text-muted, #64748b); font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
+    .referral-empty { color: var(--text-muted, #64748b); padding: 18px 0; }
+    @media (max-width: 700px) { .referral-grid { grid-template-columns: 1fr; } .referral-link-row { align-items: stretch; flex-direction: column; } .referral-link-row button { width: 100%; } .referral-panel { overflow-x: auto; } }
+  </style>
+</head>
+<body class="dashboard-body">
+  <div id="agentShellHeader"></div>
+  <div id="agentShellDrawer"></div>
+  <div id="agentShellOverlay"></div>
+
+  <main class="referral-page">
+    <section class="referral-hero">
+      <h1>Refer and earn</h1>
+      <p>Share your Skaitech referral link. Qualified agent signups are counted here, and approved rewards are credited to your wallet.</p>
+      <div class="referral-link-row">
+        <input id="referralLink" readonly aria-label="Your referral link" placeholder="Loading your referral link…">
+        <button class="btn btn-primary" id="copyReferralBtn" type="button"><i class="fa-solid fa-copy"></i> Copy link</button>
+      </div>
+      <p class="referral-note">A referral is counted after the new agent completes sign-in. Each signup can be attributed only once.</p>
+    </section>
+
+    <section class="referral-grid" aria-label="Referral summary">
+      <div class="referral-stat"><small>Qualified referrals</small><strong id="referralCount">0</strong></div>
+      <div class="referral-stat"><small>Rewards credited</small><strong id="referralRewardTotal">GHS 0.00</strong></div>
+      <div class="referral-stat"><small>Your referral code</small><strong id="referralCode">—</strong></div>
+    </section>
+
+    <section class="referral-panel">
+      <h2 style="margin: 0; font-size: 1.1rem; color: var(--text-main, #0f172a);">Referral history</h2>
+      <div id="referralHistory" class="referral-empty">Loading referral history…</div>
+    </section>
+  </main>
+
+  <script type="module" src="agentNav.js?v=20261117"></script>
+  <script type="module" src="script.js?v=20261117-referrals"></script>
+  <script type="module" src="referrals.js?v=20261117"></script>
+</body>
+</html>
