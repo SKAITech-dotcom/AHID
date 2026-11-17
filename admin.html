@@ -849,7 +849,7 @@
       </div>
       <div class="nav-item" data-section="payouts-module">
         <i class="fa-solid fa-money-bill-transfer"></i>
-        <span>Commission Withdrawals</span>
+        <span>Store Commission Payments</span>
       </div>
       <div class="nav-item" data-section="referrals-module">
         <i class="fa-solid fa-user-group"></i>
@@ -1685,10 +1685,15 @@
 
         <div class="panel">
           <div class="panel-header">
-            <div class="panel-title"><i class="fa-solid fa-money-bill-transfer"></i> Agent Store Commission Withdrawal Requests</div>
+            <div>
+              <div class="panel-title"><i class="fa-solid fa-money-bill-transfer"></i> Store Commission Payments</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Record the manual MoMo/bank payment here. The agent commission balance is deducted once and both ledgers retain the payout and payment references.</div>
+            </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <select id="payoutStatusFilter" class="form-select" style="max-width: 150px;" onchange="filterPayouts()">
                 <option value="all">All Payouts</option>
+                <option value="requested">Requested</option>
+                <option value="approved">Approved</option>
                 <option value="pending">Pending</option>
                 <option value="processing">Processing</option>
                 <option value="paid">Paid</option>

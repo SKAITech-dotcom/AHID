@@ -570,8 +570,8 @@ function renderPayoutHistory(payouts) {
         const date = payout.requested_at ? new Date(payout.requested_at).toLocaleDateString() : '';
         const status = String(payout.status || '').toUpperCase();
         return `<div class="store-list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
-            <span class="amt" style="font-weight: 600;">GHS ${Number(payout.amount || 0).toFixed(2)}</span>
-            <span style="color: #6b7280; font-size: 13px;">${date}</span>
+            <span class="amt" style="font-weight: 600;">GHS ${Number(payout.amount || 0).toFixed(2)}<small style="display:block;color:#94a3b8;font-size:10px;">${escapeHtml(payout.reference || '')}</small>${payout.disbursement_reference ? `<small style="display:block;color:#16a34a;font-size:10px;">Paid ref: ${escapeHtml(payout.disbursement_reference)}</small>` : ''}</span>
+            <span style="color: #6b7280; font-size: 13px;">${date}${payout.paid_at ? `<small style="display:block;color:#16a34a;">Paid ${new Date(payout.paid_at).toLocaleDateString()}</small>` : ''}</span>
             <span class="store-pill" style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #eff6ff; color: #2563eb;">${status}</span>
         </div>`;
     }).join('');
@@ -608,16 +608,16 @@ async function loadPayouts() {
     // 2. Direct database query fallback
     if (!payoutsLoaded && currentAgentData?.id) {
         try {
-            const [accountRes, payoutsRes, ordersRes] = await Promise.all([
+            const [accountRes, payoutsRes, walletRes] = await Promise.all([
                 supabase.from('agent_payout_accounts').select('*').eq('agent_id', currentAgentData.id).maybeSingle(),
-                supabase.from('agent_payouts').select('*').eq('agent_id', currentAgentData.id).order('requested_at', { ascending: false }).limit(30),
-                supabase.from('store_orders').select('agent_earning').eq('agent_id', currentAgentData.id).eq('payment_status', 'paid')
+                supabase.from('agent_payouts').select('id, amount, status, reference, disbursement_reference, requested_at, paid_at, commission_debited').eq('agent_id', currentAgentData.id).order('requested_at', { ascending: false }).limit(30),
+                supabase.from('wallets').select('commission_balance').eq('id', currentAgentData.id).maybeSingle(),
             ]);
 
-            const totalEarnings = (ordersRes.data || []).reduce((sum, r) => sum + Number(r.agent_earning || 0), 0);
+            const totalEarnings = Number(walletRes.data?.commission_balance || 0);
             const payoutList = payoutsRes.data || [];
             const committed = payoutList
-                .filter(p => ['requested', 'approved', 'processing', 'paid'].includes(String(p.status).toLowerCase()))
+                .filter(p => ['requested', 'approved', 'processing', 'pending'].includes(String(p.status).toLowerCase()) && p.commission_debited !== true)
                 .reduce((sum, p) => sum + Number(p.amount || 0), 0);
             const available = Math.max(0, totalEarnings - committed);
 

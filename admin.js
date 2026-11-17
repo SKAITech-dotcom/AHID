@@ -2951,7 +2951,7 @@ function renderPayoutsTable(payouts) {
     const accName = snap.account_name ? ` (${snap.account_name})` : '';
     const network = snap.network ? `[${snap.network.toUpperCase()}] ` : '';
 
-    const isPending = p.status === 'pending' || p.status === 'processing';
+    const isPending = ['pending', 'requested', 'approved', 'processing'].includes(String(p.status || '').toLowerCase());
     const isPaid = p.status === 'paid';
     const isRejected = p.status === 'rejected';
 
@@ -2961,14 +2961,16 @@ function renderPayoutsTable(payouts) {
       ? '<span class="badge badge-failed"><i class="fa-solid fa-xmark"></i> Rejected</span>'
       : p.status === 'processing'
       ? '<span class="badge badge-network"><i class="fa-solid fa-spinner fa-spin"></i> Processing</span>'
+      : p.status === 'requested' || p.status === 'approved'
+      ? `<span class="badge badge-pending"><i class="fa-solid fa-clock"></i> ${escapeHtml(String(p.status).replace(/^./, (c) => c.toUpperCase()))}</span>`
       : '<span class="badge badge-pending"><i class="fa-solid fa-clock"></i> Pending</span>';
 
     let actions = '';
     if (isPending) {
       actions = `
         <div style="display: flex; gap: 4px;">
-          <button class="btn btn-primary btn-sm" onclick="openPayoutModal('${p.id}', '${escapeHtml(name)}', ${p.amount}, 'paid')" title="Approve & Mark Paid">
-            <i class="fa-solid fa-check"></i> Pay
+          <button class="btn btn-primary btn-sm" onclick="openPayoutModal('${p.id}', '${escapeHtml(name)}', ${p.amount}, 'paid')" title="Record manual payment and deduct commission">
+            <i class="fa-solid fa-check"></i> Record Payment
           </button>
           <button class="btn btn-danger btn-sm" onclick="openPayoutModal('${p.id}', '${escapeHtml(name)}', ${p.amount}, 'rejected')" title="Reject & Refund Commission">
             <i class="fa-solid fa-ban"></i> Reject
@@ -2986,7 +2988,7 @@ function renderPayoutsTable(payouts) {
         <td><strong style="color: #3b82f6;">${money(p.amount || 0)}</strong></td>
         <td><span class="badge badge-primary">${escapeHtml((p.method || 'momo').toUpperCase())}</span></td>
         <td><span>${network}${escapeHtml(accNumber)}${escapeHtml(accName)}</span></td>
-        <td><span style="font-family: monospace; font-size: 0.75rem;">${escapeHtml(p.reference || '—')}</span></td>
+        <td><span style="font-family: monospace; font-size: 0.75rem;">${escapeHtml(p.reference || '—')}</span>${p.disbursement_reference ? `<br><small style="color:var(--text-muted);">Paid: ${escapeHtml(p.disbursement_reference)}</small>` : ''}</td>
         <td style="color: var(--text-dim); font-size: 0.74rem;">${new Date(p.requested_at).toLocaleString()}</td>
         <td>${statusBadge}</td>
         <td>${actions}</td>
@@ -3038,7 +3040,7 @@ function handlePayoutDecisionChange() {
     if (input) input.placeholder = 'e.g. Hubtel CS Ref: #2027124-91823';
     if (btn) {
       btn.className = 'btn btn-primary';
-      btn.textContent = 'Confirm Payout Paid';
+      btn.textContent = 'Record Payment & Deduct Commission';
     }
   } else if (decision === 'rejected') {
     if (label) label.textContent = 'Rejection Reason (Refunds commission to agent wallet)';

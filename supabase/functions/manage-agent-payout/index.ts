@@ -8,13 +8,13 @@ import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supab
  * here - a request lands as `requested` for an admin to approve and settle from
  * the console, so the money movement stays a deliberate manual step.
  *
- * Available balance = settled store earnings (fulfilment `successful`, payment
- * `paid`) minus everything already requested or paid out.
+ * Available balance = the wallet's commission balance minus open payout
+ * reservations. Commission is deducted only when an admin records payment.
  */
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
-const OPEN_STATUSES = ['requested', 'approved', 'processing', 'paid'];
+const RESERVABLE_STATUSES = ['requested', 'approved', 'processing', 'pending'];
 
 function text(value: unknown, maxLength: number): string {
   return String(value ?? '').trim().slice(0, maxLength);
@@ -33,32 +33,36 @@ Deno.serve(async (request) => {
       .maybeSingle();
 
     if (request.method === 'GET') {
-      const [ordersRes, payoutsRes] = await Promise.all([
+      const [walletRes, ordersRes, payoutsRes] = await Promise.all([
+        admin.from('wallets').select('commission_balance, withdrawn_commission').eq('id', user.id).maybeSingle(),
         admin.from('store_orders')
           .select('agent_earning')
           .eq('agent_id', user.id)
           .eq('payment_status', 'paid')
           .eq('fulfilment_status', 'successful'),
         admin.from('agent_payouts')
-          .select('id, amount, status, method, reference, admin_note, requested_at, paid_at')
+          .select('id, amount, status, method, reference, admin_note, disbursement_reference, commission_debited, requested_at, paid_at')
           .eq('agent_id', user.id)
           .order('requested_at', { ascending: false })
           .limit(100),
       ]);
+      if (walletRes.error) throw walletRes.error;
       if (ordersRes.error) throw ordersRes.error;
       if (payoutsRes.error) throw payoutsRes.error;
 
       const settled = (ordersRes.data ?? []).reduce((sum, row) => sum + Number(row.agent_earning || 0), 0);
       const committed = (payoutsRes.data ?? [])
-        .filter((row) => OPEN_STATUSES.includes(String(row.status)))
+        .filter((row) => RESERVABLE_STATUSES.includes(String(row.status)) && row.commission_debited !== true)
         .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+      const commissionBalance = Number(walletRes.data?.commission_balance || 0);
 
       return json({
         account: account ?? null,
         balance: {
           settled: round2(settled),
           committed: round2(committed),
-          available: round2(Math.max(0, settled - committed)),
+          available: round2(Math.max(0, commissionBalance - committed)),
+          commissionBalance: round2(commissionBalance),
         },
         payouts: payoutsRes.data ?? [],
       });
@@ -112,37 +116,52 @@ Deno.serve(async (request) => {
           return json({ error: 'Save a payout account before requesting a payout.' }, 400);
         }
 
-        const { data: settledOrders, error: settledError } = await admin
-          .from('store_orders')
-          .select('agent_earning')
+        const [{ data: wallet, error: walletError }, { data: openPayouts, error: openError }] = await Promise.all([
+          admin.from('wallets').select('commission_balance').eq('id', user.id).maybeSingle(),
+          admin.from('agent_payouts')
+          .select('amount, status, commission_debited')
           .eq('agent_id', user.id)
-          .eq('payment_status', 'paid')
-          .eq('fulfilment_status', 'successful');
-        if (settledError) throw settledError;
-        const { data: openPayouts, error: openError } = await admin
-          .from('agent_payouts')
-          .select('amount, status')
-          .eq('agent_id', user.id)
-          .in('status', OPEN_STATUSES);
+          .in('status', RESERVABLE_STATUSES),
+        ]);
+        if (walletError) throw walletError;
         if (openError) throw openError;
 
-        const settled = (settledOrders ?? []).reduce((sum, row) => sum + Number(row.agent_earning || 0), 0);
-        const committed = (openPayouts ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
-        const available = round2(Math.max(0, settled - committed));
+        const committed = (openPayouts ?? [])
+          .filter((row) => row.commission_debited !== true)
+          .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+        const commissionBalance = Number(wallet?.commission_balance || 0);
+        const available = round2(Math.max(0, commissionBalance - committed));
         if (amount > available) {
           return json({ error: `You can request up to GHS ${available.toFixed(2)}.` }, 400);
         }
 
         const reference = `PAYOUT-${crypto.randomUUID()}`;
-        const { error: insertError } = await admin.from('agent_payouts').insert({
+        const { data: payout, error: insertError } = await admin.from('agent_payouts').insert({
           agent_id: user.id,
           amount,
           status: 'requested',
           method: account.method,
           account_snapshot: account,
           reference,
-        });
+          commission_debited: false,
+        }).select('id').single();
         if (insertError) throw insertError;
+        const { data: agentRow } = await admin.from('agents').select('agent_code').eq('id', user.id).maybeSingle();
+        const { error: transactionError } = await admin.from('transactions').insert({
+          agent_id: user.id,
+          agent_code: agentRow?.agent_code || null,
+          reference,
+          amount,
+          type: 'Commission Withdrawal',
+          description: 'Store commission payout requested; awaiting admin payment',
+          status: 'pending',
+          metadata: { payout_id: payout?.id || null, commission_debited: false },
+          created_at: new Date().toISOString(),
+        });
+        if (transactionError) {
+          if (payout?.id) await admin.from('agent_payouts').delete().eq('id', payout.id);
+          throw transactionError;
+        }
         return json({ success: true, reference, amount });
       }
 

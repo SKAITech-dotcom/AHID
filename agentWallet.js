@@ -373,20 +373,29 @@ async function handleWithdrawCommission() {
   }
 
   try {
-    const { data, error } = await supabase.rpc('withdraw_commission', {
-      p_agent_id: currentAgentUser.id,
-      p_amount: amount,
-      p_payout_method: method,
-      p_account_name: accountName,
-      p_account_number: accountNumber,
-      p_network: method === 'momo' ? network : null,
-      p_bank_name: method === 'bank' ? bankName : null,
+    const accountResult = await supabase.functions.invoke('manage-agent-payout', {
+      body: {
+        action: 'save-account',
+        method,
+        accountName,
+        accountNumber,
+        momoNetwork: method === 'momo' ? network : '',
+        bankName: method === 'bank' ? bankName : '',
+      },
     });
+    if (accountResult.error || accountResult.data?.error) {
+      throw new Error(accountResult.data?.error || accountResult.error?.message || 'Unable to save payout account.');
+    }
 
-    if (error) throw error;
+    const payoutResult = await supabase.functions.invoke('manage-agent-payout', {
+      body: { action: 'request', amount },
+    });
+    if (payoutResult.error || payoutResult.data?.error) {
+      throw new Error(payoutResult.data?.error || payoutResult.error?.message || 'Unable to submit payout request.');
+    }
 
     closeAllModals();
-    showToast(`Payout request for GHS ${amount.toFixed(2)} submitted for review!`);
+    showToast(`Payout request for GHS ${amount.toFixed(2)} submitted. Commission will be deducted after admin records payment.`);
     await refreshDashboard();
   } catch (err) {
     console.error('Withdraw commission error:', err);
