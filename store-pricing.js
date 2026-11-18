@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient.js';
+import { supabase, readFunctionError } from './supabaseClient.js';
 import { requireVerifiedAgent } from './agentAuthGuard.js';
 import { checkAgentAccessServer } from './agentAccessCheck.js';
 import { getAgentStoreUrl, getPlatformName } from './qrConfig.js';
@@ -126,6 +126,8 @@ async function saveStorePrices() {
         return;
     }
 
+    let persistedPrices = prices;
+
     // The protected edge function is the only write path. This keeps the
     // platform-price floor and the agent/store mirrors consistent instead of
     // allowing a direct browser upsert to bypass validation.
@@ -137,18 +139,57 @@ async function saveStorePrices() {
             headers
         });
         if (fnErr || fnData?.error) {
-            const message = fnData?.error || fnErr?.message || 'Unable to save your prices.';
+            const parsedError = fnErr ? await readFunctionError(fnErr) : null;
+            const message = fnData?.error || parsedError?.message || fnErr?.message || 'Unable to save your prices.';
             alert(String(message));
             return;
         }
+
+        const adjustedPrices = fnData?.adjustedPrices || {};
+        persistedPrices = { ...prices, ...adjustedPrices };
+        Object.entries(adjustedPrices).forEach(([key, value]) => {
+            const inputEl = document.getElementById(key);
+            if (inputEl) inputEl.value = Number(value).toFixed(2);
+            localStorage.setItem(key, String(value));
+        });
+
+        const adjustedCount = Object.keys(adjustedPrices).length;
+        if (adjustedCount > 0) {
+            alert(`✅ Prices saved. ${adjustedCount} price${adjustedCount === 1 ? '' : 's'} below the platform minimum were raised automatically.`);
+        } else {
+            alert("✅ All custom prices securely updated and saved to your storefront!");
+        }
     } catch (fnErr) {
-        alert(fnErr?.message || 'Unable to save your prices. Please try again.');
+        const parsedError = await readFunctionError(fnErr);
+        alert(parsedError.message || fnErr?.message || 'Unable to save your prices. Please try again.');
         return;
     }
 
-    alert("✅ All custom prices securely updated and saved to your storefront! Prices cannot be set below the platform price.");
-    Object.entries(prices).forEach(([key, value]) => localStorage.setItem(key, String(value)));
+    Object.entries(persistedPrices).forEach(([key, value]) => localStorage.setItem(key, String(value)));
     await loadStoreSettings();
+}
+
+async function loadPlatformPriceFloors() {
+    const { data, error } = await supabase
+        .from('bundle_catalog')
+        .select('network, volume_mb, price');
+    if (error) throw error;
+
+    (data || []).forEach(row => {
+        const network = String(row.network || '').toLowerCase().replace(/[-_]/g, '');
+        const volumeMb = Number(row.volume_mb);
+        const floor = Number(row.price);
+        if (!network || !Number.isFinite(volumeMb) || volumeMb <= 0 || !Number.isFinite(floor)) return;
+        const volumeGb = volumeMb / 1024;
+        if (!Number.isInteger(volumeGb)) return;
+
+        const inputEl = document.getElementById(`price_${network}_${volumeGb}gb`);
+        const current = Number(inputEl?.value);
+        if (inputEl && (!Number.isFinite(current) || current < floor)) {
+            inputEl.value = floor.toFixed(2);
+            localStorage.setItem(inputEl.id, inputEl.value);
+        }
+    });
 }
 
 // Withdrawal action handlers
@@ -190,6 +231,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             inputEl.value = savedValue;
         }
     });
+
+    // Keep stale HTML/local-storage defaults from submitting values below the
+    // current platform price floor after an admin changes the catalog.
+    try {
+        await loadPlatformPriceFloors();
+    } catch (floorErr) {
+        console.warn('Could not load live platform price floors:', floorErr);
+    }
 
     // 3. Directly load agent custom prices from Supabase agent_pricing table
     if (currentAgentData?.id) {

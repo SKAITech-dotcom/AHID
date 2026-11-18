@@ -99,6 +99,7 @@ Deno.serve(async (request) => {
         return json({ error: 'No valid prices provided to update.' }, 400);
       }
 
+      const adjustedPrices: Record<string, number> = {};
       const dataPriceRows = rowsToUpsert.filter((row) => row.pricing_key !== DISCOUNT_KEY);
       if (dataPriceRows.length > 0) {
         const { data: catalogRows, error: catalogError } = await admin
@@ -114,14 +115,18 @@ Deno.serve(async (request) => {
             && Number(candidate.volume_mb) === parsed.volumeInMB);
           const minimum = Number(catalogRow?.price ?? catalogPrice(parsed.network, parsed.volumeInMB));
           if (Number.isFinite(minimum) && row.price < minimum) {
-            return json({
-              error: `${parsed.network.toUpperCase()} ${parsed.volumeInMB / 1024}GB cannot be priced below the platform price of GHS ${minimum.toFixed(2)}.`,
-              code: 'price_below_platform_minimum',
-              minimumPrice: minimum,
-            }, 400);
+            // Older browser defaults/local storage can be below a newer
+            // platform floor. Keep the floor enforced, but normalize the row
+            // instead of failing the whole save request.
+            row.price = Math.round(minimum * 100) / 100;
+            adjustedPrices[row.pricing_key] = row.price;
           }
         }
       }
+
+      const effectivePrices = hasPrices
+        ? { ...prices, ...adjustedPrices }
+        : {};
 
       const { error: upsertError } = await admin
         .from('agent_pricing')
@@ -158,7 +163,7 @@ Deno.serve(async (request) => {
         }
 
         if (storeId && hasPrices) {
-          const storeProductRows = Object.entries(prices)
+          const storeProductRows = Object.entries(effectivePrices)
             .filter(([key, val]) => typeof key === 'string' && key.startsWith('price_') && Number.isFinite(Number(val)) && Number(val) > 0)
             .map(([key, val]) => ({
               store_id: storeId,
@@ -184,7 +189,7 @@ Deno.serve(async (request) => {
       // provisioning error never prevents custom prices from reaching the storefront.
       if (hasPrices) {
         try {
-          const agentPricesRows = Object.entries(prices)
+          const agentPricesRows = Object.entries(effectivePrices)
             .filter(([key, val]) => typeof key === 'string' && key.startsWith('price_') && Number.isFinite(Number(val)) && Number(val) >= 0)
             .map(([key, val]) => {
               const match = key.match(/^price_([a-z]+)_(.+)$/i);
@@ -235,7 +240,7 @@ Deno.serve(async (request) => {
         }
       }
 
-      return json({ success: true, count: rowsToUpsert.length, storeId, slug: storeSlug });
+      return json({ success: true, count: rowsToUpsert.length, storeId, slug: storeSlug, adjustedPrices });
     }
 
     return json({ error: 'Method not allowed' }, 405);
