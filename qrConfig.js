@@ -29,8 +29,11 @@ function cleanSlug(value) {
 export function getAgentStoreUrl(storeSlug, { withTracking = false } = {}) {
   const slug = cleanSlug(storeSlug);
   if (!slug) return '';
-  const url = `${getBaseOrigin()}/store/${encodeURIComponent(slug)}`;
-  return withTracking ? `${url}?ref=${QR_TRACKING_VALUE}` : url;
+  // Use the existing static storefront entrypoint. The custom Vercel domain
+  // serves this file reliably, while dynamic /store/:slug rewrites are not
+  // available on every connected host.
+  const url = `${getBaseOrigin()}/storefront.html?slug=${encodeURIComponent(slug)}`;
+  return withTracking ? `${url}&ref=${QR_TRACKING_VALUE}` : url;
 }
 
 export function getSystemRootUrl({ withTracking = false } = {}) {
