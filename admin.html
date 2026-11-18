@@ -338,6 +338,113 @@
       background: var(--card-hover);
     }
 
+    .admin-notification-wrap {
+      position: relative;
+    }
+    .admin-notification-badge {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border: 2px solid var(--sidebar-bg);
+      border-radius: 999px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 0.62rem;
+      line-height: 12px;
+      text-align: center;
+      font-weight: 700;
+    }
+    .admin-notification-dropdown {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      width: min(380px, calc(100vw - 32px));
+      max-height: 440px;
+      overflow: hidden;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+      z-index: 300;
+    }
+    .admin-notification-dropdown[hidden] {
+      display: none;
+    }
+    .admin-notification-dropdown-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-main);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    .admin-notification-dropdown-header button {
+      border: 0;
+      background: transparent;
+      color: var(--accent-light);
+      cursor: pointer;
+      font-size: 0.7rem;
+    }
+    .admin-notification-list {
+      max-height: 380px;
+      overflow-y: auto;
+    }
+    .admin-notification-item {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      padding: 12px 14px;
+      border: 0;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .admin-notification-item:hover,
+    .admin-notification-item.unread {
+      background: rgba(59, 130, 246, 0.08);
+    }
+    .admin-notification-item:last-child {
+      border-bottom: 0;
+    }
+    .admin-notification-icon {
+      display: grid;
+      place-items: center;
+      flex: 0 0 28px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(245, 158, 11, 0.16);
+      color: #fbbf24;
+      font-size: 0.76rem;
+    }
+    .admin-notification-copy {
+      min-width: 0;
+    }
+    .admin-notification-title {
+      color: var(--text-main);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .admin-notification-body {
+      margin-top: 3px;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      line-height: 1.4;
+    }
+    .admin-notification-time {
+      margin-top: 5px;
+      color: var(--text-dim);
+      font-size: 0.66rem;
+    }
+
     /* Content Area */
     .admin-content {
       padding: 20px 24px;
@@ -916,6 +1023,21 @@
         <div class="disbursement-pill" title="Live Disbursement Balance">
           <i class="fa-solid fa-vault"></i>
           <span>Disbursement [2027124]: <strong id="topbarDisbursementBal">Loading…</strong></span>
+        </div>
+        <div class="admin-notification-wrap">
+          <button type="button" class="btn-refresh" id="adminNotificationBtn" title="Admin notifications" aria-label="Admin notifications" aria-expanded="false">
+            <i class="fa-solid fa-bell"></i>
+            <span class="admin-notification-badge" id="adminNotificationBadge" hidden>0</span>
+          </button>
+          <div class="admin-notification-dropdown" id="adminNotificationDropdown" hidden>
+            <div class="admin-notification-dropdown-header">
+              <span>Admin notifications</span>
+              <button type="button" id="adminMarkNotificationsRead">Mark all read</button>
+            </div>
+            <div class="admin-notification-list" id="adminNotificationList">
+              <div style="padding: 16px; color: var(--text-muted); font-size: 0.74rem;">Loading notifications…</div>
+            </div>
+          </div>
         </div>
         <div class="status-pill">
           <span class="status-dot"></span>
@@ -2348,6 +2470,6 @@
 <div id="toast"><i class="fa-solid fa-circle-check" id="toastIcon"></i> <span id="toastMessage"></span></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="admin.js?v=20261118-qr"></script>
+<script type="module" src="admin.js?v=20261118-admin-notifications"></script>
 </body>
 </html>

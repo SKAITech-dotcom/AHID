@@ -24,6 +24,9 @@ let cachedWallets = [];
 let cachedAdmins = [];
 let selectedWalletUser = null;
 let activeSectionRefreshInProgress = false;
+let adminNotifications = [];
+let adminNotificationPoll = null;
+let adminNotificationLoginNoticeShown = false;
 
 // Constant Configurations
 const TV_PACKAGES = {
@@ -106,6 +109,144 @@ function showToast(message, type = 'success') {
   }, 4000);
 }
 
+function formatAdminNotificationDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Just now' : date.toLocaleString();
+}
+
+function adminNotificationIcon(kind) {
+  return kind === 'success' ? 'fa-circle-check' : kind === 'error' ? 'fa-circle-exclamation' : kind === 'info' ? 'fa-circle-info' : 'fa-bell';
+}
+
+function renderAdminNotifications() {
+  const list = document.getElementById('adminNotificationList');
+  const badge = document.getElementById('adminNotificationBadge');
+  if (!list || !badge) return;
+
+  const unreadCount = adminNotifications.filter((notification) => !notification.read_at).length;
+  badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+  badge.hidden = unreadCount === 0;
+
+  if (!adminNotifications.length) {
+    list.innerHTML = '<div style="padding: 16px; color: var(--text-muted); font-size: 0.74rem;">No notifications yet.</div>';
+    return;
+  }
+
+  list.innerHTML = adminNotifications.map((notification) => {
+    const kind = String(notification.kind || 'info');
+    const unreadClass = notification.read_at ? '' : ' unread';
+    return `
+      <button type="button" class="admin-notification-item${unreadClass}" data-admin-notification-id="${escapeHtml(notification.id)}">
+        <span class="admin-notification-icon"><i class="fa-solid ${adminNotificationIcon(kind)}"></i></span>
+        <span class="admin-notification-copy">
+          <span class="admin-notification-title">${escapeHtml(notification.title || 'Notification')}</span>
+          <span class="admin-notification-body">${escapeHtml(notification.body || '')}</span>
+          <span class="admin-notification-time">${escapeHtml(formatAdminNotificationDate(notification.created_at))}</span>
+        </span>
+      </button>
+    `;
+  }).join('');
+}
+
+async function loadAdminNotifications({ showLoginNotice = false } = {}) {
+  if (!currentUser) return;
+
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id, title, body, kind, read_at, created_at, order_table, order_id')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    if (error) throw error;
+
+    adminNotifications = data || [];
+    renderAdminNotifications();
+
+    const unreadPayout = adminNotifications.find((notification) => (
+      !notification.read_at && notification.order_table === 'agent_payouts'
+    ));
+    if (showLoginNotice && unreadPayout && !adminNotificationLoginNoticeShown) {
+      adminNotificationLoginNoticeShown = true;
+      showToast('New store commission withdrawal request. Open the bell to review it.', 'success');
+    }
+  } catch (error) {
+    // Notifications are auxiliary UI. A missing/temporarily unavailable list
+    // must not prevent the admin portal from loading its operational modules.
+    console.warn('loadAdminNotifications error:', error);
+  }
+}
+
+async function markAdminNotificationRead(notificationId) {
+  if (!currentUser || !notificationId) return;
+  const { error } = await supabase
+    .from('notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('id', notificationId)
+    .eq('user_id', currentUser.id);
+  if (error) throw error;
+}
+
+async function markAllAdminNotificationsRead() {
+  if (!currentUser) return;
+  const { error } = await supabase
+    .from('notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('user_id', currentUser.id)
+    .is('read_at', null);
+  if (error) throw error;
+  await loadAdminNotifications();
+}
+
+function bindAdminNotificationControls() {
+  const button = document.getElementById('adminNotificationBtn');
+  const dropdown = document.getElementById('adminNotificationDropdown');
+  const list = document.getElementById('adminNotificationList');
+  const markAllButton = document.getElementById('adminMarkNotificationsRead');
+  if (!button || !dropdown || !list || !markAllButton) return;
+
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const willOpen = dropdown.hidden;
+    dropdown.hidden = !willOpen;
+    button.setAttribute('aria-expanded', String(willOpen));
+    if (willOpen) loadAdminNotifications();
+  });
+
+  markAllButton.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    try {
+      await markAllAdminNotificationsRead();
+    } catch (error) {
+      console.error('markAllAdminNotificationsRead error:', error);
+      showToast('Notifications could not be marked as read.', 'error');
+    }
+  });
+
+  list.addEventListener('click', async (event) => {
+    const item = event.target.closest('[data-admin-notification-id]');
+    if (!item) return;
+    const notification = adminNotifications.find((row) => String(row.id) === String(item.dataset.adminNotificationId));
+    try {
+      if (notification && !notification.read_at) await markAdminNotificationRead(notification.id);
+      dropdown.hidden = true;
+      button.setAttribute('aria-expanded', 'false');
+      if (notification?.order_table === 'agent_payouts') switchSection('payouts-module');
+      await loadAdminNotifications();
+    } catch (error) {
+      console.error('admin notification click error:', error);
+      showToast('Notification could not be opened.', 'error');
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.admin-notification-wrap')) {
+      dropdown.hidden = true;
+      button.setAttribute('aria-expanded', 'false');
+    }
+  });
+}
+
 let systemQrState = null;
 
 async function loadSystemQrStats() {
@@ -174,6 +315,8 @@ async function initAdminPortal() {
     currentUser = authData.user;
     currentAgent = authData.agent;
     isSuperAdmin = authData.isSuperAdmin;
+    bindAdminNotificationControls();
+    await loadAdminNotifications({ showLoginNotice: true });
 
     // Render Admin Identity
     const avatarEl = document.getElementById('sidebarUserAvatar');
@@ -225,6 +368,11 @@ async function initAdminPortal() {
         refreshActiveSection();
       }
     }, 20000);
+
+    if (adminNotificationPoll) window.clearInterval(adminNotificationPoll);
+    adminNotificationPoll = window.setInterval(() => {
+      if (!document.hidden) loadAdminNotifications();
+    }, 30000);
 
     // Close sidebar on mobile clicking outside
     document.addEventListener('click', (e) => {

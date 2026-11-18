@@ -24,7 +24,7 @@ Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
 
   try {
-    const { admin, user } = await requireAgent(request);
+    const { admin, user, agent } = await requireAgent(request);
 
     const { data: account } = await admin
       .from('agent_payout_accounts')
@@ -162,6 +162,43 @@ Deno.serve(async (request) => {
           if (payout?.id) await admin.from('agent_payouts').delete().eq('id', payout.id);
           throw transactionError;
         }
+
+        // Keep the admin informed without making notification delivery part of
+        // the financial request. The payout and transaction are already saved;
+        // an unavailable notification row must never make the agent retry and
+        // risk creating a duplicate withdrawal request.
+        try {
+          const { data: admins, error: adminsError } = await admin
+            .from('agents')
+            .select('id, full_name, role, status, is_active')
+            .in('role', ['admin', 'super_admin']);
+          if (adminsError) throw adminsError;
+
+          const recipients = (admins || []).filter((row) => (
+            (row.status === 'active' || row.id === user.id) && row.is_active !== false
+          ));
+          if (['admin', 'super_admin'].includes(String(agent?.role)) && !recipients.some((row) => row.id === user.id)) {
+            recipients.push({ id: user.id });
+          }
+          if (recipients.length && payout?.id) {
+            const agentName = text(agent?.full_name, 120) || text(agentRow?.agent_code, 80) || 'An agent';
+            const notificationRows = recipients.map((recipient) => ({
+              user_id: recipient.id,
+              title: 'New Store Commission Withdrawal',
+              body: `${agentName} requested GHS ${amount.toFixed(2)} from store commission. Review it in Store Commission Payments.`,
+              kind: 'warning',
+              order_table: 'agent_payouts',
+              order_id: payout.id,
+            }));
+            const { error: notificationError } = await admin
+              .from('notifications')
+              .insert(notificationRows);
+            if (notificationError) throw notificationError;
+          }
+        } catch (notificationError) {
+          console.error('manage-agent-payout notification error:', notificationError);
+        }
+
         return json({ success: true, reference, amount });
       }
 
