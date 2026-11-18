@@ -1,5 +1,7 @@
 import { supabase } from './supabaseClient.js';
 import { requireAdminAccess, PRIMARY_SUPER_ADMIN_EMAIL } from './agentAuthGuard.js';
+import { getAgentStoreUrl, getPlatformName, getSystemRootUrl } from './qrConfig.js';
+import { copyText, downloadCanvas, printQrCanvas, renderHighResolutionQr, shareQr } from './qrFeature.js';
 
 // Application State
 let currentUser = null;
@@ -104,6 +106,63 @@ function showToast(message, type = 'success') {
   }, 4000);
 }
 
+let systemQrState = null;
+
+async function loadSystemQrStats() {
+  const countEl = document.getElementById('systemQrScanCount');
+  if (!countEl) return;
+  const { count, error } = await supabase
+    .from('qr_scans')
+    .select('id', { count: 'exact', head: true })
+    .eq('scan_type', 'admin_system');
+  if (!error) countEl.textContent = `${Number(count || 0).toLocaleString()} system QR scans`;
+}
+
+async function openSystemQrModal() {
+  const cleanUrl = getSystemRootUrl();
+  const trackedUrl = getSystemRootUrl({ withTracking: true });
+  const canvas = document.getElementById('systemQrCanvas');
+  try {
+    await renderHighResolutionQr(canvas, trackedUrl);
+    systemQrState = { cleanUrl, trackedUrl };
+    document.getElementById('systemQrPlatformName').textContent = getPlatformName();
+    document.getElementById('systemQrUrl').textContent = cleanUrl;
+    document.getElementById('systemQrModal')?.classList.add('open');
+    await loadSystemQrStats();
+  } catch (error) {
+    showToast(error.message || 'Unable to create the system QR code.', 'error');
+  }
+}
+
+function closeSystemQrModal() {
+  document.getElementById('systemQrModal')?.classList.remove('open');
+}
+
+function saveSystemQr() {
+  if (downloadCanvas(document.getElementById('systemQrCanvas'), 'system-qr-code.png')) {
+    showToast('System QR code downloaded.', 'success');
+  }
+}
+
+async function copySystemQrLink() {
+  if (systemQrState && await copyText(systemQrState.cleanUrl)) showToast('System link copied.', 'success');
+}
+
+async function shareSystemQr() {
+  if (!systemQrState) return;
+  try {
+    const result = await shareQr({ title: getPlatformName(), text: 'Visit the Skaitech platform:', url: systemQrState.cleanUrl });
+    showToast(result === 'shared' ? 'System QR shared.' : 'System link copied.', 'success');
+  } catch (_) { /* User cancelled native sharing. */ }
+}
+
+function printSystemQr() {
+  if (!systemQrState) return;
+  if (!printQrCanvas(document.getElementById('systemQrCanvas'), getPlatformName(), systemQrState.cleanUrl)) {
+    showToast('Allow pop-ups to print the system QR code.', 'error');
+  }
+}
+
 // -----------------------------------------------------------------------------
 // INITIALIZATION & SECURITY CHECK
 // -----------------------------------------------------------------------------
@@ -158,6 +217,7 @@ async function initAdminPortal() {
 
     // Load the default operational view.
     await loadDataModuleData();
+    loadSystemQrStats().catch((error) => console.warn('System QR analytics notice:', error));
 
     // Keep operational order statuses current while an admin is watching them.
     window.setInterval(() => {
@@ -1426,7 +1486,7 @@ function renderStoresList(stores) {
         <td>
           <div style="display: flex; gap: 4px;">
             ${toggleBtn}
-            <a href="/storefront.html?ref=${encodeURIComponent(s.slug)}" target="_blank" class="btn btn-secondary btn-sm"><i class="fa-solid fa-eye"></i> View</a>
+            <a href="${getAgentStoreUrl(s.slug)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm"><i class="fa-solid fa-eye"></i> View</a>
           </div>
         </td>
       </tr>
@@ -2842,7 +2902,7 @@ async function loadReferralsData() {
     if (error || !data?.success) throw new Error(error?.message || data?.error || 'Unable to load referrals.');
     cachedReferralAgents = Array.isArray(data.agents) ? data.agents : [];
     if (!cachedReferralAgents.length) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:16px;">No agents found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:16px;">No agents found.</td></tr>';
       return;
     }
     tbody.innerHTML = cachedReferralAgents.map((agent) => {
@@ -2851,9 +2911,11 @@ async function loadReferralsData() {
       const canReward = qualified > rewarded;
       const agentName = escapeHtml(agent.full_name || 'Agent');
       const code = escapeHtml(agent.agent_code || '—');
+      const referralSlug = escapeHtml(agent.referral_slug || '—');
       return `<tr>
         <td><strong>${agentName}</strong></td>
         <td><span style="font-family:monospace;">${code}</span></td>
+        <td><span style="font-family:monospace;">${referralSlug}</span></td>
         <td>${escapeHtml(agent.phone || '—')}</td>
         <td><strong>${qualified}</strong></td>
         <td>${rewarded}</td>
@@ -2866,7 +2928,7 @@ async function loadReferralsData() {
     }).join('');
   } catch (err) {
     console.error('loadReferralsData error:', err);
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#ef4444;padding:16px;">${escapeHtml(err.message || 'Failed to load referrals.')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#ef4444;padding:16px;">${escapeHtml(err.message || 'Failed to load referrals.')}</td></tr>`;
   }
 }
 
@@ -3180,6 +3242,12 @@ window.promptResetAdminPassword = promptResetAdminPassword;
 window.promptRevokeAdmin = promptRevokeAdmin;
 window.copyToClipboard = copyToClipboard;
 window.handleAdminLogout = handleAdminLogout;
+window.openSystemQrModal = openSystemQrModal;
+window.closeSystemQrModal = closeSystemQrModal;
+window.saveSystemQr = saveSystemQr;
+window.copySystemQrLink = copySystemQrLink;
+window.shareSystemQr = shareSystemQr;
+window.printSystemQr = printSystemQr;
 
 // Boot on DOM Ready
 document.addEventListener('DOMContentLoaded', initAdminPortal);

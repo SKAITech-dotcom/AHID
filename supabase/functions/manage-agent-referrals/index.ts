@@ -10,10 +10,26 @@ function normalizeCode(value: unknown): string {
   return text(value, 40).toUpperCase().replace(/[^A-Z0-9_-]/g, '');
 }
 
+function normalizeSlug(value: unknown): string {
+  return text(value, 80)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function fallbackSlug(name: unknown, agentId: string): string {
+  const base = normalizeSlug(name) || 'agent';
+  const suffix = agentId.replace(/-/g, '').slice(0, 8);
+  return `${base.slice(0, Math.max(1, 80 - suffix.length - 1))}-${suffix}`;
+}
+
 async function loadAgentSummary(agentId: string) {
   const admin = adminClient();
   const [{ data: agent, error: agentError }, { data: referrals, error: referralsError }, { data: rewards, error: rewardsError }] = await Promise.all([
-    admin.from('agents').select('id, full_name, phone, agent_code').eq('id', agentId).maybeSingle(),
+    admin.from('agents').select('id, full_name, phone, agent_code, referral_slug').eq('id', agentId).maybeSingle(),
     admin.from('agent_referrals')
       .select('id, referral_code, status, source, created_at, qualified_at')
       .eq('referrer_agent_id', agentId)
@@ -35,10 +51,17 @@ async function loadAgentSummary(agentId: string) {
     const { error: codeError } = await admin.from('agents').update({ agent_code: generatedCode }).eq('id', agent.id);
     if (!codeError) code = generatedCode;
   }
+  let slug = normalizeSlug(agent?.referral_slug);
+  if (!slug && agent?.id) {
+    const generatedSlug = fallbackSlug(agent.full_name, agent.id);
+    const { error: slugError } = await admin.from('agents').update({ referral_slug: generatedSlug }).eq('id', agent.id);
+    if (!slugError) slug = generatedSlug;
+  }
   return {
     success: true,
     referralCode: code,
-    referralLink: code ? `${PUBLIC_SITE}/login.html?register=true&ref=${encodeURIComponent(code)}` : '',
+    referralSlug: slug,
+    referralLink: slug ? `${PUBLIC_SITE}/login.html?register=true&ref=${encodeURIComponent(slug)}` : '',
     count: qualified.length,
     referrals: referrals || [],
     rewards: rewards || [],
@@ -71,15 +94,29 @@ Deno.serve(async (request) => {
 
     if (action === 'record') {
       const { user } = await requireAgent(request);
+      const referralSlug = normalizeSlug(body.referralSlug);
       const referralCode = normalizeCode(body.referralCode);
-      if (!referralCode) return json({ success: true, recorded: false, reason: 'missing_code' });
+      if (!referralSlug && !referralCode) return json({ success: true, recorded: false, reason: 'missing_referral' });
 
-      const { data: referrer, error: referrerError } = await admin
-        .from('agents')
-        .select('id, agent_code, status, is_active')
-        .eq('agent_code', referralCode)
-        .maybeSingle();
+      let referrer: any = null;
+      let referrerError: any = null;
+      if (referralSlug) {
+        ({ data: referrer, error: referrerError } = await admin
+          .from('agents')
+          .select('id, agent_code, referral_slug, status, is_active')
+          .eq('referral_slug', referralSlug)
+          .maybeSingle());
+      }
       if (referrerError) throw referrerError;
+      // Keep old shared links working after the migration.
+      if (!referrer && referralCode) {
+        ({ data: referrer, error: referrerError } = await admin
+          .from('agents')
+          .select('id, agent_code, referral_slug, status, is_active')
+          .eq('agent_code', referralCode)
+          .maybeSingle());
+        if (referrerError) throw referrerError;
+      }
       if (!referrer || referrer.is_active === false || String(referrer.status || 'active') !== 'active') {
         return json({ success: true, recorded: false, reason: 'referrer_not_found' });
       }
@@ -96,7 +133,7 @@ Deno.serve(async (request) => {
       const { error } = await admin.from('agent_referrals').insert({
         referrer_agent_id: referrer.id,
         referred_agent_id: user.id,
-        referral_code: referralCode,
+        referral_code: referrer.referral_slug || referralSlug || referralCode,
         status: 'qualified',
         source: 'signup',
         qualified_at: new Date().toISOString(),
@@ -111,7 +148,7 @@ Deno.serve(async (request) => {
     if (action === 'admin-list') {
       const { user: adminUser } = await requireAdmin(request);
       const [{ data: agents, error: agentsError }, { data: referrals, error: referralsError }, { data: rewards, error: rewardsError }] = await Promise.all([
-        admin.from('agents').select('id, full_name, phone, agent_code, status, is_active').order('created_at', { ascending: false }),
+        admin.from('agents').select('id, full_name, phone, agent_code, referral_slug, status, is_active').order('created_at', { ascending: false }),
         admin.from('agent_referrals').select('id, referrer_agent_id, referred_agent_id, referral_code, status, created_at, qualified_at').order('created_at', { ascending: false }),
         admin.from('agent_referral_rewards').select('agent_id, referral_count, referrals_covered, amount, reason, created_at').order('created_at', { ascending: false }),
       ]);

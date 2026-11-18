@@ -1,6 +1,9 @@
 import { supabase } from './supabaseClient.js';
 import { checkAgentAccessServer, fetchAgentTransactions } from './agentAccessCheck.js';
 import { fetchStandardBundleCatalog } from './bundleCatalogClient.js';
+import { recordQrScan } from './qrConfig.js';
+
+recordQrScan({ scanType: 'admin_system' }).catch(() => {});
 /* ==========================================================================
    SKAITECH MASTER APPLICATION SCRIPT
    ========================================================================== */
@@ -223,29 +226,35 @@ function postAuthRedirect() {
   return queryRedirect || storedRedirect || 'dashboard.html';
 }
 
-function pendingReferralCode() {
-  const queryCode = new URLSearchParams(window.location.search).get('ref')
+function pendingReferralIdentifier() {
+  const queryIdentifier = new URLSearchParams(window.location.search).get('ref')
     || new URLSearchParams(window.location.search).get('referral')
     || '';
-  const code = String(queryCode || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+  const identifier = String(queryIdentifier || '').trim().slice(0, 80);
   try {
-    if (code) localStorage.setItem('skaitech_referral_code', code);
-    return code || localStorage.getItem('skaitech_referral_code') || '';
+    if (identifier) localStorage.setItem('skaitech_referral_identifier', identifier);
+    return identifier
+      || localStorage.getItem('skaitech_referral_identifier')
+      || localStorage.getItem('skaitech_referral_code')
+      || '';
   } catch (_) {
-    return code;
+    return identifier;
   }
 }
 
 async function recordReferralAfterAuth(user) {
-  const referralCode = pendingReferralCode();
-  if (!referralCode || !user?.id) return;
+  const referralIdentifier = pendingReferralIdentifier();
+  if (!referralIdentifier || !user?.id) return;
   try {
     const { data, error } = await supabase.functions.invoke('manage-agent-referrals', {
-      body: { action: 'record', referralCode },
+      body: { action: 'record', referralSlug: referralIdentifier, referralCode: referralIdentifier },
     });
     if (error) throw error;
     if (data?.recorded || ['already_attributed', 'self_referral', 'referrer_not_found'].includes(data?.reason)) {
-      try { localStorage.removeItem('skaitech_referral_code'); } catch (_) {}
+      try {
+        localStorage.removeItem('skaitech_referral_identifier');
+        localStorage.removeItem('skaitech_referral_code');
+      } catch (_) {}
     }
   } catch (error) {
     // Referral attribution must never prevent sign-in or account creation. The
@@ -392,7 +401,7 @@ async function handleRegistration(event) {
   }
 
   const generatedCode = generateAgentCode();
-  const referralCode = pendingReferralCode();
+  const referralIdentifier = pendingReferralIdentifier();
 
   try {
       const { data, error } = await supabase.auth.signUp({
@@ -404,7 +413,8 @@ async function handleRegistration(event) {
             phone: phone,
             agent_code: generatedCode,
             role: 'agent',
-            referred_by_agent_code: referralCode || null,
+            referred_by_agent_slug: referralIdentifier || null,
+            referred_by_agent_code: referralIdentifier || null,
           }
         }
       });

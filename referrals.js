@@ -15,7 +15,7 @@ async function loadReferrals() {
     if (error || !data?.success) throw new Error(error?.message || data?.error || 'Unable to load referrals.');
 
     document.getElementById('referralLink').value = data.referralLink || 'Referral link unavailable';
-    document.getElementById('referralCode').textContent = data.referralCode || '—';
+    document.getElementById('referralCode').textContent = data.referralSlug || data.referralCode || '—';
     document.getElementById('referralCount').textContent = String(data.count || 0);
     document.getElementById('referralRewardTotal').textContent = money(data.rewardTotal);
 

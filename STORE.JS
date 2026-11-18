@@ -1,7 +1,10 @@
 import { supabase } from './supabaseClient.js';
 import { requireVerifiedAgent } from './agentAuthGuard.js';
+import { getAgentStoreUrl, getPlatformName } from './qrConfig.js';
+import { copyText, downloadCanvas, renderHighResolutionQr, shareQr } from './qrFeature.js';
 
 let currentAgentData = null;
+let agentQrState = null;
 
 // ============================================================================
 // DECOUPLED STATE FOR AGENT ORDERS
@@ -249,24 +252,55 @@ window.addEventListener('hashchange', () => {
     }
 });
 
-const PUBLIC_STORE_ORIGIN = 'https://skaitechgh.com';
+async function refreshAgentQr(store, effectiveSlug) {
+    const button = document.getElementById('openStoreQrBtn');
+    const countEl = document.getElementById('storeQrScanCount');
+    const slug = store?.slug || effectiveSlug || '';
+    if (!slug) return;
 
-// Builds the public storefront URL for local previews or the live custom domain.
-function storeBaseUrl() {
-    if (typeof window !== 'undefined' && window.location && window.location.origin) {
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            const origin = window.location.origin;
-            const pathname = window.location.pathname;
-            const repoSegment = pathname.split('/').filter(Boolean)[0];
-            return repoSegment && pathname.includes(`/${repoSegment}/`)
-                ? `${origin}/${repoSegment}`
-                : origin;
-        }
-        if (window.location.hostname.includes('wasmer.app')) {
-            return window.location.origin;
-        }
+    const cleanUrl = getAgentStoreUrl(slug);
+    agentQrState = {
+        slug,
+        cleanUrl,
+        trackedUrl: getAgentStoreUrl(slug, { withTracking: true }),
+        storeName: store?.displayName || currentAgentData?.full_name || getPlatformName(),
+    };
+    if (button) button.disabled = false;
+    if (countEl && currentAgentData?.id) {
+        const { count, error } = await supabase
+            .from('qr_scans')
+            .select('id', { count: 'exact', head: true })
+            .eq('scan_type', 'agent_store')
+            .eq('agent_id', currentAgentData.id);
+        if (!error) countEl.textContent = `${Number(count || 0).toLocaleString()} QR scans`;
     }
-    return PUBLIC_STORE_ORIGIN;
+}
+
+async function openStoreQrModal() {
+    if (!agentQrState) return;
+    const modal = document.getElementById('storeQrModal');
+    const canvas = document.getElementById('storeQrCanvas');
+    const urlEl = document.getElementById('storeQrUrl');
+    try {
+        await renderHighResolutionQr(canvas, agentQrState.trackedUrl);
+        const nameEl = document.getElementById('storeQrStoreName');
+        if (nameEl) nameEl.textContent = agentQrState.storeName;
+        if (urlEl) urlEl.textContent = agentQrState.cleanUrl;
+        modal?.classList.add('open');
+    } catch (error) {
+        alert(error.message || 'Unable to create the store QR code.');
+    }
+}
+
+function closeStoreQrModal() {
+    document.getElementById('storeQrModal')?.classList.remove('open');
+}
+
+function notifyQrAction(button, label) {
+    if (!button) return;
+    const original = button.innerHTML;
+    button.innerHTML = `<i class="fa-solid fa-check"></i> ${label}`;
+    window.setTimeout(() => { button.innerHTML = original; }, 2000);
 }
 
 async function loadStoreSettings() {
@@ -345,17 +379,17 @@ async function loadStoreSettings() {
         }
     }
 
-    // 4. Safely construct dynamic storefront link incorporating agent name/slug
+    // 4. Construct one dynamic storefront link used by the visible link and QR code.
     const effectiveSlug = store?.slug || (currentAgentData?.agent_code ? currentAgentData.agent_code.toLowerCase() : (currentAgentData?.id ? 'store-' + currentAgentData.id.slice(0, 8) : ''));
-    const agentParam = store?.slug || currentAgentData?.agent_code?.toLowerCase() || (currentAgentData?.full_name
-        ? currentAgentData.full_name.trim().replace(/\s+/g, '_').toUpperCase()
-        : effectiveSlug);
+    const publicStoreUrl = getAgentStoreUrl(effectiveSlug);
 
-    if (linkInput && agentParam) {
-        linkInput.value = `${storeBaseUrl()}/storefront.html?ref=${encodeURIComponent(agentParam)}`;
+    if (linkInput && publicStoreUrl) {
+        linkInput.value = publicStoreUrl;
+        linkInput.dataset.storeSlug = effectiveSlug;
     } else if (linkInput && !linkInput.value) {
         linkInput.placeholder = 'Store link will appear here once saved';
     }
+    await refreshAgentQr(store, effectiveSlug);
 
     // 5. Populate form fields
     const set = (id, value) => { const el = document.getElementById(id); if (el && value !== undefined && value !== null) el.value = value; };
@@ -712,6 +746,27 @@ async function requestPayout() {
         alert(err.message || 'Unable to submit the payout request.');
     }
 }
+
+document.getElementById('openStoreQrBtn')?.addEventListener('click', openStoreQrModal);
+document.getElementById('closeStoreQrBtn')?.addEventListener('click', closeStoreQrModal);
+document.getElementById('storeQrModal')?.addEventListener('click', (event) => {
+    if (event.target.id === 'storeQrModal') closeStoreQrModal();
+});
+document.getElementById('saveStoreQrBtn')?.addEventListener('click', () => {
+    if (downloadCanvas(document.getElementById('storeQrCanvas'), `${agentQrState?.slug || 'store'}-qr-code.png`)) {
+        notifyQrAction(document.getElementById('saveStoreQrBtn'), 'Saved');
+    }
+});
+document.getElementById('copyStoreQrBtn')?.addEventListener('click', async () => {
+    if (agentQrState && await copyText(agentQrState.cleanUrl)) notifyQrAction(document.getElementById('copyStoreQrBtn'), 'Copied');
+});
+document.getElementById('shareStoreQrBtn')?.addEventListener('click', async () => {
+    if (!agentQrState) return;
+    try {
+        const result = await shareQr({ title: getPlatformName(), text: 'Visit my store:', url: agentQrState.cleanUrl });
+        notifyQrAction(document.getElementById('shareStoreQrBtn'), result === 'shared' ? 'Shared' : 'Copied');
+    } catch (_) { /* User cancelled native sharing. */ }
+});
 
 // Bind STORE functions to window for HTML onclick attributes
 window.switchTab = switchTab;

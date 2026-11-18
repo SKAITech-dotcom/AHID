@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient.js';
+import { recordQrScan } from './qrConfig.js';
 
 const FN = supabase.functions;
 
@@ -25,7 +26,8 @@ let activeNetwork = 'mtn';
 
 const params = new URLSearchParams(window.location.search);
 const pathMatch = window.location.pathname.match(/^\/store\/([a-z0-9-_]+)\/?$/i);
-const agentParam = (params.get('agent') || params.get('slug') || params.get('ref') || params.get('code') || pathMatch?.[1] || '').trim();
+const qrVisit = params.get('ref') === 'qr';
+const agentParam = (params.get('agent') || params.get('slug') || (!qrVisit ? params.get('ref') : '') || params.get('code') || pathMatch?.[1] || '').trim();
 const returningReference = params.get('reference');
 const initialNetwork = (params.get('network') || '').toLowerCase();
 if (['mtn', 'telecel', 'airteltigo'].includes(initialNetwork)) {
@@ -303,6 +305,7 @@ function renderStore() {
   if (els.app) els.app.style.display = 'block';
 
   const store = storeData.store || {};
+  recordQrScan({ scanType: 'agent_store', agentId: store.agentId || null, storeSlug: store.slug || agentParam }).catch(() => {});
   const hasAgent = Boolean(storeData.hasAgentParam && storeData.ownerName && storeData.ownerName !== 'Skaitech Agent');
 
   // Set main header greeting to "Welcome to Skaitech GH Store" and display the agent name
