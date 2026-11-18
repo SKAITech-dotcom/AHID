@@ -38,8 +38,8 @@
         .store-header p { color: var(--store-muted); font-size: 12px; margin: 0; }
         .store-header .back-link { color: #fff; padding: 8px 12px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 500; background: var(--store-accent); }
         .store-tabs { display: flex; gap: 15px; overflow-x: auto; padding: 8px 12px; margin-bottom: 20px; }
-        .store-tabs a { color: var(--store-muted); text-decoration: none; font-size: 13px; font-weight: 500; padding: 6px 10px; display: flex; align-items: center; gap: 6px; border-bottom: 2px solid transparent; white-space: nowrap; }
-        .store-tabs a.active { color: #60a5fa; font-weight: 600; border-bottom-color: var(--store-accent); }
+        .store-tabs button { color: var(--store-muted); font: inherit; font-size: 13px; font-weight: 500; padding: 6px 10px; display: flex; align-items: center; gap: 6px; border: 0; border-bottom: 2px solid transparent; background: transparent; cursor: pointer; white-space: nowrap; }
+        .store-tabs button.active { color: #60a5fa; font-weight: 600; border-bottom-color: var(--store-accent); }
         .store-panel { padding: 20px; }
         .store-panel h3 { color: var(--store-ink); font-size: 16px; margin: 0 0 6px; }
         .store-panel .hint { color: var(--store-muted); font-size: 13px; margin: 0 0 15px; }
@@ -108,10 +108,10 @@
 
         <!-- Top Navigation Tab Bar -->
         <div class="store-card store-tabs">
-            <a href="#overview" onclick="switchTab('overview')" id="tab-overview"><i class="fa-solid fa-chart-line"></i> Overview</a>
-            <a href="#store" onclick="switchTab('store')" id="tab-store"><i class="fa-solid fa-store"></i> Store</a>
-            <a href="#pricing" onclick="switchTab('pricing')" id="tab-pricing" class="active"><i class="fa-solid fa-tags"></i> Pricing</a>
-            <a href="#withdrawals" onclick="switchTab('withdrawals')" id="tab-withdrawals"><i class="fa-solid fa-wallet"></i> Withdrawals</a>
+            <button type="button" onclick="switchTab('overview')" id="tab-overview"><i class="fa-solid fa-chart-line"></i> Overview</button>
+            <button type="button" onclick="switchTab('store')" id="tab-store"><i class="fa-solid fa-store"></i> Store</button>
+            <button type="button" onclick="switchTab('pricing')" id="tab-pricing" class="active"><i class="fa-solid fa-tags"></i> Pricing</button>
+            <button type="button" onclick="switchTab('withdrawals')" id="tab-withdrawals"><i class="fa-solid fa-wallet"></i> Withdrawals</button>
         </div>
 
         <!-- TAB CONTENT AREA: OVERVIEW -->
@@ -321,7 +321,7 @@
     </div>
 
     <!-- External Script -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script type="module" src="store-pricing.js?v=20261118"></script>
 </body>
 </html>

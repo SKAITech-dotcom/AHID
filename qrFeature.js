@@ -6,19 +6,74 @@ function escapePrintText(value) {
 
 export function renderHighResolutionQr(canvas, value) {
   if (!canvas || !value) throw new Error('A QR canvas and URL are required.');
-  if (!globalThis.QRCode?.toCanvas) throw new Error('QR renderer is still loading. Please try again.');
 
   canvas.width = 512;
   canvas.height = 512;
   canvas.style.width = '220px';
   canvas.style.height = '220px';
+
+  if (globalThis.QRCode?.toCanvas) {
+    return new Promise((resolve, reject) => {
+      globalThis.QRCode.toCanvas(canvas, value, {
+        width: 512,
+        margin: 2,
+        errorCorrectionLevel: 'H',
+        color: { dark: '#0f172a', light: '#ffffff' },
+      }, (error) => error ? reject(error) : resolve(canvas));
+    });
+  }
+
+  // qrcodejs is intentionally used as a plain browser script on this static
+  // site. It renders a 512px canvas (or image fallback) into a temporary node,
+  // which we copy to the visible canvas below.
+  if (typeof globalThis.QRCode !== 'function') {
+    throw new Error('QR renderer failed to load. Refresh the page and try again.');
+  }
+
+  const holder = document.createElement('div');
+  holder.style.position = 'fixed';
+  holder.style.left = '-10000px';
+  holder.style.top = '0';
+  document.body.appendChild(holder);
+  const level = globalThis.QRCode.CorrectLevel?.H ?? 2;
+  new globalThis.QRCode(holder, {
+    text: value,
+    width: 512,
+    height: 512,
+    colorDark: '#0f172a',
+    colorLight: '#ffffff',
+    correctLevel: level,
+  });
+
   return new Promise((resolve, reject) => {
-    globalThis.QRCode.toCanvas(canvas, value, {
-      width: 512,
-      margin: 2,
-      errorCorrectionLevel: 'H',
-      color: { dark: '#0f172a', light: '#ffffff' },
-    }, (error) => error ? reject(error) : resolve(canvas));
+    const copyRenderedCode = () => {
+      const source = holder.querySelector('canvas, img');
+      if (!source) return false;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        holder.remove();
+        reject(new Error('This browser cannot render QR codes.'));
+        return true;
+      }
+      context.clearRect(0, 0, 512, 512);
+      context.drawImage(source, 0, 0, 512, 512);
+      holder.remove();
+      resolve(canvas);
+      return true;
+    };
+
+    const image = holder.querySelector('img');
+    if (image) {
+      image.onload = copyRenderedCode;
+      if (image.complete) copyRenderedCode();
+    } else if (!copyRenderedCode()) {
+      window.setTimeout(() => {
+        if (!copyRenderedCode()) {
+          holder.remove();
+          reject(new Error('QR renderer did not produce an image.'));
+        }
+      }, 100);
+    }
   });
 }
 
