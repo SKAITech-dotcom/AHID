@@ -261,6 +261,7 @@ function switchSection(sectionId) {
 
   const titles = {
     'data-module': { title: 'Data Bundles', sub: 'Agent dashboard bundles with Swift / GrandTech fulfilment' },
+    'qr-code-module': { title: 'QR Code', sub: 'Whole-system QR code and scan analytics' },
     'airtime-module': { title: 'Airtime Dispatch Management', sub: 'Hubtel Commission Services [POS: 002040687] network top-up dispatch' },
     'utility-module': { title: 'Utility Bills & Subscriptions', sub: 'ECG Prepaid/Postpaid, Ghana Water (GWCL), DStv, GOtv, and StarTimes' },
     'pricing-control-module': { title: 'Prices & Commission Control', sub: 'Live Standard Data prices and airtime/utility commission sharing' },
@@ -298,6 +299,7 @@ async function refreshActiveSection() {
 
   try {
     if (activeSection === 'data-module') await loadDataModuleData();
+    else if (activeSection === 'qr-code-module') await loadSystemQrStats();
     else if (activeSection === 'airtime-module') await loadAirtimeData();
     else if (activeSection === 'utility-module') await loadUtilityData();
     else if (activeSection === 'pricing-control-module') await loadPricingControlData();

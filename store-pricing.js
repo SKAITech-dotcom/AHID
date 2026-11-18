@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient.js';
 import { requireVerifiedAgent } from './agentAuthGuard.js';
+import { checkAgentAccessServer } from './agentAccessCheck.js';
 import { getAgentStoreUrl, getPlatformName } from './qrConfig.js';
 import { copyText, downloadCanvas, renderHighResolutionQr, shareQr } from './qrFeature.js';
 
@@ -162,7 +163,16 @@ function transferToBalance() {
 // Load saved values on page start and verify agent access
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. Enforce verified agent authentication
-    const authResult = await requireVerifiedAgent({ redirectOnFail: true });
+    let authResult = null;
+    try {
+        const serverAccess = await checkAgentAccessServer();
+        if (serverAccess?.isAgent && serverAccess.agent) {
+            authResult = serverAccess;
+        }
+    } catch (serverError) {
+        console.warn('Server agent check notice:', serverError);
+    }
+    if (!authResult) authResult = await requireVerifiedAgent({ redirectOnFail: true });
     if (!authResult) return;
     currentAgentData = authResult.agent;
 

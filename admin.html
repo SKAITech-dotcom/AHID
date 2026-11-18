@@ -815,6 +815,10 @@
         <i class="fa-solid fa-wifi"></i>
         <span>Data Bundles</span>
       </div>
+      <div class="nav-item" data-section="qr-code-module">
+        <i class="fa-solid fa-qrcode"></i>
+        <span>QR Code</span>
+      </div>
       <div class="nav-item" data-section="airtime-module">
         <i class="fa-solid fa-mobile-screen-button"></i>
         <span>Airtime Dispatch</span>
@@ -1045,14 +1049,21 @@
         </div>
       </section>
 
-      <section id="section-data-module" class="admin-section">
+      <section id="section-qr-code-module" class="admin-section">
         <div class="panel qr-admin-card">
           <div>
-            <div class="panel-title"><i class="fa-solid fa-qrcode"></i> System QR Code</div>
+            <div class="panel-title"><i class="fa-solid fa-qrcode"></i> Whole System QR Code</div>
             <div class="qr-admin-count" id="systemQrScanCount">0 system QR scans</div>
           </div>
           <button type="button" class="btn btn-primary" onclick="openSystemQrModal()"><i class="fa-solid fa-qrcode"></i> Open System QR</button>
         </div>
+        <div class="panel">
+          <div class="panel-title"><i class="fa-solid fa-circle-info"></i> Platform QR Code</div>
+          <p style="color:var(--text-muted);font-size:.82rem;margin:10px 0 0;">This QR code opens the main Skaitech platform. Every scan is recorded in the QR analytics table and the total above updates from Supabase.</p>
+        </div>
+      </section>
+
+      <section id="section-data-module" class="admin-section">
         <div class="panel">
           <div class="panel-header">
             <div class="panel-title"><i class="fa-solid fa-wifi"></i> Data Bundles</div>
@@ -2232,7 +2243,7 @@
 <div class="modal-overlay" id="systemQrModal">
   <div class="modal-card" style="max-width: 500px;">
     <div class="modal-header">
-      <div><h3 style="margin:0;"><i class="fa-solid fa-qrcode"></i> System QR Code</h3><small style="color:var(--text-muted);">Scan to visit the main platform</small></div>
+      <div><h3 style="margin:0;"><i class="fa-solid fa-qrcode"></i> Whole System QR Code</h3><small style="color:var(--text-muted);">Scan to visit the main platform</small></div>
       <button type="button" class="modal-close" onclick="closeSystemQrModal()">&times;</button>
     </div>
     <div class="modal-body qr-admin-modal-body">

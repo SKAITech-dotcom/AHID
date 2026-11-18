@@ -1612,6 +1612,7 @@ async function loadUserData() {
     currentPath.endsWith('agentWallet.html') ||
     currentPath.endsWith('deposit.html') ||
     currentPath.endsWith('store.html') ||
+    currentPath.endsWith('store-pricing.html') ||
     currentPath.endsWith('referrals.html') ||
     currentPath.endsWith('agentafa.html');
 
