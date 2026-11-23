@@ -5,7 +5,7 @@ import { callUtilityProvider } from '../_shared/utilityProvider.ts';
 import { hubtelRequest } from '../_shared/hubtelClient.ts';
 import { activeDataProvider, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
 import { requestProviderCancellation } from '../_shared/providerCancellation.ts';
-import { refundWallet } from '../_shared/wallet.ts';
+import { recordProviderRefund, refundWallet } from '../_shared/wallet.ts';
 
 // Commission Services path segment: the DISBURSEMENT (prepaid deposit) account.
 // Distinct from the merchant/collection account used to receive money.
@@ -260,7 +260,7 @@ async function loadAdminWalletHistory(admin: Admin, userId: string) {
       .select('id, amount, payment_reference, status, provider, created_at, paid_at')
       .eq('agent_id', userId).order('created_at', { ascending: false }).range(from, to)),
     fetchAllRows((from, to) => admin.from('agent_wallet_refunds')
-      .select('id, amount, reference, reason, admin_id, created_at')
+      .select('id, amount, reference, reason, admin_id, source, order_type, order_id, internal_reference, provider, provider_order_id, provider_reference, metadata, created_at')
       .eq('agent_id', userId).order('created_at', { ascending: false }).range(from, to)),
     fetchAllRows((from, to) => admin.from('agent_data_orders')
       .select('id, short_code, provider_reference, network_type, phone, volume_mb, amount, status, created_at')
@@ -490,7 +490,7 @@ Deno.serve(async (request) => {
           amount: Number(o.amount || 0),
           status: o.status,
           provider: o.provider_name || 'Swift',
-          providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.status,
+          providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
           providerReference: o.provider_order_id || o.provider_reference || '',
           failureReason: '',
           createdAt: o.created_at,
@@ -507,7 +507,7 @@ Deno.serve(async (request) => {
           amount: Number(o.sale_amount || 0),
           status: o.status,
           provider: o.provider_name || 'Swift',
-          providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.status,
+          providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
           providerReference: o.provider_reference || '',
           failureReason: '',
           createdAt: o.created_at,
@@ -522,9 +522,11 @@ Deno.serve(async (request) => {
           phone: o.recipient_phone,
           network: o.network,
           amount: Number(o.amount || 0),
-          status: o.status || 'completed',
+          // Legacy rows have no provider identity. Never present them as
+          // delivered; they require a provider-backed reconciliation or review.
+          status: o.status || 'processing',
           provider: 'Swift',
-          providerStatus: o.status || 'completed',
+          providerStatus: o.status || 'UNKNOWN',
           failureReason: '',
           createdAt: o.created_at,
           type: 'Data Bundle (Wallet)',
@@ -540,7 +542,7 @@ Deno.serve(async (request) => {
           amount: Number(o.platform_price || 0),
           status: o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status),
           provider: o.provider || 'Swift',
-          providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.fulfilment_status,
+          providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
           providerReference: o.provider_reference || '',
           failureReason: '',
           createdAt: o.created_at,
@@ -705,7 +707,7 @@ Deno.serve(async (request) => {
             .range(from, to)),
           fetchAllRows((from, to) => admin
             .from('agent_wallet_refunds')
-            .select('id, amount, reference, reason, admin_id, created_at')
+        .select('id, amount, reference, reason, admin_id, source, order_type, order_id, internal_reference, provider, provider_order_id, provider_reference, metadata, created_at')
             .eq('agent_id', userId)
             .order('created_at', { ascending: false })
             .range(from, to)),
@@ -1503,6 +1505,14 @@ Deno.serve(async (request) => {
             await admin.from('agent_data_orders').update({ status: 'processing', completed_at: null }).eq('id', order.id).eq('status', 'successful');
           }
           if (terminalState) {
+            const { error: providerUpdateError } = await admin.from('agent_data_orders').update({
+              provider_order_id: order.provider_order_id || live.providerOrderId || null,
+              provider_status: live.status,
+              provider_state: live.state,
+              last_status_checked_at: new Date().toISOString(),
+              provider_response: updatedResponse,
+            }).eq('id', order.id);
+            if (providerUpdateError) throw providerUpdateError;
             const { data: settledState, error: settleError } = await admin.rpc('settle_agent_data_order', {
               p_order_id: order.id,
               p_status: live.state,
@@ -1522,6 +1532,9 @@ Deno.serve(async (request) => {
             // Still processing – update the response timestamp so we know the check ran
             const { error: updateError } = await admin.from('agent_data_orders').update({
               provider_order_id: order.provider_order_id || live.providerOrderId || null,
+              provider_status: live.status,
+              provider_state: live.state,
+              last_status_checked_at: new Date().toISOString(),
               provider_response: updatedResponse,
             }).eq('id', order.id);
             if (updateError) throw updateError;
@@ -1577,7 +1590,7 @@ Deno.serve(async (request) => {
             order.network_type as string,
             Number(order.volume_mb),
           ));
-          const providerOrderId = String(order.provider_reference || stored.providerOrderId || stored.orderId || stored.provider_order_id || '');
+          const providerOrderId = String(stored.providerOrderId || stored.orderId || stored.provider_order_id || order.provider_reference || '');
           const ref = String(order.payment_reference || '');
           const live = await fetchLiveOrderStatus(provider, providerOrderId, ref);
           if (!live) {
@@ -1601,7 +1614,8 @@ Deno.serve(async (request) => {
             : live.state === 'failed' || live.state === 'cancelled'
               ? 'failed'
               : String(order.status) === 'successful' ? 'processing' : String(order.status || 'processing');
-          const isOpen = ['pending_payment', 'processing'].includes(String(order.status));
+          const isOpen = ['pending_payment', 'processing'].includes(String(order.status))
+            || (String(order.status) === 'successful' && live.state !== 'successful');
           if (live.state === 'processing' && String(order.status) === 'successful') {
             await admin.from('public_data_orders').update({
               status: 'processing',
@@ -1621,11 +1635,26 @@ Deno.serve(async (request) => {
               p_reason: `Refund: Public data order failed with provider (${live.status})`,
             });
             if (refundError) throw refundError;
+            await recordProviderRefund({
+              orderType: 'public_data_orders',
+              orderId: String(order.id),
+              agentId: String(order.agent_id),
+              amount: Number(order.sale_amount),
+              internalReference: ref,
+              provider,
+              providerOrderId: live.providerOrderId || providerOrderId || null,
+              providerReference: String(order.provider_reference || live.providerOrderId || ''),
+              reason: `Refund: Public data order failed with provider (${live.status})`,
+              metadata: { providerStatus: live.status, providerState: live.state },
+            });
           }
 
           const { error: updateError } = await admin.from('public_data_orders').update({
             status: nextStatus,
             provider_reference: order.provider_reference || live.providerOrderId || null,
+            provider_status: live.status,
+            provider_state: live.state,
+            last_status_checked_at: new Date().toISOString(),
             provider_response: updatedResponse,
             completed_at: nextStatus === 'successful' || nextStatus === 'failed' ? new Date().toISOString() : null,
           }).eq('id', order.id).in('status', ['pending_payment', 'processing']);
@@ -1720,6 +1749,9 @@ Deno.serve(async (request) => {
             if (isOpen) {
               const { error: updateError } = await admin.from('store_orders').update({
                 provider_reference: providerReference,
+                provider_status: live.status,
+                provider_state: live.state,
+                last_status_checked_at: new Date().toISOString(),
                 provider_response: updatedResponse,
                 updated_at: new Date().toISOString(),
               }).eq('id', order.id).in('fulfilment_status', ['pending', 'processing']);
@@ -1746,6 +1778,9 @@ Deno.serve(async (request) => {
             const { error: updateError } = await admin.from('store_orders').update({
               fulfilment_status: 'successful',
               provider_reference: providerReference,
+              provider_status: live.status,
+              provider_state: live.state,
+              last_status_checked_at: checkedAt,
               provider_response: updatedResponse,
               failure_reason: null,
               completed_at: checkedAt,
@@ -1764,6 +1799,18 @@ Deno.serve(async (request) => {
                 await refundWallet(String(order.agent_id), reference, debitAmount, `Refund for failed store order ${reference}`);
                 paymentStatus = 'refunded';
                 refundAmount = debitAmount;
+                await recordProviderRefund({
+                  orderType: 'store_orders',
+                  orderId: String(order.id),
+                  agentId: String(order.agent_id),
+                  amount: debitAmount,
+                  internalReference: reference,
+                  provider,
+                  providerOrderId: live.providerOrderId || providerOrderId || null,
+                  providerReference: reference,
+                  reason: `Refund for failed store order ${reference}`,
+                  metadata: { providerStatus: live.status, providerState: live.state },
+                });
               } catch (refundError) {
                 failureReason = `${failureReason}. Refund pending: ${refundError instanceof Error ? refundError.message : String(refundError)}`;
               }
@@ -1773,6 +1820,9 @@ Deno.serve(async (request) => {
               fulfilment_status: 'failed',
               refund_amount: refundAmount,
               provider_reference: providerReference,
+              provider_status: live.status,
+              provider_state: live.state,
+              last_status_checked_at: checkedAt,
               provider_response: updatedResponse,
               failure_reason: failureReason,
               completed_at: checkedAt,

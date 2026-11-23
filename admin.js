@@ -526,7 +526,7 @@ async function loadDataModuleData(options = {}) {
     const agentOrderRows = (agentOrders || []).map((o) => {
       const resp = (o.provider_response && typeof o.provider_response === 'object') ? o.provider_response : {};
       const provider = String(o.provider_name || ((o.network_type === 'mtn' && o.volume_mb === 1024) || (o.network_type === 'telecel' && o.volume_mb === 5120) ? 'GrandTech' : 'Swift'));
-      const providerStatus = safeProviderStatus(o.provider_status || resp.lastProviderStatus || resp.status || o.status);
+      const providerStatus = safeProviderStatus(o.provider_status || resp.lastProviderStatus || resp.status, 'UNKNOWN');
       const isCancelled = o.status === 'cancelled' || resp.cancelled === true;
       const orderId = fiveCharacterAdminOrderCode(o.short_code || o.provider_reference || o.id);
       return {
@@ -553,7 +553,7 @@ async function loadDataModuleData(options = {}) {
     const publicOrderRows = (publicOrders || []).map((o) => {
       const resp = (o.provider_response && typeof o.provider_response === 'object') ? o.provider_response : {};
       const provider = String(o.provider_name || resp.provider || 'Swift');
-      const providerStatus = safeProviderStatus(o.provider_status || resp.lastProviderStatus || resp.status || o.status);
+      const providerStatus = safeProviderStatus(o.provider_status || resp.lastProviderStatus || resp.status, 'UNKNOWN');
       const isCancelled = o.status === 'cancelled' || resp.cancelled === true;
       const orderId = fiveCharacterAdminOrderCode(o.short_code || o.payment_reference || o.id);
       return {
@@ -586,9 +586,9 @@ async function loadDataModuleData(options = {}) {
       phone: o.recipient_phone,
       network: o.network,
       amount: Number(o.amount || 0),
-      status: o.status || 'completed',
+      status: o.status || 'processing',
       provider: 'Wallet order',
-      providerStatus: safeProviderStatus(o.status, 'COMPLETED'),
+      providerStatus: safeProviderStatus(o.status, 'UNKNOWN'),
       providerReference: '',
       isCancelled: false,
       failureReason: '',
@@ -611,7 +611,7 @@ async function loadDataModuleData(options = {}) {
         amount: Number(o.platform_price || o.sale_amount || 0),
         status,
         provider: o.provider || 'Swift',
-        providerStatus: safeProviderStatus(o.provider_status || resp.lastProviderStatus || resp.providerStatus || status),
+      providerStatus: safeProviderStatus(o.provider_status || resp.lastProviderStatus || resp.providerStatus, 'UNKNOWN'),
         providerReference: o.provider_reference || '',
         isCancelled: status === 'cancelled',
         failureReason: o.failure_reason || '',
@@ -1979,13 +1979,13 @@ async function openHistoryModal(userId, fullName) {
     }
 
     if (!refunds.length) {
-      refundTbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 14px;">No manual refunds.</td></tr>';
+      refundTbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 14px;">No refunds recorded.</td></tr>';
     } else {
       refundTbody.innerHTML = refunds.map(refund => `
         <tr>
           <td><code>${escapeHtml(refund.reference)}</code></td>
           <td><strong style="color: #34d399;">${money(refund.amount)}</strong></td>
-          <td>${escapeHtml(refund.reason)}</td>
+          <td>${escapeHtml(refund.reason)}<br><small style="color:var(--text-muted);">${escapeHtml(refund.order_type || 'manual')} · ${escapeHtml(refund.provider || '—')} · ${escapeHtml(refund.provider_order_id || refund.order_id || '—')}</small></td>
           <td><code>${escapeHtml(refund.admin_id || '—')}</code></td>
           <td style="color: var(--text-dim); font-size: 0.74rem;">${new Date(refund.created_at).toLocaleString()}</td>
         </tr>

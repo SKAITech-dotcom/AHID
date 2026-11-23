@@ -1,6 +1,6 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { activeDataProvider, fetchDataOrderStatus, recoverGrandTechOrderIdFromProvider, recoverGrandTechOrderIdFromStored } from '../_shared/dataProvider.ts';
-import { refundWallet } from '../_shared/wallet.ts';
+import { recordProviderRefund, refundWallet } from '../_shared/wallet.ts';
 import { volumeForBundleId } from '../_shared/dataCatalog.ts';
 
 /**
@@ -57,7 +57,7 @@ Deno.serve(async (request) => {
 
     let query = supabase
       .from('agent_data_orders')
-      .select('id, provider_reference, provider_name, provider_order_id, network_type, volume_mb, amount, status, created_at, provider_response')
+      .select('id, provider_reference, provider_name, provider_order_id, network_type, phone, volume_mb, amount, status, created_at, provider_response')
       .eq('agent_id', user.id)
       // Include successful rows whose last provider answer was still pending.
       // Older code could mark an accepted order successful before delivery;
@@ -125,6 +125,7 @@ Deno.serve(async (request) => {
         }
         await supabase.from('agent_data_orders').update({
           provider_order_id: order.provider_order_id || live.providerOrderId || null,
+          provider_reference: order.provider_reference || live.providerOrderId || null,
           provider_status: live.status,
           provider_state: live.state,
           last_status_checked_at: new Date().toISOString(),
@@ -168,6 +169,7 @@ Deno.serve(async (request) => {
             status: nextStatus,
             completed_at: nextStatus === 'processing' ? null : order.completed_at,
             provider_order_id: order.provider_order_id || live.providerOrderId || null,
+          provider_reference: order.provider_reference || live.providerOrderId || null,
             provider_status: live.status,
             provider_state: live.state,
             last_status_checked_at: new Date().toISOString(),
@@ -325,7 +327,7 @@ async function syncStoreDataOrders(
       checkedAt,
     };
 
-    if (order.fulfilment_status === 'successful' && live.state !== 'successful') {
+        if (order.fulfilment_status === 'successful' && live.state !== 'successful') {
       await supabase.from('store_orders').update({
         fulfilment_status: 'processing',
         completed_at: null,
@@ -337,6 +339,7 @@ async function syncStoreDataOrders(
         .from('store_orders')
         .update({
           fulfilment_status: 'successful',
+          provider_reference: order.provider_reference || live.providerOrderId || null,
           provider_status: live.status,
           provider_state: live.state,
           last_status_checked_at: checkedAt,
@@ -375,7 +378,8 @@ async function syncStoreDataOrders(
       let paymentStatus = String(order.payment_status || 'paid');
       let refundMessage = '';
 
-      if (order.wallet_debited && paymentStatus !== 'refunded' && refundAmount <= 0 && debitAmount > 0) {
+        let walletRefunded = false;
+        if (order.wallet_debited && paymentStatus !== 'refunded' && refundAmount <= 0 && debitAmount > 0) {
         try {
           await refundWallet(
             agentId,
@@ -385,11 +389,39 @@ async function syncStoreDataOrders(
           );
           refundAmount = debitAmount;
           paymentStatus = 'refunded';
+            walletRefunded = true;
+            await recordProviderRefund({
+              orderType: 'store_orders',
+              orderId: String(order.id),
+              agentId,
+              amount: debitAmount,
+              internalReference: reference,
+              provider,
+              providerOrderId: live.providerOrderId || providerOrderId || null,
+              providerReference: reference,
+              reason: `Refund for failed store data order ${reference}`,
+              metadata: { providerStatus: live.status, providerState: live.state },
+            });
         } catch (refundError) {
           refundMessage = refundError instanceof Error ? refundError.message : String(refundError);
           console.error('Wallet store data refund failed:', refundError);
         }
       }
+
+        if (paymentStatus === 'refunded' && !walletRefunded && order.wallet_debited) {
+          await recordProviderRefund({
+            orderType: 'store_orders',
+            orderId: String(order.id),
+            agentId,
+            amount: debitAmount,
+            internalReference: reference,
+            provider,
+            providerOrderId: live.providerOrderId || providerOrderId || null,
+            providerReference: reference,
+            reason: `Refund for failed store data order ${reference}`,
+            metadata: { providerStatus: live.status, providerState: live.state },
+          }).catch((auditError) => console.error('Store refund audit failed:', auditError));
+        }
 
       const { error: updateError } = await supabase
         .from('store_orders')
@@ -485,7 +517,7 @@ async function syncLegacyPublicDataOrders(
     );
     if (order.status === 'successful' && !staleSuccessful && !orderReference) continue;
     const provider = String(order.provider_name || stored.provider || activeDataProvider(order.network_type, Number(order.volume_mb)));
-    let providerOrderId = String(order.provider_reference ?? stored.providerOrderId ?? stored.orderId ?? stored.providerReference ?? '');
+    let providerOrderId = String(stored.providerOrderId ?? stored.orderId ?? stored.providerReference ?? order.provider_reference ?? '');
     if (!providerOrderId && provider.toLowerCase().includes('grandtech')) {
       providerOrderId = recoverGrandTechOrderIdFromStored(stored, {
         phone: String(order.customer_phone || ''),
@@ -574,7 +606,18 @@ async function syncLegacyPublicDataOrders(
           String(order.payment_reference),
           Number(order.sale_amount),
           `Standard data bundle rejected by provider: ${live?.status || 'Failed'}`,
-        ).catch((err) => console.error('Standard data refund failed:', err));
+        ).then(() => recordProviderRefund({
+          orderType: 'public_data_orders',
+          orderId: String(order.id),
+          agentId: String(order.agent_id),
+          amount: Number(order.sale_amount),
+          internalReference: String(order.payment_reference),
+          provider,
+          providerOrderId: live?.providerOrderId || providerOrderId || null,
+          providerReference: String(order.provider_reference || live?.providerOrderId || ''),
+          reason: `Standard data bundle rejected by provider: ${live?.status || 'Failed'}`,
+          metadata: { providerStatus: live?.status, providerState: live?.state },
+        })).catch((err) => console.error('Standard data refund/audit failed:', err));
       }
     } else if (live?.status) {
       // Still in progress: update provider_response timestamp

@@ -1,6 +1,6 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
 import { activeDataProvider, dataOrderStuckMinutes, fetchDataOrderStatus, recoverGrandTechOrderIdFromProvider, recoverGrandTechOrderIdFromStored } from '../_shared/dataProvider.ts';
-import { refundWallet } from '../_shared/wallet.ts';
+import { recordProviderRefund, refundWallet } from '../_shared/wallet.ts';
 
 /**
  * Order status for the storefront, and the point where delivery is actually
@@ -83,6 +83,50 @@ Deno.serve(async (request) => {
         ? await fetchDataOrderStatus(provider as 'grandtech' | 'swift', providerOrderId, String(data.payment_reference))
         : null;
 
+      // Public checkout orders use the company provider wallet. Keep that
+      // internal reservation tied to the same provider result as the public
+      // order, so a provider failure also reverses the company-side debit.
+      if (live && data.provider_reference) {
+        const { data: providerOrder } = await supabase
+          .from('agent_data_orders')
+          .select('id, agent_id, provider_reference, provider_name, provider_order_id, status, amount, provider_response')
+          .eq('provider_reference', String(data.provider_reference))
+          .maybeSingle();
+        if (providerOrder && ['pending', 'processing'].includes(String(providerOrder.status))) {
+          const providerResponse = providerOrder.provider_response && typeof providerOrder.provider_response === 'object'
+            ? providerOrder.provider_response as Record<string, unknown>
+            : {};
+          await supabase.from('agent_data_orders').update({
+            provider_order_id: providerOrder.provider_order_id || live.providerOrderId || providerOrderId || null,
+            provider_status: live.status,
+            provider_state: live.state,
+            last_status_checked_at: new Date().toISOString(),
+            provider_response: {
+              ...providerResponse,
+              provider,
+              providerOrderId: live.providerOrderId || providerOrderId || null,
+              lastProviderStatus: live.status,
+              lastProviderState: live.state,
+              lastStatusCheckedAt: new Date().toISOString(),
+            },
+          }).eq('id', providerOrder.id);
+          if (['successful', 'failed', 'cancelled'].includes(live.state)) {
+            await supabase.rpc('settle_agent_data_order', {
+              p_order_id: providerOrder.id,
+              p_status: live.state,
+              p_provider_response: {
+                ...providerResponse,
+                provider,
+                providerOrderId: live.providerOrderId || providerOrderId || null,
+                lastProviderStatus: live.status,
+                lastProviderState: live.state,
+                lastStatusCheckedAt: new Date().toISOString(),
+              },
+            });
+          }
+        }
+      }
+
       if (live?.state === 'processing' && staleSuccessful) {
         status = 'processing';
         await supabase.from('public_data_orders').update({
@@ -150,7 +194,18 @@ Deno.serve(async (request) => {
           String(data.payment_reference),
           Number(data.sale_amount),
           'Standard data bundle not delivered',
-        ).catch((err) => console.error('Data delivery refund failed:', err));
+        ).then(() => recordProviderRefund({
+          orderType: 'public_data_orders',
+          orderId: String(data.id),
+          agentId: String(data.agent_id),
+          amount: Number(data.sale_amount),
+          internalReference: String(data.payment_reference),
+          provider,
+          providerOrderId: live?.providerOrderId || providerOrderId || null,
+          providerReference: String(data.provider_reference || live?.providerOrderId || ''),
+          reason: 'Standard data bundle not delivered',
+          metadata: { providerStatus: live?.status || null, providerState: live?.state || 'failed' },
+        })).catch((err) => console.error('Data delivery refund/audit failed:', err));
       }
       if (status === 'failed' && !data.agent_id && data.payment_provider === 'paystack' && data.paystack_refund_status !== 'initiated') {
         const secret = Deno.env.get('PAYSTACK_SECRET_KEY')?.trim();
@@ -169,11 +224,19 @@ Deno.serve(async (request) => {
 
     const { data: fresh } = await supabase
       .from('public_data_orders')
-      .select('payment_reference, short_code, network_type, volume_mb, sale_amount, status, created_at')
+      .select('payment_reference, short_code, network_type, volume_mb, sale_amount, status, payment_provider, provider_name, provider_reference, provider_status, provider_state, last_status_checked_at, provider_response, created_at')
       .eq('id', data.id)
       .single();
 
-    return json({ order: fresh ?? { ...data, status }, note });
+    const order = fresh ?? { ...data, status };
+    return json({
+      order: {
+        ...order,
+        providerStatus: order.provider_status || order.provider_response?.lastProviderStatus || 'UNKNOWN',
+        providerState: order.provider_state || order.provider_response?.lastProviderState || order.status,
+      },
+      note,
+    });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : 'Unable to retrieve order.' }, 500);
   }

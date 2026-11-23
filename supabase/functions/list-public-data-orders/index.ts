@@ -2,6 +2,7 @@ import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
 import { activeDataProvider, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
 import { fetchHubtelCommissionStatus } from '../_shared/hubtelCommissionStatus.ts';
 import { settleHubtelAirtimeOrder } from '../_shared/hubtelSettlement.ts';
+import { recordProviderRefund, refundWallet } from '../_shared/wallet.ts';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -111,7 +112,7 @@ Deno.serve(async (request) => {
     ] = await Promise.all([
       admin
         .from('public_data_orders')
-        .select('id, short_code, customer_phone, network_type, volume_mb, sale_amount, status, provider_name, provider_reference, provider_response, created_at')
+        .select('id, short_code, customer_phone, network_type, volume_mb, sale_amount, status, provider_name, provider_reference, provider_status, provider_state, last_status_checked_at, provider_response, created_at')
         .is('agent_id', null)
         .in('customer_phone', phoneVariants)
         .order('created_at', { ascending: false })
@@ -129,7 +130,7 @@ Deno.serve(async (request) => {
       // purchases appear in the same guest tracker.
       admin
         .from('store_orders')
-        .select('id, short_code, reference, product_type, product_label, network, recipient, customer_phone, sale_amount, payment_status, fulfilment_status, provider, provider_reference, provider_response, meta, created_at')
+        .select('id, short_code, reference, product_type, product_label, network, recipient, customer_phone, agent_id, sale_amount, payment_status, fulfilment_status, wallet_debited, refund_amount, provider, provider_reference, provider_status, provider_state, last_status_checked_at, provider_response, meta, created_at')
         .eq('product_type', 'data_bundle')
         .order('created_at', { ascending: false })
         .limit(200),
@@ -159,7 +160,7 @@ Deno.serve(async (request) => {
       ).trim();
       const providerReference = String(stored.providerReference || row.provider_reference || '').trim();
       let status = String(row.status || 'pending_payment').toLowerCase();
-      let providerStatus = String(stored.lastProviderStatus || stored.providerStatus || status);
+      let providerStatus = String(row.provider_status || stored.lastProviderStatus || stored.providerStatus || status);
 
       // A customer lookup is also a live status check. Do not stop polling just
       // because an older row was labelled successful; the provider may still
@@ -172,16 +173,35 @@ Deno.serve(async (request) => {
           providerReference,
         ).catch(() => null);
         if (live) {
+          const checkedAt = new Date().toISOString();
           providerStatus = live.status || providerStatus;
+          if (live.state === 'processing' && status === 'successful') status = 'processing';
           if (['successful', 'failed', 'cancelled'].includes(live.state)) status = live.state;
-          await admin.from('public_data_orders').update({
-            provider_response: {
-              ...stored,
-              lastProviderStatus: providerStatus,
-              lastProviderState: live.state,
-              lastStatusCheckedAt: new Date().toISOString(),
-            },
-          }).eq('id', row.id);
+          const updatedResponse = {
+            ...stored,
+            lastProviderStatus: providerStatus,
+            lastProviderState: live.state,
+            lastStatusCheckedAt: checkedAt,
+          };
+          if (['successful', 'failed', 'cancelled'].includes(live.state)) {
+            await admin.rpc('mark_public_data_order', {
+              p_order_id: row.id,
+              p_status: status,
+              p_provider_amount: null,
+              p_provider_reference: row.provider_reference || live.providerOrderId || null,
+              p_provider_response: updatedResponse,
+            });
+          } else {
+            await admin.from('public_data_orders').update({
+              status,
+              completed_at: status === 'processing' ? null : undefined,
+              provider_reference: row.provider_reference || live.providerOrderId || null,
+              provider_status: providerStatus,
+              provider_state: live.state,
+              last_status_checked_at: checkedAt,
+              provider_response: updatedResponse,
+            }).eq('id', row.id);
+          }
         }
       }
 
@@ -204,7 +224,7 @@ Deno.serve(async (request) => {
       return customerPhone.includes(phone) || recipientPhone.includes(phone);
     })) {
       const stored = asRecord(row.provider_response);
-      const paymentStatus = String(row.payment_status || 'pending').toLowerCase();
+      let paymentStatus = String(row.payment_status || 'pending').toLowerCase();
       const fulfilmentStatus = String(row.fulfilment_status || 'pending').toLowerCase();
       const providerValue = String(row.provider || stored.provider || '').trim().toLowerCase();
       const provider = providerValue.includes('grandtech')
@@ -222,7 +242,7 @@ Deno.serve(async (request) => {
       let status = paymentStatus !== 'paid' && fulfilmentStatus === 'pending'
         ? 'pending_payment'
         : fulfilmentStatus;
-      let providerStatus = String(stored.lastProviderStatus || stored.providerStatus || fulfilmentStatus);
+      let providerStatus = String(row.provider_status || stored.lastProviderStatus || stored.providerStatus || fulfilmentStatus);
 
       if (!['failed', 'cancelled'].includes(status) && providerOrderId && (provider === 'swift' || provider === 'grandtech')) {
         const live = await fetchDataOrderStatus(
@@ -231,20 +251,73 @@ Deno.serve(async (request) => {
           String(row.reference || ''),
         ).catch(() => null);
         if (live) {
+          const checkedAt = new Date().toISOString();
           providerStatus = live.status || providerStatus;
+          if (live.state === 'processing' && status === 'successful') status = 'processing';
           if (['successful', 'failed', 'cancelled'].includes(live.state)) status = live.state;
-          await admin.from('store_orders').update({
-            provider_reference: live.providerOrderId || providerOrderId,
-            provider_status: providerStatus,
-            provider_state: live.state,
-            last_status_checked_at: new Date().toISOString(),
-            provider_response: {
-              ...stored,
-              lastProviderStatus: providerStatus,
-              lastProviderState: live.state,
-              lastStatusCheckedAt: new Date().toISOString(),
-            },
-          }).eq('id', row.id);
+          const updatedResponse = {
+            ...stored,
+            lastProviderStatus: providerStatus,
+            lastProviderState: live.state,
+            lastStatusCheckedAt: checkedAt,
+          };
+          let refundAmount = Number(row.refund_amount || 0);
+          if (live.state === 'failed' || live.state === 'cancelled') {
+            if (row.wallet_debited && paymentStatus !== 'refunded' && refundAmount <= 0) {
+              try {
+                await refundWallet(String(row.agent_id), String(row.reference), Number(row.sale_amount), `Refund for failed store order ${row.reference}`);
+                paymentStatus = 'refunded';
+                refundAmount = Number(row.sale_amount);
+                await recordProviderRefund({
+                  orderType: 'store_orders',
+                  orderId: String(row.id),
+                  agentId: String(row.agent_id),
+                  amount: Number(row.sale_amount),
+                  internalReference: String(row.reference),
+                  provider,
+                  providerOrderId: live.providerOrderId || providerOrderId || null,
+                  providerReference: String(row.provider_reference || ''),
+                  reason: `Refund for failed store order ${row.reference}`,
+                  metadata: { providerStatus, providerState: live.state },
+                });
+              } catch (refundError) {
+                console.error('Guest store provider refund failed:', refundError);
+              }
+            }
+            await admin.from('store_orders').update({
+              payment_status: paymentStatus,
+              fulfilment_status: 'failed',
+              refund_amount: refundAmount,
+              provider_reference: row.provider_reference || live.providerOrderId || providerOrderId,
+              provider_status: providerStatus,
+              provider_state: live.state,
+              last_status_checked_at: checkedAt,
+              provider_response: updatedResponse,
+              completed_at: checkedAt,
+              updated_at: checkedAt,
+            }).eq('id', row.id);
+          } else if (live.state === 'successful') {
+            await admin.from('store_orders').update({
+              fulfilment_status: 'successful',
+              provider_reference: row.provider_reference || live.providerOrderId || providerOrderId,
+              provider_status: providerStatus,
+              provider_state: live.state,
+              last_status_checked_at: checkedAt,
+              provider_response: updatedResponse,
+              completed_at: checkedAt,
+              updated_at: checkedAt,
+            }).eq('id', row.id);
+          } else {
+            await admin.from('store_orders').update({
+              fulfilment_status: status === 'processing' ? 'processing' : fulfilmentStatus,
+              provider_reference: row.provider_reference || live.providerOrderId || providerOrderId,
+              provider_status: providerStatus,
+              provider_state: live.state,
+              last_status_checked_at: checkedAt,
+              provider_response: updatedResponse,
+              updated_at: checkedAt,
+            }).eq('id', row.id);
+          }
         }
       }
 

@@ -72,6 +72,42 @@ export async function refundWallet(
 }
 
 /**
+ * Records the provider-confirmed refund after refundWallet has reversed the
+ * original debit. This is deliberately a separate idempotent RPC so the same
+ * internal order and provider order can never create a second refund credit.
+ */
+export async function recordProviderRefund(params: {
+  orderType: string;
+  orderId: string;
+  agentId: string;
+  amount: number;
+  internalReference: string;
+  provider?: string | null;
+  providerOrderId?: string | null;
+  providerReference?: string | null;
+  reason: string;
+  metadata?: Record<string, unknown>;
+}): Promise<string> {
+  const safeAmount = requirePositiveAmount(params.amount, 'Refund amount');
+  const { data, error } = await adminClient().rpc('record_agent_provider_refund', {
+    p_order_type: params.orderType,
+    p_order_id: params.orderId,
+    p_agent_id: params.agentId,
+    p_amount: safeAmount,
+    p_internal_reference: params.internalReference,
+    p_provider: params.provider || null,
+    p_provider_order_id: params.providerOrderId || null,
+    p_provider_reference: params.providerReference || null,
+    p_reason: params.reason,
+    p_metadata: params.metadata || {},
+  });
+  if (error) {
+    throw new WalletError(String(error.message || 'Failed to record provider refund.'));
+  }
+  return String(data);
+}
+
+/**
  * Atomically credits an agent wallet (e.g. for store sales profit) and records the ledger entry.
  * Returns the new wallet balance.
  */

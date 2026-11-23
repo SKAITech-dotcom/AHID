@@ -1064,7 +1064,7 @@ async function loadStoredOrdersInternal() {
             // rows instead of silently disappearing from the UI.
             const dataOrders = await fetchAllRows((from, to) => supabase
                 .from('agent_data_orders')
-                .select('id, provider_reference, short_code, provider_order_id, network_type, phone, volume_mb, amount, status, provider_response, created_at')
+                .select('id, provider_reference, short_code, provider_order_id, provider_status, provider_state, network_type, phone, volume_mb, amount, status, provider_response, created_at')
                 .eq('agent_id', user.id)
                 .order('created_at', { ascending: false })
                 .range(from, to));
@@ -1072,7 +1072,7 @@ async function loadStoredOrdersInternal() {
             // Public checkout orders are also Standard Data Bundle orders.
             const publicDataOrders = await fetchAllRows((from, to) => supabase
                 .from('public_data_orders')
-                .select('id, payment_reference, short_code, provider_reference, network_type, customer_name, customer_phone, volume_mb, sale_amount, status, provider_response, created_at')
+                .select('id, payment_reference, short_code, provider_reference, provider_status, provider_state, network_type, customer_name, customer_phone, volume_mb, sale_amount, status, provider_response, created_at')
                 .eq('agent_id', user.id)
                 .order('created_at', { ascending: false })
                 .range(from, to));
@@ -1099,7 +1099,7 @@ async function loadStoredOrdersInternal() {
             try {
                 storeOrders = await fetchAllRows((from, to) => supabase
                     .from('store_orders')
-                    .select('id, reference, short_code, product_label, network, recipient, customer_phone, platform_price, provider, provider_reference, provider_response, fulfilment_status, payment_status, created_at')
+                    .select('id, reference, short_code, product_label, network, recipient, customer_phone, platform_price, provider, provider_reference, provider_status, provider_state, provider_response, fulfilment_status, payment_status, created_at')
                     .eq('agent_id', user.id)
                     .eq('product_type', 'data_bundle')
                     .order('created_at', { ascending: false })
@@ -1153,7 +1153,7 @@ async function loadStoredOrdersInternal() {
                         phone: maskPhoneDisplay(o.phone),
                         package: `${formatDataVolume(o.volume_mb)} (GHS ${Number(o.amount).toFixed(2)})`,
                         status: o.status,
-                        providerStatus: o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.status,
+                        providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_order_id || o.provider_reference || '',
                         date: new Date(o.created_at).toLocaleDateString(),
                         rawDate: o.created_at
@@ -1169,8 +1169,8 @@ async function loadStoredOrdersInternal() {
                         network: (o.network || '').toUpperCase(),
                         phone: maskPhoneDisplay(o.recipient_phone),
                         package: `${o.bundle_size || 'Data bundle'} (GHS ${Number(o.amount).toFixed(2)})`,
-                        status: o.status || 'completed',
-                        providerStatus: o.status || 'completed',
+                        status: o.status || ORDER_STATUS.PROCESSING,
+                        providerStatus: o.status || 'UNKNOWN',
                         providerRef: '',
                         date: new Date(o.created_at).toLocaleDateString(),
                         rawDate: o.created_at
@@ -1187,7 +1187,7 @@ async function loadStoredOrdersInternal() {
                         phone: maskPhoneDisplay(o.customer_phone),
                         package: `${formatDataVolume(o.volume_mb)} (GHS ${Number(o.sale_amount).toFixed(2)})`,
                         status: o.status,
-                        providerStatus: o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.status,
+                        providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_reference || '',
                         date: new Date(o.created_at).toLocaleDateString(),
                         rawDate: o.created_at
@@ -1204,7 +1204,7 @@ async function loadStoredOrdersInternal() {
                         phone: maskPhoneDisplay(o.recipient || o.customer_phone),
                         package: `${o.product_label || 'Data bundle'} (GHS ${Number(o.platform_price || 0).toFixed(2)})`,
                         status: o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status),
-                        providerStatus: o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || o.fulfilment_status || 'UNKNOWN',
+                        providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_reference || '',
                         date: new Date(o.created_at).toLocaleDateString(),
                         rawDate: o.created_at

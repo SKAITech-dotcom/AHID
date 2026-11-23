@@ -1,5 +1,6 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
 import { activeDataProvider, fetchDataOrderStatus, recoverGrandTechOrderIdFromProvider, recoverGrandTechOrderIdFromStored } from '../_shared/dataProvider.ts';
+import { recordProviderRefund, refundWallet } from '../_shared/wallet.ts';
 
 interface OrderMatch {
   trackingId: string;
@@ -53,10 +54,9 @@ async function liveDataStatus(admin: ReturnType<typeof adminClient>, row: Record
       ? 'swift'
       : providerValue;
   let providerOrderId = String(
-    (row.order_table === 'public_data_orders' ? row.provider_reference : row.provider_order_id)
-      || stored.providerOrderId
+    stored.providerOrderId
       || stored.orderId
-      || (row.order_table === 'public_data_orders' ? row.provider_reference : '')
+      || (row.order_table === 'public_data_orders' ? row.provider_reference : row.provider_order_id)
       || stored.providerReference
       || '',
   ).trim();
@@ -104,6 +104,54 @@ async function liveDataStatus(admin: ReturnType<typeof adminClient>, row: Record
       ...providerIdentity,
     })
     .eq('id', row.id);
+
+  if (['successful', 'failed', 'cancelled'].includes(live.state)) {
+    const isPublic = row.order_table === 'public_data_orders';
+    if (isPublic) {
+      await admin.rpc('mark_public_data_order', {
+        p_order_id: row.id,
+        p_status: live.state === 'successful' ? 'successful' : 'failed',
+        p_provider_amount: null,
+        p_provider_reference: providerOrderId || live.providerOrderId || null,
+        p_provider_response: {
+          ...stored,
+          lastProviderStatus: live.status,
+          lastProviderState: live.state,
+          lastStatusCheckedAt: checkedAt,
+        },
+      });
+      if (live.state !== 'successful' && row.agent_id) {
+        await refundWallet(
+          String(row.agent_id),
+          String(row.payment_reference || row.provider_reference || ''),
+          Number(row.sale_amount || 0),
+          `Refund for provider-failed public data order ${row.short_code || row.id}`,
+        ).then(() => recordProviderRefund({
+          orderType: 'public_data_orders',
+          orderId: String(row.id),
+          agentId: String(row.agent_id),
+          amount: Number(row.sale_amount || 0),
+          internalReference: String(row.payment_reference || row.provider_reference || ''),
+          provider,
+          providerOrderId: live.providerOrderId || providerOrderId || null,
+          providerReference: String(row.provider_reference || ''),
+          reason: `Refund for provider-failed public data order ${row.short_code || row.id}`,
+          metadata: { providerStatus: live.status, providerState: live.state },
+        })).catch((error) => console.error('Track-order public refund failed:', error));
+      }
+    } else {
+      await admin.rpc('settle_agent_data_order', {
+        p_order_id: row.id,
+        p_status: live.state,
+        p_provider_response: {
+          ...stored,
+          lastProviderStatus: live.status,
+          lastProviderState: live.state,
+          lastStatusCheckedAt: checkedAt,
+        },
+      });
+    }
+  }
   return live;
 }
 

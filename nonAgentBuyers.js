@@ -37,6 +37,7 @@ function rememberGuestOrder(order) {
     accessToken: String(order.accessToken || '').trim(),
     phone: String(order.phone || '').trim(),
     status: String(order.status || 'pending_payment'),
+    providerStatus: String(order.providerStatus || order.provider_status || '').trim(),
     statusLabel: String(order.statusLabel || '').trim(),
     network: String(order.network || '').trim(),
     volumeMb: Number(order.volumeMb || 0),
@@ -67,6 +68,7 @@ function renderGuestOrders() {
       <strong>Order ${escapeHtml(item.orderCode || '—')}</strong>
       <div class="order-meta">Recipient: ${escapeHtml(item.phone || '—')}<br>${escapeHtml(bundle)}${item.amount ? ` · GHS ${Number(item.amount).toFixed(2)}` : ''}</div>
       <div class="order-state">${escapeHtml(item.statusLabel || status)}</div>
+      ${item.providerStatus ? `<div class="order-meta">Provider: ${escapeHtml(item.providerStatus)}</div>` : ''}
       <button type="button" data-refresh-order="${index}">Refresh status</button>
     </article>`;
   }).join('');
@@ -215,6 +217,7 @@ async function refreshGuestOrder(index, button) {
     if (!order) throw new Error('Order was not found. Check the order ID and recipient number.');
     payment.orderCode = String(order.short_code || payment.orderCode || '').toUpperCase();
     payment.status = String(order.status || 'processing');
+    payment.providerStatus = String(order.providerStatus || order.provider_status || '').trim();
     payment.statusLabel = '';
     payment.network = order.network_type || payment.network || '';
     payment.volumeMb = Number(order.volume_mb || payment.volumeMb || 0);
