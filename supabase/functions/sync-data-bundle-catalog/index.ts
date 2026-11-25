@@ -8,6 +8,7 @@ import {
   bundleIdFor,
   catalogPrice,
   formatBundleVolume,
+  isDisabledStandardBundle,
   type DataNetwork,
 } from '../_shared/dataCatalog.ts';
 
@@ -37,8 +38,9 @@ Deno.serve(async (request) => {
       fetchSwiftPackages(),
     ]);
 
-    // Build a catalog from the provider assigned to each tier. GrandTech is
-    // used only for MTN 1GB and Telecel 5GB; all remaining tiers use Swift.
+    // Keep the existing provider assignment: GrandTech supplies MTN 1GB and
+    // Telecel 5GB when those tiers are available; the disabled-tier guard
+    // below prevents either one from being reactivated by a sync.
     const chosen = new Map<string, { packageId: string; cost: number }>();
     for (const pkg of grandTechPackages) {
       if (pkg.soldOut) continue;
@@ -47,6 +49,7 @@ Deno.serve(async (request) => {
       const volumeInMB = Math.round(pkg.sizeGb * 1024);
       if (volumeInMB < 1024) continue;
       if (providerForBundle(network, volumeInMB) !== 'grandtech') continue;
+      if (isDisabledStandardBundle(network, volumeInMB)) continue;
       if (!Number.isFinite(volumeInMB) || volumeInMB <= 0) continue;
       // Only sizes that map to a whole number of MB can be sold, because that
       // is the unit volume_mb and the order path are both denominated in.
@@ -67,7 +70,7 @@ Deno.serve(async (request) => {
       if (!DATA_NETWORKS.includes(network)) continue;
       const volumeInMB = swiftPackageVolumeInMB(pkg.name);
       if (volumeInMB === null) continue;
-      if (!Number.isFinite(volumeInMB) || volumeInMB < 1024 || providerForBundle(network, volumeInMB) !== 'swift') continue;
+      if (!Number.isFinite(volumeInMB) || volumeInMB < 1024 || providerForBundle(network, volumeInMB) !== 'swift' || isDisabledStandardBundle(network, volumeInMB)) continue;
       if (catalogPrice(network, volumeInMB) === null) continue;
       const cost = Number(pkg.price);
       if (!Number.isFinite(cost) || cost <= 0) continue;
@@ -100,7 +103,7 @@ Deno.serve(async (request) => {
         .sort((a, b) => a - b);
 
       for (const volumeInMB of volumes) {
-        if (volumeInMB < 1024) continue;
+        if (volumeInMB < 1024 || isDisabledStandardBundle(network, volumeInMB)) continue;
         const match = chosen.get(`${network}:${volumeInMB}`);
         const bundleId = bundleIdFor(network, volumeInMB);
         const price = catalogPrice(network, volumeInMB);

@@ -22,6 +22,9 @@ export type DataNetwork = 'mtn' | 'telecel' | 'airteltigo';
 
 export const DATA_NETWORKS: DataNetwork[] = ['mtn', 'telecel', 'airteltigo'];
 
+/** Standard Data bundle ids that are intentionally unavailable for sale. */
+export const DISABLED_STANDARD_BUNDLE_IDS = new Set(['mtn-1gb', 'telecel-5gb']);
+
 /**
  * network -> volume in MB -> sale price in GHS.
  *
@@ -58,6 +61,15 @@ export function bundleIdFor(network: DataNetwork, volumeInMB: number): string {
   const gb = volumeInMB / 1024;
   const suffix = Number.isInteger(gb) ? `${gb}gb` : `${volumeInMB}mb`;
   return `${network}-${suffix}`;
+}
+
+export function isDisabledStandardBundle(network: string, volumeInMB: number): boolean {
+  const normalizedNetwork = String(network || '').trim().toLowerCase();
+  const gb = Number(volumeInMB) / 1024;
+  const bundleId = Number.isInteger(gb)
+    ? `${normalizedNetwork}-${gb}gb`
+    : `${normalizedNetwork}-${Number(volumeInMB)}mb`;
+  return DISABLED_STANDARD_BUNDLE_IDS.has(bundleId);
 }
 
 /** The volume a bundle_id refers to, or null when the id is not one of ours. */
