@@ -1,6 +1,11 @@
 import { supabase } from './supabaseClient.js';
 
-const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['mtn-1gb', 'telecel-5gb']);
+const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['telecel-5gb']);
+
+function isOutOfStockBundle(network, bundleId) {
+  return String(network || '').toLowerCase() === 'mtn'
+    || HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundleId || '').toLowerCase());
+}
 
 /**
  * Reads the live Standard Data sale catalog directly from Supabase. The edge
@@ -36,6 +41,7 @@ export async function fetchStandardBundleCatalog() {
       validity: bundle.validity ? String(bundle.validity) : null,
       volumeMb: Number(bundle.volumeMb),
       price: Number(bundle.price),
+      outOfStock: isOutOfStockBundle(group.network, bundle.bundleId),
     })),
   }));
 }
@@ -52,6 +58,7 @@ function normalizeRows(rows) {
       validity: row.validity ? String(row.validity) : null,
       volumeMb: Number(row.volume_mb),
       price: Number(row.price),
+      outOfStock: isOutOfStockBundle(network, row.bundle_id),
     });
   }
   return [...groups.entries()].map(([network, bundles]) => ({ network, bundles }));

@@ -8,7 +8,7 @@ import {
   bundleIdFor,
   catalogPrice,
   formatBundleVolume,
-  isDisabledStandardBundle,
+  isOutOfStockStandardBundle,
   type DataNetwork,
 } from '../_shared/dataCatalog.ts';
 
@@ -49,7 +49,7 @@ Deno.serve(async (request) => {
       const volumeInMB = Math.round(pkg.sizeGb * 1024);
       if (volumeInMB < 1024) continue;
       if (providerForBundle(network, volumeInMB) !== 'grandtech') continue;
-      if (isDisabledStandardBundle(network, volumeInMB)) continue;
+      if (isOutOfStockStandardBundle(network, volumeInMB)) continue;
       if (!Number.isFinite(volumeInMB) || volumeInMB <= 0) continue;
       // Only sizes that map to a whole number of MB can be sold, because that
       // is the unit volume_mb and the order path are both denominated in.
@@ -70,7 +70,7 @@ Deno.serve(async (request) => {
       if (!DATA_NETWORKS.includes(network)) continue;
       const volumeInMB = swiftPackageVolumeInMB(pkg.name);
       if (volumeInMB === null) continue;
-      if (!Number.isFinite(volumeInMB) || volumeInMB < 1024 || providerForBundle(network, volumeInMB) !== 'swift' || isDisabledStandardBundle(network, volumeInMB)) continue;
+      if (!Number.isFinite(volumeInMB) || volumeInMB < 1024 || providerForBundle(network, volumeInMB) !== 'swift' || isOutOfStockStandardBundle(network, volumeInMB)) continue;
       if (catalogPrice(network, volumeInMB) === null) continue;
       const cost = Number(pkg.price);
       if (!Number.isFinite(cost) || cost <= 0) continue;
@@ -103,7 +103,7 @@ Deno.serve(async (request) => {
         .sort((a, b) => a - b);
 
       for (const volumeInMB of volumes) {
-        if (volumeInMB < 1024 || isDisabledStandardBundle(network, volumeInMB)) continue;
+        if (volumeInMB < 1024 || isOutOfStockStandardBundle(network, volumeInMB)) continue;
         const match = chosen.get(`${network}:${volumeInMB}`);
         const bundleId = bundleIdFor(network, volumeInMB);
         const price = catalogPrice(network, volumeInMB);

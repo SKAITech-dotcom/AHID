@@ -178,6 +178,7 @@ function renderBundles() {
   list.innerHTML = bundles.map((bundle) => {
     const unaffordable = Number(bundle.price) > state.balance;
     const selected = bundle.bundleKey === state.selectedBundleKey;
+    const outOfStock = bundle.isOutOfStock === true;
     const meta = [network?.name, bundle.category].filter(Boolean).join(' • ');
     const isSpecial = !AFFORDABLE_CATEGORIES.has(bundle.category);
     const category = isSpecial
@@ -188,9 +189,9 @@ function renderBundles() {
       <button
         type="button"
         role="radio"
-        class="sv-bundle ${selected ? 'selected' : ''} ${unaffordable ? 'unaffordable' : ''}"
+        class="sv-bundle ${selected ? 'selected' : ''} ${unaffordable ? 'unaffordable' : ''} ${outOfStock ? 'out-of-stock' : ''}"
         aria-checked="${selected}"
-        onclick="selectDataBundle('${escapeHtml(bundle.bundleKey)}')"
+        ${outOfStock ? 'aria-disabled="true" disabled' : `onclick="selectDataBundle('${escapeHtml(bundle.bundleKey)}')"`}
       >
         <input type="radio" name="sv-bundle" tabindex="-1" aria-hidden="true" ${selected ? 'checked' : ''} readonly>
         <span class="sv-radio" aria-hidden="true"></span>
@@ -201,7 +202,7 @@ function renderBundles() {
         </span>
         <span class="sv-bundle-price">
           <span class="sv-price">${formatCedi(bundle.price)}</span>
-          <span class="sv-low">Low balance</span>
+          <span class="sv-low">${outOfStock ? 'Out of stock' : 'Low balance'}</span>
         </span>
       </button>
     `;
@@ -227,6 +228,12 @@ function renderFooter() {
   if (!bundle) {
     button.disabled = true;
     button.textContent = 'Select a bundle';
+    return;
+  }
+
+  if (bundle.isOutOfStock) {
+    button.disabled = true;
+    button.textContent = 'Out of stock';
     return;
   }
 
@@ -270,7 +277,8 @@ export function selectDataNetwork(networkId) {
 }
 
 export function selectDataBundle(bundleKey) {
-  if (!activeBundles().some((bundle) => bundle.bundleKey === bundleKey)) return;
+  const bundle = activeBundles().find((candidate) => candidate.bundleKey === bundleKey);
+  if (!bundle || bundle.isOutOfStock) return;
   state.selectedBundleKey = bundleKey;
   state.idempotencyKey = null;
   renderAll();
@@ -372,6 +380,7 @@ async function loadCatalog() {
           category: 'Standard',
           validity: bundle.validity ? String(bundle.validity) : null,
           isAvailable: true,
+          isOutOfStock: bundle.outOfStock === true || id === 'mtn',
         };
       }),
     };
@@ -447,6 +456,10 @@ export async function startDataPurchase() {
 
   if (!bundle) {
     showNotice('Select a data bundle first.');
+    return;
+  }
+  if (bundle.isOutOfStock) {
+    showNotice('This bundle is out of stock.');
     return;
   }
   if (!GHANA_PHONE.test(phone)) {

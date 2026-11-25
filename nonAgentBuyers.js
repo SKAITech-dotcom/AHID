@@ -2,7 +2,7 @@ import { supabase, readFunctionError } from './supabaseClient.js';
 
 const NETWORKS = ['mtn', 'telecel', 'airteltigo'];
 const NETWORK_LABELS = { mtn: 'MTN', telecel: 'Telecel', airteltigo: 'AirtelTigo' };
-const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['mtn-1gb', 'telecel-5gb']);
+const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['telecel-5gb']);
 const params = new URLSearchParams(window.location.search);
 let network = NETWORKS.includes(params.get('network')) ? params.get('network') : 'mtn';
 let bundles = [];
@@ -107,19 +107,22 @@ function renderBundles() {
     catalog.innerHTML = '<div class="message show info">No bundles are currently available on this network.</div>';
     return;
   }
-  catalog.innerHTML = visible.map((bundle) => `
+  catalog.innerHTML = visible.map((bundle) => {
+    const outOfStock = bundle.outOfStock === true;
+    return `
     <article class="bundle">
       <h2>${escapeHtml(volume(bundle.volumeMb))}</h2>
       <small>${escapeHtml(bundle.title || `${NETWORK_LABELS[network]} data bundle`)}${bundle.validity ? ` · ${escapeHtml(bundle.validity)}` : ''}</small>
       <div class="price">${money(bundle.price)}</div>
-      <button class="buy" type="button" data-bundle-id="${escapeHtml(bundle.bundleId)}">Buy this bundle</button>
-    </article>`).join('');
+      <button class="buy" type="button" data-bundle-id="${escapeHtml(bundle.bundleId)}" ${outOfStock ? 'disabled' : ''}>${outOfStock ? 'Out of stock' : 'Buy this bundle'}</button>
+    </article>`;
+  }).join('');
   catalog.querySelectorAll('[data-bundle-id]').forEach((button) => button.addEventListener('click', () => openCheckout(button.dataset.bundleId)));
 }
 
 function openCheckout(bundleId) {
   selectedBundle = bundles.find((bundle) => bundle.bundleId === bundleId) || null;
-  if (!selectedBundle) return;
+  if (!selectedBundle || selectedBundle.outOfStock) return;
   $('selectedBundle').textContent = `${NETWORK_LABELS[selectedBundle.network]} · ${volume(selectedBundle.volumeMb)} · ${money(selectedBundle.price)}`;
   $('paymentHelp').textContent = `Complete the ${paymentGatewayForPrice(selectedBundle.price)} checkout. Your bundle is sent after payment is confirmed.`;
   $('checkout').classList.add('open');
@@ -141,7 +144,11 @@ async function loadCatalog() {
       throw new Error(details.message || 'Unable to load the live data catalogue.');
     }
     bundles = (Array.isArray(data?.bundles) ? data.bundles : [])
-      .filter((bundle) => !HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundle.bundleId || '').toLowerCase()));
+      .filter((bundle) => !HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundle.bundleId || '').toLowerCase()))
+      .map((bundle) => ({
+        ...bundle,
+        outOfStock: String(bundle.network || '').toLowerCase() === 'mtn',
+      }));
     renderTabs();
     renderBundles();
     if (!bundles.length) showMessage('No data bundles are available right now.', 'info');
@@ -154,6 +161,7 @@ async function loadCatalog() {
 
 async function startCheckout() {
   if (!selectedBundle) return showMessage('Choose a data bundle first.', 'error');
+  if (selectedBundle.outOfStock) return showMessage('This bundle is out of stock.', 'error');
   const phone = $('customerPhone').value.trim();
   if (!/^0\d{9}$/.test(phone)) return showMessage('Enter a valid 10-digit Ghana customer number.', 'error');
 

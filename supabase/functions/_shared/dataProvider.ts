@@ -13,7 +13,7 @@ import {
   type GrandTechOrderState,
 } from './grandtechDataProvider.ts';
 import { friendlyProviderMessage } from './providerMessages.ts';
-import { isDisabledStandardBundle } from './dataCatalog.ts';
+import { isOutOfStockStandardBundle } from './dataCatalog.ts';
 
 export type DataProviderName = 'grandtech' | 'swift';
 
@@ -124,7 +124,7 @@ export async function resolveDataPackage(
   volumeInMB: number,
 ): Promise<ResolvedDataPackage | null> {
   const network = String(networkType || '').trim().toLowerCase();
-  if (isDisabledStandardBundle(network, volumeInMB)) return null;
+  if (isOutOfStockStandardBundle(network, volumeInMB)) return null;
   const provider = providerForBundle(network, volumeInMB);
   if (provider === 'grandtech') {
     const pkg = await resolveGrandTechPackage(network, volumeInMB);

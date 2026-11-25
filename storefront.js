@@ -4,7 +4,7 @@ import { recordQrScan } from './qrConfig.js';
 const FN = supabase.functions;
 
 const NETWORK_LABELS = { mtn: 'MTN', telecel: 'Telecel', airteltigo: 'AirtelTigo' };
-const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['mtn-1gb', 'telecel-5gb']);
+const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['telecel-5gb']);
 
 const els = {
   loading: document.getElementById('loading'),
@@ -31,9 +31,12 @@ function hideDisabledStoreBundles(data) {
     networks: (data?.networks || [])
       .map((group) => ({
         ...group,
-        bundles: (group.bundles || []).filter((bundle) =>
-          !HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundle.bundleId || '').toLowerCase())
-        ),
+        bundles: (group.bundles || [])
+          .filter((bundle) => !HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundle.bundleId || '').toLowerCase()))
+          .map((bundle) => ({
+            ...bundle,
+            outOfStock: String(group.network || '').toLowerCase() === 'mtn',
+          })),
       }))
       .filter((group) => group.bundles.length > 0),
   };
@@ -278,6 +281,7 @@ async function loadStore() {
         volumeMb: volumeInMB,
         basePrice: catalogPrice,
         price: Math.round(finalPrice * 100) / 100,
+        outOfStock: network === 'mtn',
         isCustomPrice: (custom !== undefined && custom > 0) || (override?.price !== undefined && override.price > 0)
       };
     }).filter(Boolean);
@@ -407,15 +411,16 @@ function renderBundles(bundles) {
   els.grid.innerHTML = bundles.map((bundle, index) => {
     const price = Number(bundle.price);
     const checkout = computeStoreCheckout(price);
+    const outOfStock = bundle.outOfStock === true || String(bundle.network).toLowerCase() === 'mtn';
 
     return `
-      <div class="bundle">
+      <div class="bundle ${outOfStock ? 'out-of-stock' : ''}">
         <span class="net">${NETWORK_LABELS[bundle.network] || bundle.network}</span>
         <span class="size">${bundle.title.replace(/^[A-Za-z ]+/, '').trim() || (bundle.volumeMb / 1024) + 'GB'}</span>
         <span class="price">${money(price)}</span>
         <span class="valid">${bundle.validity || 'Instant Delivery'}</span>
-        <button type="button" data-index="${index}">Buy Now</button>
-        <div class="form" id="form-${index}">
+        <button type="button" data-index="${index}" ${outOfStock ? 'disabled' : ''}>${outOfStock ? 'Out of stock' : 'Buy Now'}</button>
+        ${outOfStock ? '' : `<div class="form" id="form-${index}">
           <input type="tel" id="phone-${index}" placeholder="Recipient number e.g. 0240000000 *" autocomplete="tel" inputmode="tel">
           
           <div class="fee-breakdown">
@@ -429,7 +434,7 @@ function renderBundles(bundles) {
             <button type="button" class="confirm" data-confirm="${index}">Pay ${money(checkout.grossAmount)}</button>
             <button type="button" class="cancel" data-cancel="${index}">Cancel</button>
           </div>
-        </div>
+        </div>`}
       </div>
     `;
   }).join('');
@@ -454,6 +459,10 @@ function toggleForm(index) {
 }
 
 async function submitOrder(bundle, index) {
+  if (!bundle || bundle.outOfStock || String(bundle.network).toLowerCase() === 'mtn') {
+    showResult('<strong>Out of stock.</strong> This MTN bundle is temporarily unavailable.', 'err');
+    return;
+  }
   const phone = (document.getElementById(`phone-${index}`)?.value || '').trim();
   const button = els.grid.querySelector(`[data-confirm="${index}"]`);
 
