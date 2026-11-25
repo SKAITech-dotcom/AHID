@@ -49,7 +49,10 @@ Deno.serve(async (request) => {
 
     if (error) throw error;
 
-    const rows = data?.length ? data : DATA_NETWORKS.flatMap((network) =>
+    const visibleCatalogRows = (data ?? []).filter((row) =>
+      !isDisabledStandardBundle(String(row.network), Number(row.volume_mb))
+    );
+    const rows = visibleCatalogRows.length ? visibleCatalogRows : DATA_NETWORKS.flatMap((network) =>
       Object.entries(SALE_CATALOG[network])
         .filter(([volume]) => Number(volume) >= 1024 && !isDisabledStandardBundle(network, Number(volume)))
         .map(([volume, price]) => ({

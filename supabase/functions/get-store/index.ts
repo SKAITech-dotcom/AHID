@@ -268,7 +268,8 @@ Deno.serve(async (request) => {
       });
     }
 
-    let bundles = (catalogResult.data ?? []) as {
+    let bundles = (catalogResult.data ?? [])
+      .filter((row) => !isDisabledStandardBundle(String(row.network), Number(row.volume_mb))) as {
       bundle_id: string; network: string; title: string; validity: string | null; volume_mb: number; price: number;
     }[];
     if (bundles.length === 0) {
