@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient.js';
 import { checkAgentAccessServer } from './agentAccessCheck.js';
-import { fetchStandardBundleCatalog } from './bundleCatalogClient.js';
+import { fetchStandardBundleCatalog } from './bundleCatalogClient.js?v=20261125-hidden-bundles';
 
 /**
  * Standard Data Bundle storefront (data.html).

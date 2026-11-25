@@ -2,6 +2,7 @@ import { supabase, readFunctionError } from './supabaseClient.js';
 
 const NETWORKS = ['mtn', 'telecel', 'airteltigo'];
 const NETWORK_LABELS = { mtn: 'MTN', telecel: 'Telecel', airteltigo: 'AirtelTigo' };
+const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['mtn-1gb', 'telecel-5gb']);
 const params = new URLSearchParams(window.location.search);
 let network = NETWORKS.includes(params.get('network')) ? params.get('network') : 'mtn';
 let bundles = [];
@@ -139,7 +140,8 @@ async function loadCatalog() {
       const details = await readFunctionError(error);
       throw new Error(details.message || 'Unable to load the live data catalogue.');
     }
-    bundles = Array.isArray(data?.bundles) ? data.bundles : [];
+    bundles = (Array.isArray(data?.bundles) ? data.bundles : [])
+      .filter((bundle) => !HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundle.bundleId || '').toLowerCase()));
     renderTabs();
     renderBundles();
     if (!bundles.length) showMessage('No data bundles are available right now.', 'info');

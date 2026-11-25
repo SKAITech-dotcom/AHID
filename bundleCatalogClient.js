@@ -1,5 +1,7 @@
 import { supabase } from './supabaseClient.js';
 
+const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['mtn-1gb', 'telecel-5gb']);
+
 /**
  * Reads the live Standard Data sale catalog directly from Supabase. The edge
  * function remains a compatibility fallback, but agent pages should not rely
@@ -26,7 +28,9 @@ export async function fetchStandardBundleCatalog() {
 
   return (Array.isArray(fallback.data?.networks) ? fallback.data.networks : []).map((group) => ({
     network: String(group.network || '').toLowerCase(),
-    bundles: (Array.isArray(group.bundles) ? group.bundles : []).map((bundle) => ({
+    bundles: (Array.isArray(group.bundles) ? group.bundles : []).filter((bundle) =>
+      !HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundle.bundleId || '').toLowerCase())
+    ).map((bundle) => ({
       bundleId: String(bundle.bundleId),
       title: String(bundle.title),
       validity: bundle.validity ? String(bundle.validity) : null,
@@ -39,6 +43,7 @@ export async function fetchStandardBundleCatalog() {
 function normalizeRows(rows) {
   const groups = new Map();
   for (const row of rows) {
+    if (HIDDEN_STANDARD_BUNDLE_IDS.has(String(row.bundle_id || '').toLowerCase())) continue;
     const network = String(row.network || '').toLowerCase();
     if (!groups.has(network)) groups.set(network, []);
     groups.get(network).push({

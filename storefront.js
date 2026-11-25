@@ -4,6 +4,7 @@ import { recordQrScan } from './qrConfig.js';
 const FN = supabase.functions;
 
 const NETWORK_LABELS = { mtn: 'MTN', telecel: 'Telecel', airteltigo: 'AirtelTigo' };
+const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['mtn-1gb', 'telecel-5gb']);
 
 const els = {
   loading: document.getElementById('loading'),
@@ -23,6 +24,20 @@ const els = {
 
 let storeData = null;
 let activeNetwork = 'mtn';
+
+function hideDisabledStoreBundles(data) {
+  return {
+    ...data,
+    networks: (data?.networks || [])
+      .map((group) => ({
+        ...group,
+        bundles: (group.bundles || []).filter((bundle) =>
+          !HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundle.bundleId || '').toLowerCase())
+        ),
+      }))
+      .filter((group) => group.bundles.length > 0),
+  };
+}
 
 const params = new URLSearchParams(window.location.search);
 const pathMatch = window.location.pathname.match(/^\/store\/([a-z0-9-_]+)\/?$/i);
@@ -90,7 +105,7 @@ async function loadStore() {
   try {
     const { data, error } = await FN.invoke('get-store', { body: { slug: agentParam || '' } });
     if (!error && data && !data.error) {
-      storeData = data;
+      storeData = hideDisabledStoreBundles(data);
       renderStore();
 
       // If customer returned from redirect checkout with a reference
@@ -237,6 +252,7 @@ async function loadStore() {
       const volumeInMB = Number(b.volume_mb);
       const catalogPrice = Number(b.price);
       const bId = String(b.bundle_id).toLowerCase();
+      if (HIDDEN_STANDARD_BUNDLE_IDS.has(bId)) return null;
       const gb = volumeInMB / 1024;
       const keyGb = Number.isInteger(gb) && gb > 0 ? `price_${network}_${gb}gb` : '';
       const keyMb = `price_${network}_${volumeInMB}mb`;
