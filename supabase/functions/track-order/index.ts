@@ -1,6 +1,8 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
 import { activeDataProvider, fetchDataOrderStatus, recoverGrandTechOrderIdFromProvider, recoverGrandTechOrderIdFromStored } from '../_shared/dataProvider.ts';
 import { recordProviderRefund, refundWallet } from '../_shared/wallet.ts';
+import { fetchHubtelCommissionStatus } from '../_shared/hubtelCommissionStatus.ts';
+import { settleHubtelAirtimeOrder, settleHubtelUtilityOrder } from '../_shared/hubtelSettlement.ts';
 
 interface OrderMatch {
   trackingId: string;
@@ -155,6 +157,67 @@ async function liveDataStatus(admin: ReturnType<typeof adminClient>, row: Record
   return live;
 }
 
+async function liveHubtelStatus(
+  admin: ReturnType<typeof adminClient>,
+  type: 'airtime' | 'utility',
+  row: Record<string, unknown>,
+) {
+  const current = String(type === 'airtime' ? row.airtime_status : row.status).toLowerCase();
+  if (['failed', 'cancelled', 'completed', 'delivered'].includes(current)) return null;
+  const reference = String(row.payment_reference || '').trim();
+  if (!reference) return null;
+  const live = await fetchHubtelCommissionStatus(reference).catch(() => null);
+  if (!live) return null;
+
+  const checkedAt = new Date().toISOString();
+  const providerResponse = {
+    ...(row.provider_response && typeof row.provider_response === 'object' ? row.provider_response : {}),
+    ...live.payload,
+    lastProviderStatus: live.status || live.state.toUpperCase(),
+    lastProviderState: live.state,
+    checkedAt,
+  };
+
+  if (live.state === 'pending') {
+    await admin.from(type === 'airtime' ? 'airtime_orders' : 'utility_orders').update({
+      provider_reference: live.orderId || row.provider_reference || null,
+      provider_response: providerResponse,
+      ...(type === 'airtime' ? { updated_at: checkedAt } : { paid_at: checkedAt }),
+    }).eq('id', row.id);
+    return live;
+  }
+
+  if (type === 'airtime') {
+    await settleHubtelAirtimeOrder(admin, {
+      id: String(row.id),
+      agent_id: row.agent_id ? String(row.agent_id) : null,
+      payment_reference: reference,
+      amount: Number(row.amount || 0),
+      wallet_charge_amount: Number(row.wallet_charge_amount || row.amount || 0),
+      provider_reference: row.provider_reference ? String(row.provider_reference) : null,
+    }, {
+      state: live.state === 'success' ? 'success' : 'failed',
+      payload: providerResponse,
+      providerReference: live.orderId || (row.provider_reference ? String(row.provider_reference) : null),
+    });
+  } else {
+    await settleHubtelUtilityOrder(admin, {
+      id: String(row.id),
+      agent_id: row.agent_id ? String(row.agent_id) : null,
+      payment_reference: reference,
+      gross_amount: Number(row.gross_amount || row.amount || 0),
+      wallet_charge_amount: Number(row.wallet_charge_amount || row.gross_amount || row.amount || 0),
+      bill_category: String(row.bill_category || ''),
+      provider_reference: row.provider_reference ? String(row.provider_reference) : null,
+    }, {
+      state: live.state === 'success' ? 'success' : 'failed',
+      payload: providerResponse,
+      providerReference: live.orderId || (row.provider_reference ? String(row.provider_reference) : null),
+    });
+  }
+  return live;
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -172,11 +235,13 @@ Deno.serve(async (request) => {
       // 1. Check airtime orders
       const { data: airtimeData } = await admin
         .from('airtime_orders')
-        .select('payment_reference, short_code, network, amount, customer_name, recipient_phone, payment_status, airtime_status, provider_response, created_at')
+        .select('id, agent_id, payment_reference, short_code, network, amount, wallet_charge_amount, customer_name, recipient_phone, payment_status, airtime_status, provider_reference, provider_response, created_at')
         .eq('short_code', ref)
         .maybeSingle();
       if (airtimeData) {
-        const status = airtimeData.airtime_status === 'delivered' ? 'Delivered'
+        const live = await liveHubtelStatus(admin, 'airtime', airtimeData);
+        const status = live?.state === 'success' || airtimeData.airtime_status === 'delivered' ? 'Delivered'
+          : live?.state === 'failed' || airtimeData.airtime_status === 'failed' ? 'Failed'
           : airtimeData.airtime_status === 'failed' ? 'Failed'
           : airtimeData.payment_status === 'pending_payment' ? 'Awaiting Payment'
           : airtimeData.payment_status === 'paid' ? 'Processing' : (airtimeData.payment_status || 'Pending');
@@ -190,7 +255,7 @@ Deno.serve(async (request) => {
           name: airtimeData.customer_name || 'Airtime',
           phone: airtimeData.recipient_phone || '',
           status,
-          providerStatus: String(airtimeData.provider_response?.lastProviderStatus || airtimeData.airtime_status || status),
+          providerStatus: String(live?.status || airtimeData.provider_response?.lastProviderStatus || airtimeData.airtime_status || status),
           date: dateOf(airtimeData.created_at),
         };
       }
@@ -247,10 +312,11 @@ Deno.serve(async (request) => {
       if (!match) {
         const { data: utilData } = await admin
           .from('utility_orders')
-          .select('payment_reference, short_code, bill_type, package_name, amount, customer_name, customer_phone, status, token_code, created_at')
+          .select('id, agent_id, payment_reference, short_code, bill_type, bill_category, package_name, amount, gross_amount, wallet_charge_amount, customer_name, customer_phone, status, token_code, provider_reference, provider_response, created_at')
           .eq('short_code', ref)
           .maybeSingle();
         if (utilData) {
+          const live = await liveHubtelStatus(admin, 'utility', utilData);
           match = {
             trackingId: utilData.short_code,
             shortCode: utilData.short_code,
@@ -260,7 +326,7 @@ Deno.serve(async (request) => {
             price: money(utilData.amount),
             name: utilData.customer_name || 'Customer',
             phone: utilData.customer_phone || '',
-            status: utilData.status === 'completed' ? 'Completed' : utilData.status,
+            status: live?.state === 'success' || utilData.status === 'completed' ? 'Completed' : live?.state === 'failed' ? 'Failed' : utilData.status,
             date: dateOf(utilData.created_at),
           };
         }
@@ -344,10 +410,11 @@ Deno.serve(async (request) => {
     if (ref.startsWith('UTIL-')) {
       const { data, error } = await admin
         .from('utility_orders')
-        .select('payment_reference, short_code, bill_type, package_name, amount, customer_name, customer_phone, status, token_code, created_at')
+          .select('id, agent_id, payment_reference, short_code, bill_type, bill_category, package_name, amount, gross_amount, wallet_charge_amount, customer_name, customer_phone, status, token_code, provider_reference, provider_response, created_at')
         .eq('payment_reference', ref)
         .maybeSingle();
       if (!error && data) {
+        const live = await liveHubtelStatus(admin, 'utility', data);
         match = {
           trackingId: data.payment_reference,
           shortCode: data.short_code,
@@ -357,7 +424,7 @@ Deno.serve(async (request) => {
           price: money(data.amount),
           name: data.customer_name || 'Customer',
           phone: data.customer_phone || '',
-          status: data.status === 'completed' ? 'Completed' : data.status,
+          status: live?.state === 'success' || data.status === 'completed' ? 'Completed' : live?.state === 'failed' ? 'Failed' : data.status,
           date: dateOf(data.created_at),
         };
       }
@@ -367,11 +434,13 @@ Deno.serve(async (request) => {
     if (ref.startsWith('AIR-') || ref.startsWith('PAI')) {
       const { data, error } = await admin
         .from('airtime_orders')
-        .select('payment_reference, short_code, network, amount, customer_name, recipient_phone, payment_status, airtime_status, provider_response, created_at')
+        .select('id, agent_id, payment_reference, short_code, network, amount, wallet_charge_amount, customer_name, recipient_phone, payment_status, airtime_status, provider_reference, provider_response, created_at')
         .eq('payment_reference', ref)
         .maybeSingle();
       if (!error && data) {
-        const status = data.airtime_status === 'delivered' ? 'Delivered'
+        const live = await liveHubtelStatus(admin, 'airtime', data);
+        const status = live?.state === 'success' || data.airtime_status === 'delivered' ? 'Delivered'
+          : live?.state === 'failed' || data.airtime_status === 'failed' ? 'Failed'
           : data.airtime_status === 'failed' ? 'Failed'
           : data.payment_status === 'pending_payment' ? 'Awaiting Payment'
           : data.payment_status === 'paid' ? 'Processing' : (data.payment_status || 'Pending');
@@ -385,7 +454,7 @@ Deno.serve(async (request) => {
           name: data.customer_name || 'Airtime',
           phone: data.recipient_phone || '',
           status,
-          providerStatus: String(data.provider_response?.lastProviderStatus || data.airtime_status || status),
+          providerStatus: String(live?.status || data.provider_response?.lastProviderStatus || data.airtime_status || status),
           date: dateOf(data.created_at),
         };
       }

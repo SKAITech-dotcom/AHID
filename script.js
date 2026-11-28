@@ -59,6 +59,13 @@ function formatDataVolume(volumeInMB) {
     return `${mb}MB`;
 }
 
+function volumeFromBundleLabel(value) {
+    const match = String(value || '').match(/(\d+(?:\.\d+)?)\s*(GB|MB)/i);
+    if (!match) return 0;
+    const amount = Number(match[1]);
+    return match[2].toUpperCase() === 'GB' ? Math.round(amount * 1024) : Math.round(amount);
+}
+
 const SERVICE_LABELS = {
     airtime: 'Airtime',
     utility: 'Utility',
@@ -736,6 +743,13 @@ async function processPurchase() {
       return;
     }
 
+    const networkPrefixes = { mtn: ['024', '025', '053', '054', '055', '059'], telecel: ['020', '050'], airteltigo: ['026', '027', '056', '057'] };
+    if (networkPrefixes[networkType] && !networkPrefixes[networkType].includes(phone.slice(0, 3))) {
+      const label = networkType === 'airteltigo' ? 'AT' : networkType.toUpperCase();
+      alert(`This number is not an ${label} number. Enter a valid ${label} number for the selected network.`);
+      return;
+    }
+
     if (button) {
       button.disabled = true;
       button.textContent = 'Processing secure order...';
@@ -788,6 +802,10 @@ async function processPurchase() {
         status: providerStillProcessing ? ORDER_STATUS.PROCESSING : (data.status || ORDER_STATUS.PROCESSING),
         providerStatus: data.providerStatus || data.status || ORDER_STATUS.PROCESSING,
         providerRef: data.providerReference || '',
+        repeatPhone: phone,
+        repeatNetwork: networkType,
+        repeatVolumeMb: Number(currentOrder.volumeMb || volumeInMB),
+        detailPhone: phone,
         date: new Date().toLocaleDateString()
       };
       const existingOrders = JSON.parse(localStorage.getItem('skaitechOrders')) || [];
@@ -871,6 +889,7 @@ function setServiceTab(tab, element) {
  * the current page.
  */
 let allOrders = [];
+let selectedOrderForDetails = null;
 
 function currentSearchTerm() {
   const searchInput = document.getElementById('orderSearch');
@@ -926,6 +945,9 @@ function filterOrders() {
         <td><span class="status-badge badge-${status}">${label}</span></td>
         <td class="cell-date">${escapeOrderCell(order.date || '')}</td>
     `;
+    row.style.cursor = 'pointer';
+    row.title = 'Tap to view order details';
+    row.addEventListener('click', () => openOrderDetails(order));
     tableBody.appendChild(row);
   });
 
@@ -964,6 +986,93 @@ function filterOrders() {
 }
 // LOAD AND DISPLAY ORDERS WITH STATUS ACTIONS
 // RENDER TABLE (AUTOMATIC DISPLAY - NO DROPDOWN)
+function openOrderDetails(order) {
+    selectedOrderForDetails = order || null;
+    const modal = document.getElementById('orderDetailsModal');
+    const body = document.getElementById('orderDetailsBody');
+    const subtitle = document.getElementById('orderDetailsSubtitle');
+    const repeatButton = document.getElementById('repeatOrderButton');
+    const hint = document.getElementById('repeatOrderHint');
+    if (!modal || !body || !order) return;
+
+    const orderCode = fiveCharacterOrderCode(order.shortId || order.id);
+    const recipient = order.detailPhone || order.repeatPhone || order.phone || '—';
+    const providerStatus = safeProviderStatus(order.providerStatus, 'UNKNOWN');
+    body.innerHTML = [
+        ['Order ID', `#${orderCode}`],
+        ['Service', serviceLabel(order.type)],
+        ['Network / details', [order.network, order.package].filter(Boolean).join(' · ') || '—'],
+        ['Recipient', recipient],
+        ['Status', ORDER_STATUS_LABELS[normalizeOrderStatus(order.status)]],
+        ['Provider status', providerStatus],
+        ['Provider reference', order.providerRef || 'Not assigned yet'],
+        ['Date', order.date || '—'],
+    ].map(([label, value]) => `<div><small style="display:block;color:#64748b;font-size:.72rem;margin-bottom:3px;">${escapeOrderCell(label)}</small><strong>${escapeOrderCell(value)}</strong></div>`).join('');
+    if (subtitle) subtitle.textContent = 'Live status is checked from the provider before this view is refreshed.';
+
+    const canRepeat = order.type === 'data'
+        && Boolean(order.repeatPhone)
+        && Number(order.repeatVolumeMb) > 0
+        && Boolean(order.repeatNetwork);
+    if (repeatButton) repeatButton.style.display = canRepeat ? 'inline-flex' : 'none';
+    if (hint) hint.textContent = canRepeat
+        ? 'Repeat uses the same recipient, network, and bundle size. Your wallet is checked and charged by the same protected purchase path.'
+        : 'Repeat is available for Standard Data orders. Airtime and utility orders can be opened here for details.';
+    modal.style.display = 'flex';
+}
+
+function closeOrderDetails() {
+    const modal = document.getElementById('orderDetailsModal');
+    if (modal) modal.style.display = 'none';
+    selectedOrderForDetails = null;
+}
+
+async function repeatSelectedOrder() {
+    const order = selectedOrderForDetails;
+    if (!order || order.type !== 'data') return;
+    const phone = String(order.repeatPhone || '').replace(/[\s()-]/g, '');
+    const networkType = String(order.repeatNetwork || '').toLowerCase();
+    const volumeInMB = Number(order.repeatVolumeMb);
+    const prefixes = { mtn: ['024', '025', '053', '054', '055', '059'], telecel: ['020', '050'], airteltigo: ['026', '027', '056', '057'] };
+    if (!/^0\d{9}$/.test(phone)) return alert('The saved recipient number is not valid. Open a new data order instead.');
+    if (prefixes[networkType] && !prefixes[networkType].includes(phone.slice(0, 3))) {
+        const label = networkType === 'airteltigo' ? 'AT' : networkType.toUpperCase();
+        return alert(`This number is not an ${label} number. Enter a valid ${label} number for the selected network.`);
+    }
+    if (!Number.isInteger(volumeInMB) || volumeInMB <= 0) return alert('The saved bundle size is unavailable.');
+
+    const button = document.getElementById('repeatOrderButton');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Checking wallet…';
+    }
+    try {
+        const session = await getValidAgentSession();
+        const { data, error } = await supabase.functions.invoke('purchase-agent-data', {
+            body: { phone, networkType, volumeInMB },
+            headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (error || !data?.success) {
+            let message = data?.error || error?.message || 'Unable to repeat this order.';
+            if (error?.context instanceof Response) {
+                const body = await error.context.clone().json().catch(() => null);
+                message = body?.error || message;
+            }
+            throw new Error(message);
+        }
+        closeOrderDetails();
+        alert(`Repeat order submitted. It is ${String(data.status || 'processing').toLowerCase()} until the provider confirms delivery. Order code: ${data.shortCode || 'pending'}.`);
+        await loadStoredOrders();
+    } catch (error) {
+        alert(error instanceof Error ? error.message : 'Unable to repeat this order.');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Repeat this order';
+        }
+    }
+}
+
 function maskPhoneDisplay(phone) {
     const clean = String(phone || '').replace(/\D/g, '');
     if (!clean) return phone || '-';
@@ -1155,6 +1264,10 @@ async function loadStoredOrdersInternal() {
                         status: o.status,
                         providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_order_id || o.provider_reference || '',
+                        repeatPhone: o.phone,
+                        repeatNetwork: o.network_type,
+                        repeatVolumeMb: Number(o.volume_mb),
+                        detailPhone: o.phone,
                         date: new Date(o.created_at).toLocaleDateString(),
                         rawDate: o.created_at
                     });
@@ -1172,6 +1285,10 @@ async function loadStoredOrdersInternal() {
                         status: o.status || ORDER_STATUS.PROCESSING,
                         providerStatus: o.status || 'UNKNOWN',
                         providerRef: '',
+                        repeatPhone: o.recipient_phone,
+                        repeatNetwork: String(o.network || '').toLowerCase(),
+                        repeatVolumeMb: volumeFromBundleLabel(o.bundle_size),
+                        detailPhone: o.recipient_phone,
                         date: new Date(o.created_at).toLocaleDateString(),
                         rawDate: o.created_at
                     });
@@ -1189,6 +1306,10 @@ async function loadStoredOrdersInternal() {
                         status: o.status,
                         providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_reference || '',
+                        repeatPhone: o.customer_phone,
+                        repeatNetwork: o.network_type,
+                        repeatVolumeMb: Number(o.volume_mb),
+                        detailPhone: o.customer_phone,
                         date: new Date(o.created_at).toLocaleDateString(),
                         rawDate: o.created_at
                     });
@@ -1206,6 +1327,10 @@ async function loadStoredOrdersInternal() {
                         status: o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status),
                         providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_reference || '',
+                        repeatPhone: o.recipient || o.customer_phone,
+                        repeatNetwork: o.network,
+                        repeatVolumeMb: volumeFromBundleLabel(o.product_label),
+                        detailPhone: o.recipient || o.customer_phone,
                         date: new Date(o.created_at).toLocaleDateString(),
                         rawDate: o.created_at
                     });
@@ -1567,6 +1692,9 @@ window.processPurchase = processPurchase;
 window.setFilter = setFilter;
 window.setServiceTab = setServiceTab;
 window.filterOrders = filterOrders;
+window.openOrderDetails = openOrderDetails;
+window.closeOrderDetails = closeOrderDetails;
+window.repeatSelectedOrder = repeatSelectedOrder;
 window.changePage = changePage;
 window.changePageSize = changePageSize;
 window.openForgotModal = openForgotModal;

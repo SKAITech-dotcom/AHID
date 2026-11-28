@@ -8,7 +8,6 @@ import {
   bundleIdFor,
   catalogPrice,
   formatBundleVolume,
-  isOutOfStockStandardBundle,
   type DataNetwork,
 } from '../_shared/dataCatalog.ts';
 
@@ -38,9 +37,13 @@ Deno.serve(async (request) => {
       fetchSwiftPackages(),
     ]);
 
-    // Keep the existing provider assignment: GrandTech supplies MTN 1GB and
-    // Telecel 5GB when those tiers are available; the disabled-tier guard
-    // below prevents either one from being reactivated by a sync.
+    const { data: routeRows, error: routeError } = await admin
+      .from('data_bundle_provider_routes')
+      .select('bundle_id, provider');
+    if (routeError) console.warn('Provider route table unavailable; using default routes:', routeError.message);
+    const routeMap = new Map((routeRows || []).map((row) => [String(row.bundle_id), String(row.provider).toLowerCase()]));
+    const routeFor = (network: string, volumeInMB: number) => routeMap.get(bundleIdFor(network as DataNetwork, volumeInMB)) || providerForBundle(network, volumeInMB);
+
     const chosen = new Map<string, { packageId: string; cost: number }>();
     for (const pkg of grandTechPackages) {
       if (pkg.soldOut) continue;
@@ -48,8 +51,7 @@ Deno.serve(async (request) => {
       if (!DATA_NETWORKS.includes(network)) continue;
       const volumeInMB = Math.round(pkg.sizeGb * 1024);
       if (volumeInMB < 1024) continue;
-      if (providerForBundle(network, volumeInMB) !== 'grandtech') continue;
-      if (isOutOfStockStandardBundle(network, volumeInMB)) continue;
+      if (routeFor(network, volumeInMB) !== 'grandtech') continue;
       if (!Number.isFinite(volumeInMB) || volumeInMB <= 0) continue;
       // Only sizes that map to a whole number of MB can be sold, because that
       // is the unit volume_mb and the order path are both denominated in.
@@ -70,7 +72,7 @@ Deno.serve(async (request) => {
       if (!DATA_NETWORKS.includes(network)) continue;
       const volumeInMB = swiftPackageVolumeInMB(pkg.name);
       if (volumeInMB === null) continue;
-      if (!Number.isFinite(volumeInMB) || volumeInMB < 1024 || providerForBundle(network, volumeInMB) !== 'swift' || isOutOfStockStandardBundle(network, volumeInMB)) continue;
+      if (!Number.isFinite(volumeInMB) || volumeInMB < 1024 || routeFor(network, volumeInMB) !== 'swift') continue;
       if (catalogPrice(network, volumeInMB) === null) continue;
       const cost = Number(pkg.price);
       if (!Number.isFinite(cost) || cost <= 0) continue;
@@ -84,12 +86,17 @@ Deno.serve(async (request) => {
     // not the selling price controlled in the admin portal.
     const { data: existingCatalogRows, error: existingCatalogError } = await admin
       .from('bundle_catalog')
-      .select('bundle_id, price');
+      .select('bundle_id, price, active, inactive_reason');
     if (existingCatalogError) throw existingCatalogError;
     const configuredPrices = new Map(
       (existingCatalogRows || [])
         .map((row) => [String(row.bundle_id), Number(row.price)] as const)
         .filter(([, price]) => Number.isFinite(price) && price > 0),
+    );
+    const manualDisabled = new Map(
+      (existingCatalogRows || [])
+        .filter((row) => row.active === false && /admin|system control/i.test(String(row.inactive_reason || '')))
+        .map((row) => [String(row.bundle_id), String(row.inactive_reason || 'Toggled by admin')] as const),
     );
 
     const sellableBundleIds = new Set<string>();
@@ -103,7 +110,7 @@ Deno.serve(async (request) => {
         .sort((a, b) => a - b);
 
       for (const volumeInMB of volumes) {
-        if (volumeInMB < 1024 || isOutOfStockStandardBundle(network, volumeInMB)) continue;
+        if (volumeInMB < 1024) continue;
         const match = chosen.get(`${network}:${volumeInMB}`);
         const bundleId = bundleIdFor(network, volumeInMB);
         const price = catalogPrice(network, volumeInMB);
@@ -120,7 +127,7 @@ Deno.serve(async (request) => {
             volume_mb: volumeInMB,
             price: salePrice,
             active: false,
-            inactive_reason: 'Provider has no sellable package for this network and size.',
+            inactive_reason: manualDisabled.get(bundleId) || 'Provider has no sellable package for this network and size.',
             sort_order: sortOrder++,
           }, { onConflict: 'bundle_id' });
           continue;
@@ -136,8 +143,8 @@ Deno.serve(async (request) => {
           price: salePrice,
           provider_package_id: match.packageId,
           provider_cost: match.cost,
-          active: true,
-          inactive_reason: null,
+          active: !manualDisabled.has(bundleId),
+          inactive_reason: manualDisabled.get(bundleId) || null,
           sort_order: sortOrder++,
         });
       }

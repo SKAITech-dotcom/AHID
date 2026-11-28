@@ -13,7 +13,8 @@ import {
   type GrandTechOrderState,
 } from './grandtechDataProvider.ts';
 import { friendlyProviderMessage } from './providerMessages.ts';
-import { isOutOfStockStandardBundle } from './dataCatalog.ts';
+import { bundleIdFor } from './dataCatalog.ts';
+import { adminClient } from './supabase.ts';
 
 export type DataProviderName = 'grandtech' | 'swift';
 
@@ -41,12 +42,41 @@ export interface DataBuyResult {
   failureReason?: string;
 }
 
-/** GrandTech's only designated sellable bundles; all other tiers use Swift. */
+/** Safe default routing used until an admin selects a route in System Control. */
 export function providerForBundle(networkType: string, volumeInMB: number): DataProviderName {
   const network = String(networkType || '').trim().toLowerCase();
   if ((network === 'mtn' && volumeInMB === 1024) ||
       (network === 'telecel' && volumeInMB === 5120)) return 'grandtech';
   return 'swift';
+}
+
+/**
+ * Reads the system-wide route for this exact bundle. A missing route keeps the
+ * historical default so older deployments remain safe while the migration is
+ * being applied.
+ */
+export async function providerForBundleFromSystemControl(
+  networkType: string,
+  volumeInMB: number,
+): Promise<DataProviderName> {
+  const fallback = providerForBundle(networkType, volumeInMB);
+  try {
+    const bundleId = bundleIdFor(String(networkType).trim().toLowerCase() as 'mtn' | 'telecel' | 'airteltigo', Number(volumeInMB));
+    const { data, error } = await adminClient()
+      .from('data_bundle_provider_routes')
+      .select('provider')
+      .eq('bundle_id', bundleId)
+      .maybeSingle();
+    if (error) {
+      console.warn('Data provider route lookup failed; using default route:', error.message);
+      return fallback;
+    }
+    const provider = String(data?.provider || '').trim().toLowerCase();
+    return provider === 'grandtech' || provider === 'swift' ? provider : fallback;
+  } catch (error) {
+    console.warn('Data provider route lookup failed; using default route:', error);
+    return fallback;
+  }
 }
 
 /** Provider fallback for legacy orders whose provider was not saved. */
@@ -113,27 +143,23 @@ export async function recoverGrandTechOrderIdFromProvider(input: {
 }
 
 /**
- * Resolves the provider package from the provider's live catalog. MTN 1GB and
- * Telecel 5GB are GrandTech-only; every other Data Bundle package is resolved
- * from Swift. bundle_catalog remains the storefront's sale-price catalog, but
- * a stale provider mapping there must not block a package the assigned provider
- * currently offers (or send it to the wrong provider).
+ * Resolves the provider package from the provider's live catalog. The provider
+ * route is selected per bundle in System Control and is shared by agent,
+ * guest, and agent-store checkout. A package must resolve from that provider
+ * before any wallet or payment debit occurs.
  */
 export async function resolveDataPackage(
   networkType: string,
   volumeInMB: number,
 ): Promise<ResolvedDataPackage | null> {
   const network = String(networkType || '').trim().toLowerCase();
-  if (isOutOfStockStandardBundle(network, volumeInMB)) return null;
-  const provider = providerForBundle(network, volumeInMB);
+  const provider = await providerForBundleFromSystemControl(network, volumeInMB);
   if (provider === 'grandtech') {
     const pkg = await resolveGrandTechPackage(network, volumeInMB);
     if (!pkg) return null;
     return { provider, id: pkg.id, costGhs: pkg.priceGhs, raw: { id: pkg.id, price: pkg.priceGhs } };
   }
 
-  // Standard Data uses GrandTech only for MTN 1GB and Telecel 5GB;
-  // every other Standard Data tier uses Swift.
   if (provider === 'swift') {
     const pkg = await resolveSwiftPackage(network, volumeInMB);
     if (!pkg) return null;

@@ -4,7 +4,6 @@ import {
   SALE_CATALOG,
   bundleIdFor,
   formatBundleVolume,
-  isDisabledStandardBundle,
   type DataNetwork,
 } from '../_shared/dataCatalog.ts';
 
@@ -49,12 +48,10 @@ Deno.serve(async (request) => {
 
     if (error) throw error;
 
-    const visibleCatalogRows = (data ?? []).filter((row) =>
-      !isDisabledStandardBundle(String(row.network), Number(row.volume_mb))
-    );
+    const visibleCatalogRows = data ?? [];
     const rows = visibleCatalogRows.length ? visibleCatalogRows : DATA_NETWORKS.flatMap((network) =>
       Object.entries(SALE_CATALOG[network])
-        .filter(([volume]) => Number(volume) >= 1024 && !isDisabledStandardBundle(network, Number(volume)))
+        .filter(([volume]) => Number(volume) >= 1024)
         .map(([volume, price]) => ({
           bundle_id: bundleIdFor(network, Number(volume)),
           network,

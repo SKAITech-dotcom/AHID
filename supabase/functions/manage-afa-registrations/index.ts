@@ -2,6 +2,7 @@ import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supab
 import { resolveServicePrice } from '../_shared/pricing.ts';
 import { chargeWallet, refundWallet } from '../_shared/wallet.ts';
 import { submitAfaRegistration } from '../_shared/afaProvider.ts';
+import { requireSystemServiceAvailable } from '../_shared/systemControls.ts';
 
 const VALID_STATUSES = ['Pending', 'Processing', 'Completed', 'Cancelled'];
 const AFA_SELECT = 'id, reference, full_name, phone, town, id_type, id_number, occupation, price_id, amount, status, source, created_at, updated_at, provider_reference, provider_response, failure_reason';
@@ -42,6 +43,7 @@ Deno.serve(async (request) => {
       const action = body.action;
 
       if (action === 'create') {
+        await requireSystemServiceAvailable('afa_registration', admin);
         const fullName = String(body.fullName || '').trim();
         const phone = String(body.phone || '').trim();
         const town = String(body.town || '').trim();

@@ -7,6 +7,8 @@ import {
   commissionQuote,
   resolveCommissionConfig,
 } from '../_shared/commissionConfig.ts';
+import { networkPhoneError } from '../_shared/phoneValidation.ts';
+import { requireSystemServiceAvailable } from '../_shared/systemControls.ts';
 
 const VALID_NETWORKS = new Set(['mtn', 'telecel', 'at']);
 
@@ -81,6 +83,8 @@ Deno.serve(async (request) => {
         message: 'Please enter a valid 10-digit Ghanaian mobile number (e.g. 0244123456).',
       }, 400);
     }
+    const phoneNetworkError = networkPhoneError(network, phone);
+    if (phoneNetworkError) return json({ success: false, error: phoneNetworkError, message: phoneNetworkError }, 400);
 
     // Hubtel Commission Services caps a single airtime top-up at 100 cedis
     // ("The maximum airtime top-up amount per request is 100 cedis"). Enforced
@@ -104,6 +108,7 @@ Deno.serve(async (request) => {
 
     // 2. Verified Agent Authentication & Authorization
     const { admin, user, agent } = await requireAgent(request);
+    await requireSystemServiceAvailable('airtime_top_up', admin);
     agentId = user.id;
     netAmount = Math.round(rawAmount * 100) / 100;
     const commissionService = airtimeCommissionService(network);

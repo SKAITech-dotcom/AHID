@@ -1,6 +1,4 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
-import { isDisabledStandardBundle } from '../_shared/dataCatalog.ts';
-
 /** Public, server-owned catalogue for the guest Standard Data checkout. */
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
@@ -45,7 +43,7 @@ Deno.serve(async (request) => {
           updatedAt: control?.updated_at || null,
         };
       })
-      .filter((row) => row.active && !isDisabledStandardBundle(row.network, row.volumeMb) && Number.isInteger(row.volumeMb) && row.volumeMb > 0 && Number.isFinite(row.price) && row.price > 0);
+      .filter((row) => row.active && Number.isInteger(row.volumeMb) && row.volumeMb > 0 && Number.isFinite(row.price) && row.price > 0);
 
     return json({ success: true, bundles });
   } catch (error) {

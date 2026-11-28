@@ -2,6 +2,7 @@ import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
 import { resolveDataPackage } from '../_shared/dataProvider.ts';
 import { hubtelWalletGrossAmount } from '../_shared/paymentGateway.ts';
 import { hubtelPaymentsConfigured, initializeHubtelCollection } from '../_shared/hubtelPayments.ts';
+import { networkPhoneError } from '../_shared/phoneValidation.ts';
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -44,6 +45,9 @@ Deno.serve(async (request) => {
       .maybeSingle();
     if (bundleError) throw bundleError;
     if (!bundle) return json({ error: 'That bundle is no longer available. Refresh and choose another bundle.' }, 409);
+
+    const networkError = networkPhoneError(String(bundle.network), phone);
+    if (networkError) return json({ error: networkError }, 400);
 
     const { data: control, error: controlError } = await admin
       .from('non_agent_data_prices')

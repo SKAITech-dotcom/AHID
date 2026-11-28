@@ -4,7 +4,7 @@ import { recordQrScan } from './qrConfig.js';
 const FN = supabase.functions;
 
 const NETWORK_LABELS = { mtn: 'MTN', telecel: 'Telecel', airteltigo: 'AirtelTigo' };
-const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['telecel-5gb']);
+const NETWORK_PREFIXES = { mtn: ['024', '025', '053', '054', '055', '059'], telecel: ['020', '050'], airteltigo: ['026', '027', '056', '057'] };
 
 const els = {
   loading: document.getElementById('loading'),
@@ -25,18 +25,16 @@ const els = {
 let storeData = null;
 let activeNetwork = 'mtn';
 
-function hideDisabledStoreBundles(data) {
+function normalizeStoreBundles(data) {
   return {
     ...data,
     networks: (data?.networks || [])
       .map((group) => ({
         ...group,
-        bundles: (group.bundles || [])
-          .filter((bundle) => !HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundle.bundleId || '').toLowerCase()))
-          .map((bundle) => ({
-            ...bundle,
-            outOfStock: String(group.network || '').toLowerCase() === 'mtn',
-          })),
+        bundles: (group.bundles || []).map((bundle) => ({
+          ...bundle,
+          outOfStock: bundle.outOfStock === true,
+        })),
       }))
       .filter((group) => group.bundles.length > 0),
   };
@@ -108,7 +106,7 @@ async function loadStore() {
   try {
     const { data, error } = await FN.invoke('get-store', { body: { slug: agentParam || '' } });
     if (!error && data && !data.error) {
-      storeData = hideDisabledStoreBundles(data);
+      storeData = normalizeStoreBundles(data);
       renderStore();
 
       // If customer returned from redirect checkout with a reference
@@ -255,7 +253,6 @@ async function loadStore() {
       const volumeInMB = Number(b.volume_mb);
       const catalogPrice = Number(b.price);
       const bId = String(b.bundle_id).toLowerCase();
-      if (HIDDEN_STANDARD_BUNDLE_IDS.has(bId)) return null;
       const gb = volumeInMB / 1024;
       const keyGb = Number.isInteger(gb) && gb > 0 ? `price_${network}_${gb}gb` : '';
       const keyMb = `price_${network}_${volumeInMB}mb`;
@@ -281,7 +278,7 @@ async function loadStore() {
         volumeMb: volumeInMB,
         basePrice: catalogPrice,
         price: Math.round(finalPrice * 100) / 100,
-        outOfStock: network === 'mtn',
+        outOfStock: false,
         isCustomPrice: (custom !== undefined && custom > 0) || (override?.price !== undefined && override.price > 0)
       };
     }).filter(Boolean);
@@ -411,7 +408,7 @@ function renderBundles(bundles) {
   els.grid.innerHTML = bundles.map((bundle, index) => {
     const price = Number(bundle.price);
     const checkout = computeStoreCheckout(price);
-    const outOfStock = bundle.outOfStock === true || String(bundle.network).toLowerCase() === 'mtn';
+    const outOfStock = bundle.outOfStock === true;
 
     return `
       <div class="bundle ${outOfStock ? 'out-of-stock' : ''}">
@@ -459,8 +456,8 @@ function toggleForm(index) {
 }
 
 async function submitOrder(bundle, index) {
-  if (!bundle || bundle.outOfStock || String(bundle.network).toLowerCase() === 'mtn') {
-    showResult('<strong>Out of stock.</strong> This MTN bundle is temporarily unavailable.', 'err');
+  if (!bundle || bundle.outOfStock) {
+    showResult('<strong>Out of stock.</strong> This bundle is temporarily unavailable.', 'err');
     return;
   }
   const phone = (document.getElementById(`phone-${index}`)?.value || '').trim();
@@ -481,6 +478,12 @@ async function submitOrder(bundle, index) {
   }
   if (!/^0\d{9}$/.test(phone)) {
     showResult('<strong>Invalid number.</strong> Enter a valid 10-digit number starting with 0.', 'err');
+    return;
+  }
+  const prefixes = NETWORK_PREFIXES[String(bundle.network || '').toLowerCase()];
+  if (prefixes && !prefixes.includes(phone.slice(0, 3))) {
+    const label = NETWORK_LABELS[String(bundle.network || '').toLowerCase()] === 'AirtelTigo' ? 'AT' : (NETWORK_LABELS[String(bundle.network || '').toLowerCase()] || String(bundle.network || '').toUpperCase());
+    showResult(`<strong>Wrong network number.</strong> This number is not an ${label} number.`, 'err');
     return;
   }
 

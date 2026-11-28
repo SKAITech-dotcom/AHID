@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient.js';
 import { checkAgentAccessServer } from './agentAccessCheck.js';
-import { fetchStandardBundleCatalog } from './bundleCatalogClient.js?v=20261125-hidden-bundles';
+import { fetchStandardBundleCatalog } from './bundleCatalogClient.js?v=20261128-system-control';
 
 /**
  * Standard Data Bundle storefront (data.html).
@@ -25,6 +25,18 @@ import { fetchStandardBundleCatalog } from './bundleCatalogClient.js?v=20261125-
 
 const CEDI = '\u20B5';
 const GHANA_PHONE = /^0[0-9]{9}$/;
+const NETWORK_PREFIXES = {
+  mtn: ['024', '025', '053', '054', '055', '059'],
+  telecel: ['020', '050'],
+  airteltigo: ['026', '027', '056', '057'],
+};
+
+function networkPhoneError(network, phone) {
+  const prefixes = NETWORK_PREFIXES[String(network || '').toLowerCase()];
+  if (!prefixes || prefixes.includes(String(phone).slice(0, 3))) return '';
+  const label = String(network).toLowerCase() === 'airteltigo' ? 'AT' : String(network).toUpperCase();
+  return `This number is not an ${label} number. Enter a valid ${label} number for the selected network.`;
+}
 
 const AFFORDABLE_CATEGORIES = new Set(['Standard', 'XXL']);
 
@@ -243,6 +255,13 @@ function renderFooter() {
     return;
   }
 
+  const phoneError = networkPhoneError(state.activeNetworkId, phone);
+  if (phoneError) {
+    button.disabled = true;
+    button.textContent = 'Wrong network number';
+    return;
+  }
+
   if (Number(bundle.price) > state.balance) {
     button.disabled = true;
     button.textContent = 'Wallet balance too low';
@@ -380,7 +399,7 @@ async function loadCatalog() {
           category: 'Standard',
           validity: bundle.validity ? String(bundle.validity) : null,
           isAvailable: true,
-          isOutOfStock: bundle.outOfStock === true || id === 'mtn',
+          isOutOfStock: bundle.outOfStock === true,
         };
       }),
     };
@@ -464,6 +483,11 @@ export async function startDataPurchase() {
   }
   if (!GHANA_PHONE.test(phone)) {
     showNotice('Enter a valid 10-digit Ghanaian recipient number (e.g. 024XXXXXXX).');
+    return;
+  }
+  const phoneError = networkPhoneError(state.activeNetworkId, phone);
+  if (phoneError) {
+    showNotice(phoneError);
     return;
   }
   if (Number(bundle.price) > state.balance) {

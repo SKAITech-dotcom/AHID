@@ -3,9 +3,10 @@ import type { adminClient } from '../_shared/supabase.ts';
 import { dispatchAirtimeTopup } from '../_shared/airtimeProvider.ts';
 import { callUtilityProvider } from '../_shared/utilityProvider.ts';
 import { hubtelRequest } from '../_shared/hubtelClient.ts';
-import { activeDataProvider, fetchDataOrderStatus } from '../_shared/dataProvider.ts';
+import { activeDataProvider, fetchDataOrderStatus, providerForBundle } from '../_shared/dataProvider.ts';
 import { requestProviderCancellation } from '../_shared/providerCancellation.ts';
 import { recordProviderRefund, refundWallet } from '../_shared/wallet.ts';
+import { requireSystemServiceAvailable, SYSTEM_SERVICE_LABELS, type SystemServiceKey } from '../_shared/systemControls.ts';
 
 // Commission Services path segment: the DISBURSEMENT (prepaid deposit) account.
 // Distinct from the merchant/collection account used to receive money.
@@ -450,6 +451,52 @@ Deno.serve(async (request) => {
         return json({ success: true, bundles });
       }
 
+      // 1c. SYSTEM CONTROL: service availability and provider routing
+      if (section === 'system-control') {
+        const [servicesRes, bundlesRes, routesRes] = await Promise.all([
+          admin.from('system_service_controls')
+            .select('service_key, label, available, unavailable_reason, updated_at')
+            .order('service_key'),
+          admin.from('bundle_catalog')
+            .select('bundle_id, network, title, volume_mb, price, active, inactive_reason, updated_at')
+            .order('network').order('volume_mb'),
+          admin.from('data_bundle_provider_routes').select('bundle_id, provider, updated_at'),
+        ]);
+        if (servicesRes.error) throw servicesRes.error;
+        if (bundlesRes.error) throw bundlesRes.error;
+        if (routesRes.error) throw routesRes.error;
+
+        const bundleById = new Map((bundlesRes.data || []).map((bundle) => [String(bundle.bundle_id), bundle]));
+        const routes = new Map((routesRes.data || []).map((row) => {
+          const bundle = bundleById.get(String(row.bundle_id));
+          return [
+            String(row.bundle_id),
+            String(row.provider || providerForBundle(String(bundle?.network || ''), Number(bundle?.volume_mb || 0))),
+          ] as const;
+        }));
+        return json({
+          success: true,
+          services: (servicesRes.data || []).map((row) => ({
+            serviceKey: row.service_key,
+            label: row.label || SYSTEM_SERVICE_LABELS[row.service_key as SystemServiceKey] || row.service_key,
+            available: row.available !== false,
+            unavailableReason: row.unavailable_reason || null,
+            updatedAt: row.updated_at || null,
+          })),
+          bundles: (bundlesRes.data || []).map((row) => ({
+            bundleId: row.bundle_id,
+            network: row.network,
+            title: row.title,
+            volumeMb: Number(row.volume_mb),
+            price: Number(row.price),
+            active: row.active === true,
+            inactiveReason: row.inactive_reason || null,
+            provider: routes.get(String(row.bundle_id)) || providerForBundle(String(row.network), Number(row.volume_mb)),
+            updatedAt: row.updated_at || null,
+          })),
+        });
+      }
+
       // 2. STANDARD DATA BUNDLES
       if (section === 'data-management') {
         const [agentOrders, publicOrders, legacyOrders, storeOrders, catalogRes] = await Promise.all([
@@ -806,6 +853,51 @@ Deno.serve(async (request) => {
       return json({ success: true, bundleId, isAvailable });
     }
 
+    // ACTION: SET SERVICE AVAILABILITY FROM SYSTEM CONTROL
+    if (action === 'update-system-service-control') {
+      const serviceKey = String(body.serviceKey || '').trim() as SystemServiceKey;
+      const available = body.available !== false;
+      const reason = String(body.reason || '').trim().slice(0, 240) || null;
+      if (!Object.hasOwn(SYSTEM_SERVICE_LABELS, serviceKey)) {
+        return json({ error: 'Unsupported system service.' }, 400);
+      }
+      const { data, error } = await admin.from('system_service_controls').upsert({
+        service_key: serviceKey,
+        label: SYSTEM_SERVICE_LABELS[serviceKey],
+        available,
+        unavailable_reason: available ? null : (reason || `${SYSTEM_SERVICE_LABELS[serviceKey]} is currently out of stock.`),
+        updated_by: caller.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'service_key' })
+        .select('service_key, label, available, unavailable_reason, updated_at')
+        .single();
+      if (error) throw error;
+      return json({ success: true, service: data });
+    }
+
+    // ACTION: SELECT THE PROVIDER API FOR ONE STANDARD DATA BUNDLE
+    if (action === 'update-data-provider-route') {
+      const bundleId = String(body.bundleId || '').trim();
+      const provider = String(body.provider || '').trim().toLowerCase();
+      if (!bundleId || !['swift', 'grandtech'].includes(provider)) {
+        return json({ error: 'Choose a valid bundle and provider API (Swift or GrandTech).' }, 400);
+      }
+      const { data: bundle, error: bundleError } = await admin.from('bundle_catalog')
+        .select('bundle_id').eq('bundle_id', bundleId).maybeSingle();
+      if (bundleError) throw bundleError;
+      if (!bundle) return json({ error: 'The selected data bundle no longer exists.' }, 404);
+      const { data, error } = await admin.from('data_bundle_provider_routes').upsert({
+        bundle_id: bundleId,
+        provider,
+        updated_by: caller.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'bundle_id' })
+        .select('bundle_id, provider, updated_at')
+        .single();
+      if (error) throw error;
+      return json({ success: true, route: data });
+    }
+
     // ACTION: UPDATE DATA BUNDLE PRICE
     if (action === 'update-bundle-price') {
       const bundleId = String(body.bundleId || '').trim();
@@ -915,6 +1007,7 @@ Deno.serve(async (request) => {
 
     // ACTION: DISPATCH AIRTIME (MTN, Telecel, AirtelTigo via Hubtel Commission Services)
     if (action === 'dispatch-airtime') {
+      await requireSystemServiceAvailable('airtime_top_up', admin);
       const phone = String(body.phone || '').trim();
       const network = String(body.network || '').trim().toLowerCase() as 'mtn' | 'telecel' | 'at';
       const amount = Number(body.amount);
@@ -1018,6 +1111,7 @@ Deno.serve(async (request) => {
 
     // ACTION: VERIFY UTILITY / METER / ACCOUNT (ECG, Water, TV)
     if (action === 'verify-utility-meter' || action === 'verify-utility-account') {
+      await requireSystemServiceAvailable('utility_bills', admin);
       let accountNumber = String(body.accountNumber || body.meterNumber || '').trim();
       if (/^\+?233([A-Za-z].*)$/.test(accountNumber)) {
         accountNumber = accountNumber.replace(/^\+?233/, '');
@@ -1056,6 +1150,7 @@ Deno.serve(async (request) => {
 
     // ACTION: DISPATCH UTILITY (ECG Prepaid, ECG Postpaid, Ghana Water, DStv, GOtv, StarTimes)
     if (action === 'dispatch-utility') {
+      await requireSystemServiceAvailable('utility_bills', admin);
       const rawService = String(body.service || 'ecg_prepaid').trim().toLowerCase();
       let accountNumber = String(body.accountNumber || body.meterNumber || '').trim();
       if (/^\+?233([A-Za-z].*)$/.test(accountNumber)) {
@@ -2089,7 +2184,9 @@ Deno.serve(async (request) => {
   } catch (err: unknown) {
     const error = err as Error;
     const message = error.message || 'Server error occurred in admin-portal-api.';
-    const status = /authentication is required|session is invalid/i.test(message)
+    const status = (error as { code?: string }).code === 'service_out_of_stock'
+      ? 409
+      : /authentication is required|session is invalid/i.test(message)
       ? 401
       : /administrator access|super admin access/i.test(message)
         ? 403

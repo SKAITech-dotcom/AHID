@@ -139,7 +139,22 @@
     </div>
   </main>
 
+  <div id="orderDetailsModal" role="dialog" aria-modal="true" aria-labelledby="orderDetailsTitle" style="display:none;position:fixed;inset:0;z-index:1200;background:rgba(15,23,42,.62);padding:20px;align-items:center;justify-content:center;">
+    <div style="width:min(520px,100%);background:#fff;border-radius:16px;padding:22px;box-shadow:0 24px 70px rgba(15,23,42,.28);">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+        <div><h2 id="orderDetailsTitle" style="margin:0 0 4px;">Order details</h2><p id="orderDetailsSubtitle" style="margin:0;color:#64748b;font-size:.82rem;"></p></div>
+        <button type="button" onclick="closeOrderDetails()" aria-label="Close order details" style="border:0;background:#f1f5f9;border-radius:8px;padding:7px 10px;cursor:pointer;">×</button>
+      </div>
+      <div id="orderDetailsBody" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:20px 0;color:#334155;font-size:.88rem;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;">
+        <button type="button" class="pill-btn" onclick="closeOrderDetails()">Close</button>
+        <button type="button" id="repeatOrderButton" class="pill-btn" style="background:#2563eb;color:#fff;border:0;" onclick="repeatSelectedOrder()">Repeat this order</button>
+      </div>
+      <p id="repeatOrderHint" style="margin:12px 0 0;color:#64748b;font-size:.76rem;"></p>
+    </div>
+  </div>
+
   <script type="module" src="agentNav.js?v=20261103"></script>
-  <script type="module" src="script.js"></script>
+  <script type="module" src="script.js?v=20261128-system-control"></script>
 </body>
 </html>

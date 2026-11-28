@@ -6,6 +6,7 @@ import {
   resolveCommissionConfig,
   utilityCommissionService,
 } from '../_shared/commissionConfig.ts';
+import { requireSystemServiceAvailable } from '../_shared/systemControls.ts';
 
 const VALID_BILL_TYPES: Record<string, 'electricity' | 'water' | 'tv'> = {
   ecg: 'electricity',
@@ -75,6 +76,7 @@ Deno.serve(async (request) => {
     // The customer name and email are never collected from the form; they are
     // resolved from the signed-in agent so orders stay attributable.
     const { admin, user, agent } = await requireAgent(request);
+    await requireSystemServiceAvailable('utility_bills', admin);
     agentId = user.id;
     const customerName = String(agent.full_name || user.user_metadata?.full_name || '').trim() || null;
     const customerEmail = String(user.email || '').trim().toLowerCase();

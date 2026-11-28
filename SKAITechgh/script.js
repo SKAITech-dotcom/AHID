@@ -354,7 +354,6 @@ const networkPackages = {
     label: 'TELECEL',
     themeClass: 'theme-telecel',
     logoUrl: 'img/telecel-logo.png',
-    outOfStock: true,
     packages: [
       { size: '5 GB', price: 18.50 },
       { size: '10 GB', price: 35.00 },
@@ -429,10 +428,6 @@ function selectNetwork(netKey) {
 let currentOrder = null;
 
 function openBuyModal(network, size, price) {
-    if (network && network.toUpperCase() === 'TELECEL') {
-        alert("Telecel data bundle is currently out of stock.");
-        return;
-    }
     currentOrder = { network, size, price: parseFloat(price) };
     const modal = document.getElementById('buyModal');
     const title = document.getElementById('modalTitle');
@@ -450,10 +445,6 @@ function closeBuyModal() {
 }
 
 async function processPurchase() {
-    if (currentOrder && currentOrder.network && currentOrder.network.toUpperCase() === 'TELECEL') {
-        alert("Telecel data bundle is currently out of stock.");
-        return;
-    }
     const phoneInput = document.getElementById('recipientPhone');
     const phone = phoneInput ? phoneInput.value.trim() : '';
 

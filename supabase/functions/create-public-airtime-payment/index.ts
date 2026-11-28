@@ -1,6 +1,8 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
 import { hubtelWalletGrossAmount } from '../_shared/paymentGateway.ts';
 import { hubtelPaymentsConfigured, initializeHubtelCollection } from '../_shared/hubtelPayments.ts';
+import { networkPhoneError } from '../_shared/phoneValidation.ts';
+import { requireSystemServiceAvailable } from '../_shared/systemControls.ts';
 
 const VALID_NETWORKS = new Set(['mtn', 'telecel', 'at']);
 
@@ -43,6 +45,8 @@ Deno.serve(async (request) => {
     if (!/^0\d{9}$/.test(phone)) {
       return json({ success: false, error: 'Enter a valid 10-digit Ghanaian recipient phone number.' }, 400);
     }
+    const phoneNetworkError = networkPhoneError(network, phone);
+    if (phoneNetworkError) return json({ success: false, error: phoneNetworkError }, 400);
     if (!Number.isFinite(amount) || amount < 1 || amount > 100) {
       return json({ success: false, error: 'Airtime amount must be between GHS 1.00 and GHS 100.00.' }, 400);
     }
@@ -59,6 +63,7 @@ Deno.serve(async (request) => {
     const reference = `PAI${crypto.randomUUID().replaceAll('-', '').slice(0, 29)}`;
     const accessToken = crypto.randomUUID();
     const admin = adminClient();
+    await requireSystemServiceAvailable('airtime_top_up', admin);
     const customerEmail = `guest-${reference.toLowerCase()}@customers.skaitechgh.app`;
     const grossAmount = hubtelWalletGrossAmount(amount);
     const { data: inserted, error: insertError } = await admin.from('airtime_orders').insert({

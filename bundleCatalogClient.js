@@ -1,12 +1,5 @@
 import { supabase } from './supabaseClient.js';
 
-const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['telecel-5gb']);
-
-function isOutOfStockBundle(network, bundleId) {
-  return String(network || '').toLowerCase() === 'mtn'
-    || HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundleId || '').toLowerCase());
-}
-
 /**
  * Reads the live Standard Data sale catalog directly from Supabase. The edge
  * function remains a compatibility fallback, but agent pages should not rely
@@ -33,15 +26,13 @@ export async function fetchStandardBundleCatalog() {
 
   return (Array.isArray(fallback.data?.networks) ? fallback.data.networks : []).map((group) => ({
     network: String(group.network || '').toLowerCase(),
-    bundles: (Array.isArray(group.bundles) ? group.bundles : []).filter((bundle) =>
-      !HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundle.bundleId || '').toLowerCase())
-    ).map((bundle) => ({
+    bundles: (Array.isArray(group.bundles) ? group.bundles : []).map((bundle) => ({
       bundleId: String(bundle.bundleId),
       title: String(bundle.title),
       validity: bundle.validity ? String(bundle.validity) : null,
       volumeMb: Number(bundle.volumeMb),
       price: Number(bundle.price),
-      outOfStock: isOutOfStockBundle(group.network, bundle.bundleId),
+      outOfStock: bundle.outOfStock === true,
     })),
   }));
 }
@@ -49,7 +40,6 @@ export async function fetchStandardBundleCatalog() {
 function normalizeRows(rows) {
   const groups = new Map();
   for (const row of rows) {
-    if (HIDDEN_STANDARD_BUNDLE_IDS.has(String(row.bundle_id || '').toLowerCase())) continue;
     const network = String(row.network || '').toLowerCase();
     if (!groups.has(network)) groups.set(network, []);
     groups.get(network).push({
@@ -58,7 +48,7 @@ function normalizeRows(rows) {
       validity: row.validity ? String(row.validity) : null,
       volumeMb: Number(row.volume_mb),
       price: Number(row.price),
-      outOfStock: isOutOfStockBundle(network, row.bundle_id),
+      outOfStock: false,
     });
   }
   return [...groups.entries()].map(([network, bundles]) => ({ network, bundles }));

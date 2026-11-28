@@ -22,6 +22,7 @@ let cachedUtilityOrders = [];
 let cachedNonAgentHistory = [];
 let cachedWallets = [];
 let cachedAdmins = [];
+let cachedSystemControls = { services: [], bundles: [] };
 let selectedWalletUser = null;
 let activeSectionRefreshInProgress = false;
 let adminNotifications = [];
@@ -409,6 +410,7 @@ function switchSection(sectionId) {
 
   const titles = {
     'data-module': { title: 'Data Bundles', sub: 'Agent dashboard bundles with Swift / GrandTech fulfilment' },
+    'system-control-module': { title: 'System Control', sub: 'Central service availability, data stock, and provider API routing' },
     'qr-code-module': { title: 'QR Code', sub: 'Whole-system QR code and scan analytics' },
     'airtime-module': { title: 'Airtime Dispatch Management', sub: 'Hubtel Commission Services [POS: 002040687] network top-up dispatch' },
     'utility-module': { title: 'Utility Bills & Subscriptions', sub: 'ECG Prepaid/Postpaid, Ghana Water (GWCL), DStv, GOtv, and StarTimes' },
@@ -447,6 +449,7 @@ async function refreshActiveSection() {
 
   try {
     if (activeSection === 'data-module') await loadDataModuleData();
+    else if (activeSection === 'system-control-module') await loadSystemControlData();
     else if (activeSection === 'qr-code-module') await loadSystemQrStats();
     else if (activeSection === 'airtime-module') await loadAirtimeData();
     else if (activeSection === 'utility-module') await loadUtilityData();
@@ -465,6 +468,119 @@ async function refreshActiveSection() {
   } finally {
     if (icon) setTimeout(() => icon.classList.remove('fa-spin'), 400);
     activeSectionRefreshInProgress = false;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// SYSTEM CONTROL (SERVICE AVAILABILITY + DATA PROVIDER ROUTING)
+// -----------------------------------------------------------------------------
+async function loadSystemControlData() {
+  const serviceBody = document.getElementById('systemServiceControlsTbody');
+  const dataBody = document.getElementById('systemDataControlsTbody');
+  if (!serviceBody || !dataBody) return;
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-portal-api', {
+      body: { section: 'system-control' },
+    });
+    if (error || !data?.success) throw new Error(data?.error || error?.message || 'Unable to load system controls.');
+    cachedSystemControls = {
+      services: Array.isArray(data.services) ? data.services : [],
+      bundles: Array.isArray(data.bundles) ? data.bundles : [],
+    };
+    renderSystemServiceControls(cachedSystemControls.services);
+    renderSystemDataControls(cachedSystemControls.bundles);
+  } catch (error) {
+    console.error('loadSystemControlData error:', error);
+    serviceBody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#f87171;padding:16px;">Failed to load service controls: ${escapeHtml(error.message || 'Database error')}</td></tr>`;
+    dataBody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#f87171;padding:16px;">Failed to load data controls: ${escapeHtml(error.message || 'Database error')}</td></tr>`;
+    showToast(error.message || 'Unable to load system controls.', 'error');
+  }
+}
+
+function renderSystemServiceControls(rows) {
+  const tbody = document.getElementById('systemServiceControlsTbody');
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;">No service controls configured.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((row) => {
+    const available = row.available !== false;
+    return `<tr>
+      <td><strong>${escapeHtml(row.label || row.serviceKey)}</strong><br><code style="font-size:.68rem;color:var(--text-dim);">${escapeHtml(row.serviceKey)}</code></td>
+      <td><span class="badge ${available ? 'badge-success' : 'badge-failed'}">${available ? 'Available' : 'Out of Stock'}</span></td>
+      <td style="max-width:300px;color:var(--text-muted);">${escapeHtml(row.unavailableReason || (available ? '—' : 'Service disabled by admin'))}</td>
+      <td style="font-size:.75rem;color:var(--text-muted);">${row.updatedAt ? escapeHtml(new Date(row.updatedAt).toLocaleString()) : '—'}</td>
+      <td><label class="switch"><input type="checkbox" ${available ? 'checked' : ''} onchange="toggleSystemService('${escapeHtml(row.serviceKey)}', this.checked)"><span class="slider"></span></label></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSystemDataControls(rows) {
+  const tbody = document.getElementById('systemDataControlsTbody');
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:16px;">No data bundles configured.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((row) => {
+    const available = row.active === true;
+    const network = String(row.network || '').toLowerCase();
+    const networkClass = network === 'mtn' ? 'badge-mtn' : network === 'telecel' ? 'badge-telecel' : 'badge-at';
+    return `<tr>
+      <td><span class="badge ${networkClass}">${escapeHtml(network.toUpperCase())}</span></td>
+      <td><strong>${escapeHtml(row.title || row.bundleId)}</strong><br><small>${escapeHtml(formatVolumeInGb(`${row.volumeMb}MB`, row.volumeMb))}</small></td>
+      <td>${money(row.price)}</td>
+      <td><select class="form-select" style="min-width:125px;" onchange="saveSystemProviderRoute('${escapeHtml(row.bundleId)}', this.value)"><option value="swift" ${row.provider === 'swift' ? 'selected' : ''}>Swift API</option><option value="grandtech" ${row.provider === 'grandtech' ? 'selected' : ''}>GrandTech API</option></select></td>
+      <td><span class="badge ${available ? 'badge-success' : 'badge-failed'}">${available ? 'In Stock' : 'Out of Stock'}</span></td>
+      <td style="font-size:.75rem;color:var(--text-muted);">${row.updatedAt ? escapeHtml(new Date(row.updatedAt).toLocaleString()) : '—'}</td>
+      <td><label class="switch"><input type="checkbox" ${available ? 'checked' : ''} onchange="toggleSystemBundleStock('${escapeHtml(row.bundleId)}', this.checked)"><span class="slider"></span></label></td>
+    </tr>`;
+  }).join('');
+}
+
+async function toggleSystemService(serviceKey, available) {
+  let reason = '';
+  if (!available) {
+    reason = window.prompt('Reason shown as out of stock (optional):', 'Temporarily unavailable') ?? '';
+  }
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-portal-api', {
+      body: { action: 'update-system-service-control', serviceKey, available, reason },
+    });
+    if (error || !data?.success) throw new Error(data?.error || error?.message || 'Could not update service availability.');
+    showToast(`${data.service?.label || serviceKey} marked ${available ? 'available' : 'out of stock'}.`, 'success');
+    await loadSystemControlData();
+  } catch (error) {
+    showToast(error.message || 'Could not update service availability.', 'error');
+    await loadSystemControlData();
+  }
+}
+
+async function saveSystemProviderRoute(bundleId, provider) {
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-portal-api', {
+      body: { action: 'update-data-provider-route', bundleId, provider },
+    });
+    if (error || !data?.success) throw new Error(data?.error || error?.message || 'Could not save provider API route.');
+    showToast(`Provider route saved: ${provider === 'grandtech' ? 'GrandTech' : 'Swift'} API.`, 'success');
+  } catch (error) {
+    showToast(error.message || 'Could not save provider API route.', 'error');
+    await loadSystemControlData();
+  }
+}
+
+async function toggleSystemBundleStock(bundleId, isAvailable) {
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-portal-api', {
+      body: { action: 'toggle-data-stock', bundleId, isAvailable, catalogType: 'bundle_catalog' },
+    });
+    if (error || !data?.success) throw new Error(data?.error || error?.message || 'Could not update bundle stock.');
+    showToast(`Bundle marked ${isAvailable ? 'in stock' : 'out of stock'}.`, 'success');
+    await loadSystemControlData();
+  } catch (error) {
+    showToast(error.message || 'Could not update bundle stock.', 'error');
+    await loadSystemControlData();
   }
 }
 
@@ -3319,6 +3435,10 @@ async function handleAdminLogout() {
 // Global Exports for HTML event bindings
 window.toggleSidebar = toggleSidebar;
 window.refreshActiveSection = refreshActiveSection;
+window.loadSystemControlData = loadSystemControlData;
+window.toggleSystemService = toggleSystemService;
+window.saveSystemProviderRoute = saveSystemProviderRoute;
+window.toggleSystemBundleStock = toggleSystemBundleStock;
 window.switchDataSubTab = switchDataSubTab;
 window.filterDataCatalog = filterDataCatalog;
 window.filterDataOrders = filterDataOrders;

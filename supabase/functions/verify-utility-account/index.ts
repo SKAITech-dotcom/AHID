@@ -1,5 +1,6 @@
 import { corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { callUtilityProvider } from '../_shared/utilityProvider.ts';
+import { requireSystemServiceAvailable } from '../_shared/systemControls.ts';
 
 const SERVICES = new Set(['ecg', 'ecg_postpaid', 'ghana_water', 'dstv', 'gotv', 'startimes']);
 
@@ -9,7 +10,8 @@ Deno.serve(async (request) => {
   try {
     // Verification only needs the caller to be a verified agent; the returned
     // agent row and admin client are not used here.
-    await requireAgent(request);
+    const { admin } = await requireAgent(request);
+    await requireSystemServiceAvailable('utility_bills', admin);
     const body = await request.json();
     const service = String(body.billType ?? '').trim().toLowerCase();
     // Meter numbers and account numbers are strictly alphanumeric strings (e.g. "P241759005").

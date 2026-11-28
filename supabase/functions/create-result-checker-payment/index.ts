@@ -1,6 +1,7 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { chargeWallet, refundWallet } from '../_shared/wallet.ts';
 import { resolveServicePrice } from '../_shared/pricing.ts';
+import { requireSystemServiceAvailable } from '../_shared/systemControls.ts';
 
 const fallbackPrices: Record<'BECE' | 'WASSCE', number> = { BECE: 19, WASSCE: 22 };
 
@@ -29,6 +30,7 @@ Deno.serve(async (request) => {
 
     // WALLET-FIRST: results checker is paid from the verified agent's wallet.
     const { admin, user } = await requireAgent(request);
+    if (examType === 'WASSCE') await requireSystemServiceAvailable('results_checker', admin);
     const agentId = user.id;
     const email = String(user.email || '').trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) {

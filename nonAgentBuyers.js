@@ -2,7 +2,7 @@ import { supabase, readFunctionError } from './supabaseClient.js';
 
 const NETWORKS = ['mtn', 'telecel', 'airteltigo'];
 const NETWORK_LABELS = { mtn: 'MTN', telecel: 'Telecel', airteltigo: 'AirtelTigo' };
-const HIDDEN_STANDARD_BUNDLE_IDS = new Set(['telecel-5gb']);
+const NETWORK_PREFIXES = { mtn: ['024', '025', '053', '054', '055', '059'], telecel: ['020', '050'], airteltigo: ['026', '027', '056', '057'] };
 const params = new URLSearchParams(window.location.search);
 let network = NETWORKS.includes(params.get('network')) ? params.get('network') : 'mtn';
 let bundles = [];
@@ -144,10 +144,9 @@ async function loadCatalog() {
       throw new Error(details.message || 'Unable to load the live data catalogue.');
     }
     bundles = (Array.isArray(data?.bundles) ? data.bundles : [])
-      .filter((bundle) => !HIDDEN_STANDARD_BUNDLE_IDS.has(String(bundle.bundleId || '').toLowerCase()))
       .map((bundle) => ({
         ...bundle,
-        outOfStock: String(bundle.network || '').toLowerCase() === 'mtn',
+        outOfStock: bundle.outOfStock === true,
       }));
     renderTabs();
     renderBundles();
@@ -164,6 +163,10 @@ async function startCheckout() {
   if (selectedBundle.outOfStock) return showMessage('This bundle is out of stock.', 'error');
   const phone = $('customerPhone').value.trim();
   if (!/^0\d{9}$/.test(phone)) return showMessage('Enter a valid 10-digit Ghana customer number.', 'error');
+  if (NETWORK_PREFIXES[selectedBundle.network] && !NETWORK_PREFIXES[selectedBundle.network].includes(phone.slice(0, 3))) {
+    const label = NETWORK_LABELS[selectedBundle.network] === 'AirtelTigo' ? 'AT' : NETWORK_LABELS[selectedBundle.network];
+    return showMessage(`This number is not an ${label} number. Enter a valid ${label} number for the selected network.`, 'error');
+  }
 
   const button = $('payButton');
   button.disabled = true;

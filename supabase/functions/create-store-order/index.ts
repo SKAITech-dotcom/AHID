@@ -4,6 +4,7 @@ import { catalogPrice, formatBundleVolume, volumeForBundleId } from '../_shared/
 import { hubtelWalletGrossAmount } from '../_shared/paymentGateway.ts';
 import { hubtelPaymentsConfigured, initializeHubtelCollection } from '../_shared/hubtelPayments.ts';
 import { fulfilStoreOrder } from '../_shared/storeOrderFulfillment.ts';
+import { networkPhoneError } from '../_shared/phoneValidation.ts';
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 const NETWORK_LABELS: Record<string, string> = { mtn: 'MTN', telecel: 'Telecel', airteltigo: 'AirtelTigo' };
@@ -209,6 +210,14 @@ Deno.serve(async (request) => {
 
     let bundle = catalogBundle;
     if (!bundle) {
+      const { data: knownBundle } = await admin
+        .from('bundle_catalog')
+        .select('bundle_id')
+        .eq('bundle_id', bundleId)
+        .maybeSingle();
+      if (knownBundle) {
+        return json({ error: 'That bundle is currently out of stock. Choose another package.' }, 409);
+      }
       const parsed = volumeForBundleId(bundleId);
       const catalogSalePrice = parsed ? catalogPrice(parsed.network, parsed.volumeInMB) : null;
       if (!parsed || catalogSalePrice === null) {
@@ -225,6 +234,8 @@ Deno.serve(async (request) => {
 
     const networkType = String(bundle.network).toLowerCase();
     const volumeInMB = Number(bundle.volume_mb);
+    const phoneError = networkPhoneError(networkType, recipient);
+    if (phoneError) return json({ error: phoneError }, 400);
     const platformPrice = round2(Number(bundle.price));
 
     if (!Number.isFinite(platformPrice) || platformPrice <= 0) {

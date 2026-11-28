@@ -13,6 +13,7 @@ import {
   volumeForBundleId,
   type DataNetwork,
 } from '../_shared/dataCatalog.ts';
+import { networkPhoneError } from '../_shared/phoneValidation.ts';
 
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
@@ -60,9 +61,8 @@ Deno.serve(async (request) => {
       // storefront can never make us charge a price or size it chose itself.
       const { data: bundle, error: bundleError } = await admin
         .from('bundle_catalog')
-        .select('bundle_id, network, volume_mb, price')
+        .select('bundle_id, network, volume_mb, price, active')
         .eq('bundle_id', requestedBundleId)
-        .eq('active', true)
         .maybeSingle();
 
       if (bundleError) {
@@ -71,6 +71,10 @@ Deno.serve(async (request) => {
         // price from the server-owned price table below and verify deliverability
         // against the assigned provider's live catalog before charging.
         console.error('bundle_catalog lookup failed; using server sale catalog:', bundleError.message);
+      }
+
+      if (bundle && bundle.active === false) {
+        return json({ error: 'That bundle is currently out of stock. Choose another package.' }, 409);
       }
 
       if (bundle) {
@@ -96,6 +100,22 @@ Deno.serve(async (request) => {
       salePrice === null || !Number.isFinite(salePrice) || salePrice <= 0) {
       return json({ error: 'Enter valid customer details and select a supported package.' }, 400);
     }
+
+    if (!requestedBundleId) {
+      const { data: catalogBundle } = await admin
+        .from('bundle_catalog')
+        .select('active, price')
+        .eq('network', networkType)
+        .eq('volume_mb', volumeInMB)
+        .maybeSingle();
+      if (catalogBundle?.active === false) {
+        return json({ error: 'That bundle is currently out of stock. Choose another package.' }, 409);
+      }
+      if (catalogBundle?.active === true) salePrice = Number(catalogBundle.price);
+    }
+
+    const phoneNetworkError = networkPhoneError(networkType, customerPhone);
+    if (phoneNetworkError) return json({ error: phoneNetworkError }, 400);
 
     const listPrice: number = salePrice;
 

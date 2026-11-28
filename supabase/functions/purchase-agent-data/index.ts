@@ -1,6 +1,7 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
 import { DATA_NETWORKS, bundleIdFor, catalogPrice, type DataNetwork } from '../_shared/dataCatalog.ts';
+import { networkPhoneError } from '../_shared/phoneValidation.ts';
 
 const NETWORKS = new Set<string>(DATA_NETWORKS);
 
@@ -29,6 +30,8 @@ Deno.serve(async (request) => {
 
     if (!/^0\d{9}$/.test(phone)) return json({ error: 'Enter a valid 10-digit Ghanaian phone number.' }, 400);
     if (!NETWORKS.has(networkType)) return json({ error: 'Unsupported network.' }, 400);
+    const networkError = networkPhoneError(networkType, phone);
+    if (networkError) return json({ error: networkError }, 400);
     if (!Number.isInteger(volumeInMB) || volumeInMB < 1024 || volumeInMB > 204800) return json({ error: 'Invalid bundle volume.' }, 400);
     // Resolve the current Standard Data selling price from the same catalog the
     // storefront reads. Never trust a client-supplied amount or a stale static

@@ -2,6 +2,7 @@ import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supab
 import { chargeWallet, refundWallet, WalletError } from '../_shared/wallet.ts';
 import { submitAfaRegistration } from '../_shared/afaProvider.ts';
 import { resolveServicePrice } from '../_shared/pricing.ts';
+import { requireSystemServiceAvailable } from '../_shared/systemControls.ts';
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
@@ -43,6 +44,7 @@ Deno.serve(async (request) => {
 
     const { admin, user } = await requireAgent(request);
     agentId = user.id;
+    await requireSystemServiceAvailable('afa_registration', admin);
 
     reference = `AFA-${crypto.randomUUID()}`;
 
