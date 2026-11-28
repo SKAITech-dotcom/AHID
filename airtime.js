@@ -509,70 +509,23 @@ export async function handleAirtimeSubmit(event) {
   }
 }
 
-// Direct insert helper for airtime_orders with auto-provisioning
+// Compatibility helper: all agent airtime purchases must use the protected
+// wallet-first Edge Function. Direct browser inserts could create a paid row
+// without debiting the wallet or confirming provider delivery.
 export async function submitAirtimeOrderDirect({ phone, network, amount, paymentMethod = 'wallet' }) {
-  const { data: { user }, error: userErr } = await supabase.auth.getUser();
-  if (userErr || !user) {
-    throw new Error('Authentication required: please log in as an active agent.');
+  if (paymentMethod !== 'wallet') throw new Error('Agent airtime purchases must use wallet balance.');
+  const { data, error } = await supabase.functions.invoke('create-airtime-payment', {
+    body: {
+      phone,
+      network,
+      amount: Number(amount),
+      paymentMethod: 'wallet',
+      clientRequestId: `AIR-${crypto.randomUUID()}`,
+    },
+  });
+  if (error || data?.error || data?.success === false) {
+    throw new Error(data?.error || data?.message || error?.message || 'Airtime purchase could not be completed.');
   }
-  const activeAgentId = user.id;
-  const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Agent';
-  const phoneNo = user.user_metadata?.phone || phone || '';
-  const agentCode = user.user_metadata?.agent_code || '';
-
-  // Auto-heal parent records if missing
-  try {
-    await supabase.from('profiles').upsert({
-      id: activeAgentId,
-      full_name: fullName,
-      phone: phoneNo || null,
-      agent_code: agentCode || null,
-    }, { onConflict: 'id' });
-
-    await supabase.from('agents').upsert({
-      id: activeAgentId,
-      full_name: fullName,
-      phone: phoneNo || null,
-      agent_code: agentCode || null,
-      role: 'agent',
-    }, { onConflict: 'id' });
-
-    await supabase.from('wallets').upsert({
-      id: activeAgentId,
-      balance: 0,
-    }, { onConflict: 'id', ignoreDuplicates: true });
-  } catch (err) {
-    console.warn('[submitAirtimeOrderDirect] Parent records check note:', err);
-  }
-
-  const reference = 'AIR-' + crypto.randomUUID();
-  const orderPayload = {
-    user_id: activeAgentId,
-    agent_id: activeAgentId,
-    payment_reference: reference,
-    recipient_phone: phone,
-    network,
-    amount: Number(amount),
-    fee_amount: 0.00,
-    gross_amount: Number(amount),
-    payment_method: paymentMethod,
-    payment_status: paymentMethod === 'wallet' ? 'paid' : 'pending_payment',
-    airtime_status: 'pending',
-    customer_name: fullName,
-    customer_email: user.email,
-  };
-
-  const { data, error } = await supabase
-    .from('airtime_orders')
-    .insert(orderPayload)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('[submitAirtimeOrderDirect] Direct insert failed:', error);
-    throw error;
-  }
-
   return data;
 }
 

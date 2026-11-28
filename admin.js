@@ -492,7 +492,7 @@ async function loadSystemControlData() {
   } catch (error) {
     console.error('loadSystemControlData error:', error);
     serviceBody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#f87171;padding:16px;">Failed to load service controls: ${escapeHtml(error.message || 'Database error')}</td></tr>`;
-    dataBody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#f87171;padding:16px;">Failed to load data controls: ${escapeHtml(error.message || 'Database error')}</td></tr>`;
+    dataBody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#f87171;padding:16px;">Failed to load data controls: ${escapeHtml(error.message || 'Database error')}</td></tr>`;
     showToast(error.message || 'Unable to load system controls.', 'error');
   }
 }
@@ -520,7 +520,7 @@ function renderSystemDataControls(rows) {
   const tbody = document.getElementById('systemDataControlsTbody');
   if (!tbody) return;
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:16px;">No data bundles configured.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:16px;">No data bundles configured.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((row) => {
@@ -532,6 +532,7 @@ function renderSystemDataControls(rows) {
       <td><strong>${escapeHtml(row.title || row.bundleId)}</strong><br><small>${escapeHtml(formatVolumeInGb(`${row.volumeMb}MB`, row.volumeMb))}</small></td>
       <td>${money(row.price)}</td>
       <td><select class="form-select" style="min-width:125px;" onchange="saveSystemProviderRoute('${escapeHtml(row.bundleId)}', this.value)"><option value="swift" ${row.provider === 'swift' ? 'selected' : ''}>Swift API</option><option value="grandtech" ${row.provider === 'grandtech' ? 'selected' : ''}>GrandTech API</option></select></td>
+      <td><select class="form-select" style="min-width:135px;" onchange="saveSystemPaymentRoute('${escapeHtml(row.bundleId)}', this.value)"><option value="skaipay" ${row.paymentProvider === 'skaipay' ? 'selected' : ''}>Skaipay</option><option value="paystack" ${row.paymentProvider === 'paystack' ? 'selected' : ''}>Paystack</option></select></td>
       <td><span class="badge ${available ? 'badge-success' : 'badge-failed'}">${available ? 'In Stock' : 'Out of Stock'}</span></td>
       <td style="font-size:.75rem;color:var(--text-muted);">${row.updatedAt ? escapeHtml(new Date(row.updatedAt).toLocaleString()) : '—'}</td>
       <td><label class="switch"><input type="checkbox" ${available ? 'checked' : ''} onchange="toggleSystemBundleStock('${escapeHtml(row.bundleId)}', this.checked)"><span class="slider"></span></label></td>
@@ -566,6 +567,19 @@ async function saveSystemProviderRoute(bundleId, provider) {
     showToast(`Provider route saved: ${provider === 'grandtech' ? 'GrandTech' : 'Swift'} API.`, 'success');
   } catch (error) {
     showToast(error.message || 'Could not save provider API route.', 'error');
+    await loadSystemControlData();
+  }
+}
+
+async function saveSystemPaymentRoute(bundleId, provider) {
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-portal-api', {
+      body: { action: 'update-customer-payment-route', bundleId, provider },
+    });
+    if (error || !data?.success) throw new Error(data?.error || error?.message || 'Could not save payment API route.');
+    showToast(`Customer payment route saved: ${provider === 'paystack' ? 'Paystack' : 'Skaipay'}.`, 'success');
+  } catch (error) {
+    showToast(error.message || 'Could not save payment API route.', 'error');
     await loadSystemControlData();
   }
 }
@@ -3438,6 +3452,7 @@ window.refreshActiveSection = refreshActiveSection;
 window.loadSystemControlData = loadSystemControlData;
 window.toggleSystemService = toggleSystemService;
 window.saveSystemProviderRoute = saveSystemProviderRoute;
+window.saveSystemPaymentRoute = saveSystemPaymentRoute;
 window.toggleSystemBundleStock = toggleSystemBundleStock;
 window.switchDataSubTab = switchDataSubTab;
 window.filterDataCatalog = filterDataCatalog;

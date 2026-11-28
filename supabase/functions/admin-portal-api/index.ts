@@ -453,7 +453,7 @@ Deno.serve(async (request) => {
 
       // 1c. SYSTEM CONTROL: service availability and provider routing
       if (section === 'system-control') {
-        const [servicesRes, bundlesRes, routesRes] = await Promise.all([
+        const [servicesRes, bundlesRes, routesRes, paymentRoutesRes] = await Promise.all([
           admin.from('system_service_controls')
             .select('service_key, label, available, unavailable_reason, updated_at')
             .order('service_key'),
@@ -461,10 +461,15 @@ Deno.serve(async (request) => {
             .select('bundle_id, network, title, volume_mb, price, active, inactive_reason, updated_at')
             .order('network').order('volume_mb'),
           admin.from('data_bundle_provider_routes').select('bundle_id, provider, updated_at'),
+          admin.from('customer_payment_routes').select('bundle_id, provider, updated_at'),
         ]);
         if (servicesRes.error) throw servicesRes.error;
         if (bundlesRes.error) throw bundlesRes.error;
         if (routesRes.error) throw routesRes.error;
+        const paymentRouteTableMissing = Boolean(paymentRoutesRes.error)
+          && /customer_payment_routes|schema cache/i.test(String(paymentRoutesRes.error?.message || ''));
+        if (paymentRoutesRes.error && !paymentRouteTableMissing) throw paymentRoutesRes.error;
+        if (paymentRouteTableMissing) console.warn('customer_payment_routes is not available yet; using the default customer payment split.');
 
         const bundleById = new Map((bundlesRes.data || []).map((bundle) => [String(bundle.bundle_id), bundle]));
         const routes = new Map((routesRes.data || []).map((row) => {
@@ -474,6 +479,10 @@ Deno.serve(async (request) => {
             String(row.provider || providerForBundle(String(bundle?.network || ''), Number(bundle?.volume_mb || 0))),
           ] as const;
         }));
+        const paymentRoutes = new Map((paymentRouteTableMissing ? [] : paymentRoutesRes.data || []).map((row) => [
+          String(row.bundle_id),
+          String(row.provider || '').toLowerCase() === 'paystack' ? 'paystack' : 'skaipay',
+        ]));
         return json({
           success: true,
           services: (servicesRes.data || []).map((row) => ({
@@ -492,6 +501,7 @@ Deno.serve(async (request) => {
             active: row.active === true,
             inactiveReason: row.inactive_reason || null,
             provider: routes.get(String(row.bundle_id)) || providerForBundle(String(row.network), Number(row.volume_mb)),
+            paymentProvider: paymentRoutes.get(String(row.bundle_id)) || (Number(row.price) >= 10 && Number(row.price) <= 50 ? 'paystack' : 'skaipay'),
             updatedAt: row.updated_at || null,
           })),
         });
@@ -887,6 +897,29 @@ Deno.serve(async (request) => {
       if (bundleError) throw bundleError;
       if (!bundle) return json({ error: 'The selected data bundle no longer exists.' }, 404);
       const { data, error } = await admin.from('data_bundle_provider_routes').upsert({
+        bundle_id: bundleId,
+        provider,
+        updated_by: caller.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'bundle_id' })
+        .select('bundle_id, provider, updated_at')
+        .single();
+      if (error) throw error;
+      return json({ success: true, route: data });
+    }
+
+    // ACTION: SELECT CUSTOMER PAYMENT GATEWAY FOR ONE STANDARD DATA BUNDLE
+    if (action === 'update-customer-payment-route') {
+      const bundleId = String(body.bundleId || '').trim();
+      const provider = String(body.provider || '').trim().toLowerCase();
+      if (!bundleId || !['skaipay', 'paystack'].includes(provider)) {
+        return json({ error: 'Choose a valid bundle and payment API (Skaipay or Paystack).' }, 400);
+      }
+      const { data: bundle, error: bundleError } = await admin.from('bundle_catalog')
+        .select('bundle_id').eq('bundle_id', bundleId).maybeSingle();
+      if (bundleError) throw bundleError;
+      if (!bundle) return json({ error: 'The selected data bundle no longer exists.' }, 404);
+      const { data, error } = await admin.from('customer_payment_routes').upsert({
         bundle_id: bundleId,
         provider,
         updated_by: caller.id,

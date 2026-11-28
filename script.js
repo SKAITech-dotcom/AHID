@@ -802,6 +802,7 @@ async function processPurchase() {
         status: providerStillProcessing ? ORDER_STATUS.PROCESSING : (data.status || ORDER_STATUS.PROCESSING),
         providerStatus: data.providerStatus || data.status || ORDER_STATUS.PROCESSING,
         providerRef: data.providerReference || '',
+        repeatKind: 'data',
         repeatPhone: phone,
         repeatNetwork: networkType,
         repeatVolumeMb: Number(currentOrder.volumeMb || volumeInMB),
@@ -1010,14 +1011,18 @@ function openOrderDetails(order) {
     ].map(([label, value]) => `<div><small style="display:block;color:#64748b;font-size:.72rem;margin-bottom:3px;">${escapeOrderCell(label)}</small><strong>${escapeOrderCell(value)}</strong></div>`).join('');
     if (subtitle) subtitle.textContent = 'Live status is checked from the provider before this view is refreshed.';
 
-    const canRepeat = order.type === 'data'
-        && Boolean(order.repeatPhone)
-        && Number(order.repeatVolumeMb) > 0
-        && Boolean(order.repeatNetwork);
+    const repeatKind = order.repeatKind || order.type;
+    const canRepeat = repeatKind === 'data'
+        ? Boolean(order.repeatPhone) && Number(order.repeatVolumeMb) > 0 && Boolean(order.repeatNetwork)
+        : repeatKind === 'airtime'
+          ? Boolean(order.repeatPhone) && Number(order.repeatAmount) > 0 && Boolean(order.repeatNetwork)
+          : repeatKind === 'utility'
+            ? Boolean(order.repeatAccountNumber) && Boolean(order.repeatBillType) && Number(order.repeatAmount) > 0 && Boolean(order.repeatCustomerPhone)
+            : false;
     if (repeatButton) repeatButton.style.display = canRepeat ? 'inline-flex' : 'none';
     if (hint) hint.textContent = canRepeat
-        ? 'Repeat uses the same recipient, network, and bundle size. Your wallet is checked and charged by the same protected purchase path.'
-        : 'Repeat is available for Standard Data orders. Airtime and utility orders can be opened here for details.';
+        ? 'Repeat uses the saved order details. Your wallet is checked and charged by the same protected purchase path before provider delivery starts.'
+        : 'Repeat is unavailable because this older order is missing the details required for a safe duplicate.';
     modal.style.display = 'flex';
 }
 
@@ -1029,17 +1034,23 @@ function closeOrderDetails() {
 
 async function repeatSelectedOrder() {
     const order = selectedOrderForDetails;
-    if (!order || order.type !== 'data') return;
-    const phone = String(order.repeatPhone || '').replace(/[\s()-]/g, '');
+    const repeatKind = order?.repeatKind || order?.type;
+    if (!order || !['data', 'airtime', 'utility'].includes(repeatKind)) return;
+    const phone = String(order.repeatPhone || order.repeatCustomerPhone || '').replace(/[\s()-]/g, '');
     const networkType = String(order.repeatNetwork || '').toLowerCase();
-    const volumeInMB = Number(order.repeatVolumeMb);
-    const prefixes = { mtn: ['024', '025', '053', '054', '055', '059'], telecel: ['020', '050'], airteltigo: ['026', '027', '056', '057'] };
-    if (!/^0\d{9}$/.test(phone)) return alert('The saved recipient number is not valid. Open a new data order instead.');
-    if (prefixes[networkType] && !prefixes[networkType].includes(phone.slice(0, 3))) {
-        const label = networkType === 'airteltigo' ? 'AT' : networkType.toUpperCase();
-        return alert(`This number is not an ${label} number. Enter a valid ${label} number for the selected network.`);
+    const prefixes = { mtn: ['024', '025', '053', '054', '055', '059'], telecel: ['020', '050'], at: ['026', '027', '056', '057'], airteltigo: ['026', '027', '056', '057'] };
+    if (repeatKind !== 'utility') {
+        if (!/^0\d{9}$/.test(phone)) return alert('The saved recipient number is not valid. Open a new order instead.');
+        if (prefixes[networkType] && !prefixes[networkType].includes(phone.slice(0, 3))) {
+            const label = networkType === 'airteltigo' ? 'AT' : networkType.toUpperCase();
+            return alert(`This number is not an ${label} number. Enter a valid ${label} number for the selected network.`);
+        }
     }
-    if (!Number.isInteger(volumeInMB) || volumeInMB <= 0) return alert('The saved bundle size is unavailable.');
+    if (repeatKind === 'data' && (!Number.isInteger(Number(order.repeatVolumeMb)) || Number(order.repeatVolumeMb) <= 0)) return alert('The saved bundle size is unavailable.');
+    if (repeatKind === 'utility' && (!order.repeatAccountNumber || !order.repeatBillType || !/^0\d{9}$/.test(phone))) {
+        return alert('The saved utility account details are incomplete. Open a new utility order instead.');
+    }
+    if (repeatKind !== 'data' && (!Number.isFinite(Number(order.repeatAmount)) || Number(order.repeatAmount) <= 0)) return alert('The saved order amount is unavailable.');
 
     const button = document.getElementById('repeatOrderButton');
     if (button) {
@@ -1048,8 +1059,37 @@ async function repeatSelectedOrder() {
     }
     try {
         const session = await getValidAgentSession();
-        const { data, error } = await supabase.functions.invoke('purchase-agent-data', {
-            body: { phone, networkType, volumeInMB },
+        let functionName = '';
+        let body = {};
+        let successMessage = '';
+        if (repeatKind === 'data') {
+            functionName = 'purchase-agent-data';
+            body = { phone, networkType, volumeInMB: Number(order.repeatVolumeMb) };
+            successMessage = 'Data order submitted';
+        } else if (repeatKind === 'airtime') {
+            functionName = 'create-airtime-payment';
+            body = {
+                phone,
+                network: networkType,
+                amount: Number(order.repeatAmount),
+                paymentMethod: 'wallet',
+                clientRequestId: `REPEAT-AIR-${crypto.randomUUID()}`,
+            };
+            successMessage = 'Airtime order submitted';
+        } else {
+            functionName = 'create-utility-bill-payment';
+            body = {
+                billType: String(order.repeatBillType),
+                accountNumber: String(order.repeatAccountNumber),
+                meterType: order.repeatMeterType || null,
+                packageName: order.repeatPackageName || null,
+                customerPhone: phone,
+                amount: Number(order.repeatAmount),
+            };
+            successMessage = 'Utility order submitted';
+        }
+        const { data, error } = await supabase.functions.invoke(functionName, {
+            body,
             headers: { Authorization: `Bearer ${session.access_token}` },
         });
         if (error || !data?.success) {
@@ -1061,7 +1101,7 @@ async function repeatSelectedOrder() {
             throw new Error(message);
         }
         closeOrderDetails();
-        alert(`Repeat order submitted. It is ${String(data.status || 'processing').toLowerCase()} until the provider confirms delivery. Order code: ${data.shortCode || 'pending'}.`);
+        alert(`${successMessage}. It is ${String(data.status || data.airtimeStatus || 'processing').toLowerCase()} until the provider confirms delivery. Order code: ${data.shortCode || data.orderCode || data.reference || 'pending'}.`);
         await loadStoredOrders();
     } catch (error) {
         alert(error instanceof Error ? error.message : 'Unable to repeat this order.');
@@ -1230,6 +1270,11 @@ async function loadStoredOrdersInternal() {
                         status: o.statusLabel,
                         providerStatus: o.providerStatus || o.statusLabel,
                         providerRef: o.providerReference || '',
+                        repeatKind: 'airtime',
+                        repeatPhone: o.phone,
+                        repeatNetwork: String(o.network || '').toLowerCase(),
+                        repeatAmount: Number(o.amount),
+                        detailPhone: o.phone,
                         date: new Date(o.createdAt).toLocaleDateString(),
                         rawDate: o.createdAt
                     });
@@ -1247,6 +1292,14 @@ async function loadStoredOrdersInternal() {
                         status: o.statusLabel,
                         providerStatus: o.providerStatus || o.statusLabel,
                         providerRef: o.providerReference || '',
+                        repeatKind: 'utility',
+                        repeatAccountNumber: o.accountNumber,
+                        repeatBillType: o.billType,
+                        repeatMeterType: o.meterType || null,
+                        repeatPackageName: o.packageName || null,
+                        repeatCustomerPhone: o.customerPhone || o.phone,
+                        repeatAmount: Number(o.amount),
+                        detailPhone: o.phoneMasked || o.phone,
                         date: new Date(o.createdAt).toLocaleDateString(),
                         rawDate: o.createdAt
                     });
@@ -1264,6 +1317,7 @@ async function loadStoredOrdersInternal() {
                         status: o.status,
                         providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_order_id || o.provider_reference || '',
+                        repeatKind: 'data',
                         repeatPhone: o.phone,
                         repeatNetwork: o.network_type,
                         repeatVolumeMb: Number(o.volume_mb),
@@ -1285,6 +1339,7 @@ async function loadStoredOrdersInternal() {
                         status: o.status || ORDER_STATUS.PROCESSING,
                         providerStatus: o.status || 'UNKNOWN',
                         providerRef: '',
+                        repeatKind: 'data',
                         repeatPhone: o.recipient_phone,
                         repeatNetwork: String(o.network || '').toLowerCase(),
                         repeatVolumeMb: volumeFromBundleLabel(o.bundle_size),
@@ -1306,6 +1361,7 @@ async function loadStoredOrdersInternal() {
                         status: o.status,
                         providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_reference || '',
+                        repeatKind: 'data',
                         repeatPhone: o.customer_phone,
                         repeatNetwork: o.network_type,
                         repeatVolumeMb: Number(o.volume_mb),
@@ -1327,6 +1383,7 @@ async function loadStoredOrdersInternal() {
                         status: o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status),
                         providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_reference || '',
+                        repeatKind: 'data',
                         repeatPhone: o.recipient || o.customer_phone,
                         repeatNetwork: o.network,
                         repeatVolumeMb: volumeFromBundleLabel(o.product_label),

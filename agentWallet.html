@@ -17,6 +17,33 @@
     } catch (e) {}
   </script>
   <style>
+    body.wallet-page {
+      min-height: 100vh;
+      padding-bottom: 40px;
+    }
+    .wallet-dashboard-body {
+      max-width: 760px;
+      background: #0b0f19;
+    }
+    .wallet-page-content {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .wallet-page-hero {
+      background: linear-gradient(135deg, #1e3a8a, #2563eb);
+      border: 1px solid rgba(147, 197, 253, .25);
+      border-radius: 16px;
+      padding: 20px;
+      margin: 18px 0;
+      color: #fff;
+      box-shadow: 0 12px 28px rgba(37, 99, 235, .18);
+    }
+    .wallet-page-hero h1 { color: #fff !important; }
+    .wallet-page-hero p { color: #dbeafe !important; }
+    @media (max-width: 520px) {
+      .wallet-dashboard-body { padding: 12px; }
+      .wallet-page-content { width: 100%; }
+    }
     .wallet-action-btn {
       flex: 1;
       padding: 11px 14px;
@@ -139,18 +166,20 @@
     }
   </style>
 </head>
-<body style="background: #f3f4f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding-bottom: 50px;">
+<body class="dashboard-page wallet-page" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0;">
 
-    <div style="padding: 0 16px; max-width: 650px; margin: 0 auto;">
+  <main class="gt-dashboard-body wallet-dashboard-body">
+    <div class="wallet-page-content" style="padding: 0 4px;">
         
         <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin: 20px 0 14px;">
+        <div class="wallet-page-hero" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
             <div>
-                <h1 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin: 0 0 4px;">My Wallet &amp; Transactions</h1>
-                <p style="font-size: 0.85rem; color: #64748b; margin: 0;">Track your spendable balance, store orders, and commissions.</p>
+                <div style="font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #bfdbfe; margin-bottom: 6px;"><i class="fa-solid fa-wallet"></i> Agent wallet</div>
+                <h1 style="font-size: 1.35rem; font-weight: 800; color: #fff; margin: 0 0 4px;">My Wallet &amp; Transactions</h1>
+                <p style="font-size: 0.85rem; color: #dbeafe; margin: 0;">Track your spendable balance, store earnings, and protected purchase history.</p>
             </div>
             <div style="text-align: right;">
-                <span id="walletAgentInitials" style="display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; background: #2563eb; color: #ffffff; font-weight: 800; font-size: 0.85rem;">SA</span>
+                <span id="walletAgentInitials" style="display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,.18); color: #ffffff; font-weight: 800; font-size: 0.85rem; border: 1px solid rgba(255,255,255,.3);">SA</span>
             </div>
         </div>
 
@@ -281,6 +310,7 @@
         </div>
 
     </div>
+  </main>
 
     <!-- ========================================================================= -->
     <!-- MODALS: Commission Transfer and Withdrawal -->

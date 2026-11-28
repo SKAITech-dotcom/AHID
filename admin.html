@@ -1094,13 +1094,13 @@
             <div class="panel-title"><i class="fa-solid fa-wifi"></i> Standard Data Stock &amp; Provider API</div>
           </div>
           <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 14px;">
-            Each bundle has one system-wide provider route. The selected API is used for agent purchases, non-agent purchases, and agent-store orders. A provider must confirm delivery before an order becomes completed.
+            Each bundle has system-wide fulfilment and customer-payment routes. Fulfilment controls Swift/GrandTech for agent, non-agent, and agent-store data delivery; payment controls Skaipay/Paystack for non-agent and agent-store checkout. Payment must be confirmed before delivery starts.
           </p>
           <div class="table-container">
             <table>
-              <thead><tr><th>Network</th><th>Bundle</th><th>Price</th><th>Provider API</th><th>Status</th><th>Updated</th><th>Controls</th></tr></thead>
+              <thead><tr><th>Network</th><th>Bundle</th><th>Price</th><th>Fulfilment API</th><th>Payment API</th><th>Status</th><th>Updated</th><th>Controls</th></tr></thead>
               <tbody id="systemDataControlsTbody">
-                <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:16px;">Loading data controls…</td></tr>
+                <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:16px;">Loading data controls…</td></tr>
               </tbody>
             </table>
           </div>

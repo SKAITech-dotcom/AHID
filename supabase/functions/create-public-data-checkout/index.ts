@@ -3,6 +3,7 @@ import { resolveDataPackage } from '../_shared/dataProvider.ts';
 import { hubtelWalletGrossAmount } from '../_shared/paymentGateway.ts';
 import { hubtelPaymentsConfigured, initializeHubtelCollection } from '../_shared/hubtelPayments.ts';
 import { networkPhoneError } from '../_shared/phoneValidation.ts';
+import { customerPaymentProviderForBundle, customerPaymentProviderLabel } from '../_shared/customerPaymentRouting.ts';
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -10,12 +11,6 @@ function errorMessage(error: unknown, fallback: string) {
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
-function paymentProviderForSale(saleAmount: number): 'hubtel' | 'paystack' {
-  // GHS 10.00 through GHS 50.00 uses Paystack. Everything below GHS 10.00
-  // or above GHS 50.00 uses Skaipay (Hubtel).
-  return saleAmount >= 10 && saleAmount <= 50 ? 'paystack' : 'hubtel';
 }
 
 /** Creates a Hubtel checkout for a guest; no agent session or wallet is used. */
@@ -67,7 +62,7 @@ Deno.serve(async (request) => {
       return json({ error: 'This bundle is temporarily unavailable from its provider. No payment was started.' }, 409);
     }
 
-    const paymentProvider = paymentProviderForSale(saleAmount);
+    const paymentProvider = await customerPaymentProviderForBundle(bundleId, saleAmount, admin);
     const paystackSecret = Deno.env.get('PAYSTACK_SECRET_KEY')?.trim();
     const feeRateValue = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.0195');
     const feeRate = Number.isFinite(feeRateValue) && feeRateValue >= 0 && feeRateValue < 1
@@ -143,7 +138,7 @@ Deno.serve(async (request) => {
           amount: saleAmount,
           grossAmount,
           paymentProvider,
-          gatewayLabel: 'Skaipay (Hubtel)',
+        gatewayLabel: customerPaymentProviderLabel(paymentProvider),
         });
       }
 
@@ -196,7 +191,7 @@ Deno.serve(async (request) => {
         amount: saleAmount,
         grossAmount,
         paymentProvider,
-        gatewayLabel: 'Paystack',
+        gatewayLabel: customerPaymentProviderLabel(paymentProvider),
       });
     } catch (error) {
       await admin.from('public_data_orders').update({

@@ -5,6 +5,7 @@ import { hubtelWalletGrossAmount } from '../_shared/paymentGateway.ts';
 import { hubtelPaymentsConfigured, initializeHubtelCollection } from '../_shared/hubtelPayments.ts';
 import { fulfilStoreOrder } from '../_shared/storeOrderFulfillment.ts';
 import { networkPhoneError } from '../_shared/phoneValidation.ts';
+import { customerPaymentProviderForBundle, customerPaymentProviderLabel } from '../_shared/customerPaymentRouting.ts';
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 const NETWORK_LABELS: Record<string, string> = { mtn: 'MTN', telecel: 'Telecel', airteltigo: 'AirtelTigo' };
@@ -26,8 +27,9 @@ Deno.serve(async (request) => {
       return json(result, result.success || isWaitingForPayment ? 200 : 400);
     }
 
-    // 2. Order Checkout Initialization. The gateway is selected server-side:
-    // Skaipay/Hubtel for prices below GHS 10, Paystack for GHS 10 and above.
+    // 2. Order Checkout Initialization. The gateway is selected server-side
+    // from the system-wide per-bundle route, with the legacy amount split as
+    // the safe fallback when a route row is not yet present.
     const rawSlug = String(body.slug || body.ref || body.agent || body.code || '').trim();
     const bundleId = String(body.bundleId || '').trim().toLowerCase();
     const recipient = String(body.recipient || body.phone || '').trim();
@@ -296,7 +298,7 @@ Deno.serve(async (request) => {
     }
     const providerCost = round2(dataPackage.costGhs);
 
-    const paymentProvider = saleAmount < 10 ? 'hubtel' : 'paystack';
+    const paymentProvider = await customerPaymentProviderForBundle(bundleId, saleAmount, admin);
     const feeRate = Number(Deno.env.get('PAYSTACK_FEE_PERCENT') ?? '0.0195');
     const safeRate = Number.isFinite(feeRate) && feeRate >= 0 && feeRate < 1 ? feeRate : 0.0195;
     const grossAmount = paymentProvider === 'hubtel'
@@ -398,7 +400,7 @@ Deno.serve(async (request) => {
           shortCode: order.short_code,
           authorizationUrl: payment.authorizationUrl,
           paymentProvider,
-          gatewayLabel: 'Skaipay (Hubtel)',
+          gatewayLabel: customerPaymentProviderLabel(paymentProvider),
           packagePrice: saleAmount,
           feeAmount,
           grossAmount,
@@ -468,7 +470,7 @@ Deno.serve(async (request) => {
       accessCode: payment.data.access_code,
       paystackPublicKey: Deno.env.get('PAYSTACK_PUBLIC_KEY') || null,
       paymentProvider,
-      gatewayLabel: 'Paystack',
+      gatewayLabel: customerPaymentProviderLabel(paymentProvider),
       packagePrice: saleAmount,
       feeAmount,
       grossAmount,

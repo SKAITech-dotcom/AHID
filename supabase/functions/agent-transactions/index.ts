@@ -202,13 +202,13 @@ Deno.serve(async (request) => {
       fetchTransactionRows('Utility',
         (from, to) => admin
         .from('utility_orders')
-        .select('id, bill_type, bill_category, account_number, package_name, amount, fee_amount, gross_amount, wallet_charge_amount, commission_amount, agent_commission_amount, commission_rate_percent, customer_name, customer_phone, payment_reference, status, token_code, provider_reference, short_code, provider_response, created_at')
+        .select('id, bill_type, bill_category, account_number, meter_type, package_name, amount, fee_amount, gross_amount, wallet_charge_amount, commission_amount, agent_commission_amount, commission_rate_percent, customer_name, customer_phone, payment_reference, status, token_code, provider_reference, short_code, provider_response, created_at')
         .eq('agent_id', agentId)
         .order('created_at', { ascending: false })
         .range(from, to),
         (from, to) => admin
           .from('utility_orders')
-          .select('id, bill_type, bill_category, account_number, package_name, amount, fee_amount, gross_amount, wallet_charge_amount, commission_amount, agent_commission_amount, commission_rate_percent, customer_name, customer_phone, payment_reference, status, token_code, provider_reference, short_code, created_at')
+          .select('id, bill_type, bill_category, account_number, meter_type, package_name, amount, fee_amount, gross_amount, wallet_charge_amount, commission_amount, agent_commission_amount, commission_rate_percent, customer_name, customer_phone, payment_reference, status, token_code, provider_reference, short_code, created_at')
           .eq('agent_id', agentId)
           .order('created_at', { ascending: false })
           .range(from, to)),
@@ -263,6 +263,7 @@ Deno.serve(async (request) => {
         billLabel: BILL_LABELS[o.bill_type] || o.bill_type,
         billCategory: o.bill_category,
         accountNumber: o.account_number,
+        meterType: o.meter_type,
         accountMasked: maskAccount(o.account_number),
         packageName: o.package_name,
         customerName: o.customer_name,
