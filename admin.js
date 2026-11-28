@@ -3299,14 +3299,16 @@ async function loadReferralsData() {
         const award = referral.award || null;
         const status = award?.status || 'Not rewarded';
         const awardAction = award
-          ? (award.status === 'paid'
+          ? (award.legacy
+            ? '<span style="font-size:.76rem;color:var(--text-dim);">Legacy reward recorded</span>'
+            : award.status === 'paid'
             ? `<span class="badge badge-success">Paid${award.paid_reference ? ` · ${escapeHtml(award.paid_reference)}` : ''}<br><small>${award.paid_at ? escapeHtml(new Date(award.paid_at).toLocaleString()) : ''}</small></span>`
             : `<button class="btn btn-secondary btn-sm" onclick="markReferralPaid('${award.id}')"><i class="fa-solid fa-check"></i> Mark as Paid</button>`)
           : `<button class="btn btn-primary btn-sm" onclick="awardSpecificReferral('${agent.id}', '${referral.id}')"><i class="fa-solid fa-gift"></i> Award</button>`;
         return `<tr class="referral-detail-row"><td colspan="9"><div class="referral-detail-card">
           <div><strong>${escapeHtml(referred.full_name || 'Referred account')}</strong><br><small>${escapeHtml(referred.phone || referred.agent_code || '—')}</small></div>
           <div><span class="badge badge-primary">${escapeHtml(referral.status || 'qualified')}</span><br><small>${escapeHtml(referral.source || 'signup')} · ${referral.created_at ? escapeHtml(new Date(referral.created_at).toLocaleString()) : '—'}</small></div>
-          <div><strong>${award ? money(award.amount) : 'Not awarded'}</strong><br><small>${award ? `Audit: ${escapeHtml(award.audit_reference || '—')} · ${escapeHtml(status)}` : 'This referral is ready for an award.'}</small></div>
+          <div><strong>${award?.legacy ? 'Recorded' : award ? money(award.amount) : 'Not awarded'}</strong><br><small>${award ? `Audit: ${escapeHtml(award.audit_reference || '—')} · ${escapeHtml(status)}` : 'This referral is ready for an award.'}</small></div>
           <div>${awardAction}</div>
         </div></td></tr>`;
       }).join('') : `<tr class="referral-detail-row"><td colspan="9"><div class="referral-detail-card">No qualified referrals recorded for this agent.</div></td></tr>`;

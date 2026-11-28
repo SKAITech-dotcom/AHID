@@ -50,6 +50,8 @@ async function loadAgentSummary(agentId: string) {
   const referredMap = new Map((referredAgents || []).map((row) => [row.id, row]));
   const awardMap = new Map((awards || []).map((row) => [row.referral_id, row]));
   const qualified = (referrals || []).filter((row) => row.status === 'qualified');
+  const legacyRewardCount = Math.max(...(rewards || []).map((row) => Number(row.referral_count || 0)), 0);
+  const legacyReferralIds = new Set(qualified.slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))).slice(0, legacyRewardCount).map((row) => row.id));
   const rewardTotal = (rewards || []).reduce((sum, row) => sum + Number(row.amount || 0), 0)
     + (awards || []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
 
@@ -72,7 +74,13 @@ async function loadAgentSummary(agentId: string) {
     referralSlug: slug,
     referralLink: slug ? `${PUBLIC_SITE}/login.html?register=true&ref=${encodeURIComponent(slug)}` : '',
     count: qualified.length,
-    referrals: (referrals || []).map((row) => ({ ...row, referredAgent: referredMap.get(row.referred_agent_id) || null, award: awardMap.get(row.id) || null })),
+    referrals: (referrals || []).map((row) => ({
+      ...row,
+      referredAgent: referredMap.get(row.referred_agent_id) || null,
+      award: awardMap.get(row.id) || (legacyReferralIds.has(row.id)
+        ? { legacy: true, status: 'credited', audit_reference: 'Legacy aggregate reward' }
+        : null),
+    })),
     rewards: rewards || [],
     awards: awards || [],
     rewardTotal: Math.round(rewardTotal * 100) / 100,
@@ -180,6 +188,8 @@ Deno.serve(async (request) => {
           const agentAwards = (awards || []).filter((award) => award.agent_id === agent.id);
           const wallet = walletMap.get(agent.id) || {};
           const legacy = rewardMap.get(agent.id);
+          const agentReferrals = (referrals || []).filter((referral) => referral.referrer_agent_id === agent.id);
+          const legacyReferralIds = new Set(agentReferrals.filter((referral) => referral.status === 'qualified').slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))).slice(0, legacy?.count || 0).map((referral) => referral.id));
           return {
             ...agent,
             referralCount: counts.get(agent.id) || 0,
@@ -190,10 +200,12 @@ Deno.serve(async (request) => {
             totalReferralEarned: Number(wallet.total_referral_earned || 0),
             transferredReferralRewards: Number(wallet.transferred_referral_rewards || 0),
             paidReferralRewards: Number(wallet.paid_referral_rewards || 0),
-            referrals: (referrals || []).filter((referral) => referral.referrer_agent_id === agent.id).map((referral) => ({
+            referrals: agentReferrals.map((referral) => ({
               ...referral,
               referredAgent: agentMap.get(referral.referred_agent_id) || null,
-              award: awardMap.get(referral.id) || null,
+              award: awardMap.get(referral.id) || (legacyReferralIds.has(referral.id)
+                ? { legacy: true, status: 'credited', audit_reference: 'Legacy aggregate reward' }
+                : null),
             })),
           };
         }),
