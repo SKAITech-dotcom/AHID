@@ -9,8 +9,6 @@ import {
 } from '../_shared/pricing.ts';
 import {
   DATA_NETWORKS,
-  catalogPrice,
-  volumeForBundleId,
   type DataNetwork,
 } from '../_shared/dataCatalog.ts';
 import { networkPhoneError } from '../_shared/phoneValidation.ts';
@@ -66,52 +64,37 @@ Deno.serve(async (request) => {
         .maybeSingle();
 
       if (bundleError) {
-        // The browser selected this stable network/size id from the catalog.
-        // If the catalog read is temporarily unavailable, resolve the sale
-        // price from the server-owned price table below and verify deliverability
-        // against the assigned provider's live catalog before charging.
-        console.error('bundle_catalog lookup failed; using server sale catalog:', bundleError.message);
+        throw bundleError;
       }
 
-      if (bundle && bundle.active === false) {
+      if (!bundle) return json({ error: 'That bundle is not configured in Admin System Control. Refresh and choose another bundle.' }, 409);
+      if (bundle.active === false) {
         return json({ error: 'That bundle is currently out of stock. Choose another package.' }, 409);
       }
 
-      if (bundle) {
-        networkType = String(bundle.network);
-        volumeInMB = Number(bundle.volume_mb);
-        salePrice = Number(bundle.price);
-      } else {
-        const parsed = volumeForBundleId(requestedBundleId);
-        if (!parsed) return json({ error: 'That package is not recognized. Please choose a listed bundle.' }, 400);
-        networkType = parsed.network;
-        volumeInMB = parsed.volumeInMB;
-        salePrice = catalogPrice(networkType, volumeInMB);
-      }
+      networkType = String(bundle.network);
+      volumeInMB = Number(bundle.volume_mb);
+      salePrice = Number(bundle.price);
     } else {
       // Legacy path for the pages that still post a network and a volume.
       networkType = String(body.networkType || '').trim().toLowerCase();
       volumeInMB = Number(body.volumeInMB);
-      salePrice = catalogPrice(networkType, volumeInMB);
+      const { data: legacyBundle, error: legacyBundleError } = await admin
+        .from('bundle_catalog')
+        .select('network, volume_mb, price, active')
+        .eq('network', networkType)
+        .eq('volume_mb', volumeInMB)
+        .maybeSingle();
+      if (legacyBundleError) throw legacyBundleError;
+      if (!legacyBundle) return json({ error: 'That bundle is not configured in Admin System Control. Refresh and choose another bundle.' }, 409);
+      if (legacyBundle.active === false) return json({ error: 'That bundle is currently out of stock. Choose another package.' }, 409);
+      salePrice = Number(legacyBundle.price);
     }
 
     if (!DATA_NETWORKS.includes(networkType as DataNetwork) ||
       !Number.isInteger(volumeInMB) || volumeInMB <= 0 ||
       salePrice === null || !Number.isFinite(salePrice) || salePrice <= 0) {
       return json({ error: 'Enter valid customer details and select a supported package.' }, 400);
-    }
-
-    if (!requestedBundleId) {
-      const { data: catalogBundle } = await admin
-        .from('bundle_catalog')
-        .select('active, price')
-        .eq('network', networkType)
-        .eq('volume_mb', volumeInMB)
-        .maybeSingle();
-      if (catalogBundle?.active === false) {
-        return json({ error: 'That bundle is currently out of stock. Choose another package.' }, 409);
-      }
-      if (catalogBundle?.active === true) salePrice = Number(catalogBundle.price);
     }
 
     const phoneNetworkError = networkPhoneError(networkType, customerPhone);

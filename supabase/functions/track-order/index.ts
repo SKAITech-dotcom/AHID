@@ -15,6 +15,9 @@ interface OrderMatch {
   phone: string;
   status: string;
   providerStatus?: string;
+  systemStatus?: string;
+  manualStatus?: string | null;
+  manualStatusNote?: string | null;
   date: string;
 }
 
@@ -29,7 +32,7 @@ const dateOf = (value: unknown) => value ? new Date(String(value)).toLocaleStrin
  */
 function dataOrderLabel(status: unknown): string {
   const value = String(status ?? '').trim().toLowerCase();
-  if (value === 'successful') return 'Successful';
+  if (['successful', 'completed', 'delivered', 'approved'].includes(value)) return 'Successful';
   if (value === 'failed') return 'Failed';
   if (value === 'cancelled') return 'Cancelled';
   if (value === 'pending_payment') return 'Awaiting Payment';
@@ -39,10 +42,11 @@ function dataOrderLabel(status: unknown): string {
 
 async function liveDataStatus(admin: ReturnType<typeof adminClient>, row: Record<string, unknown>) {
   const current = String(row.status || '').toLowerCase();
+  const manualStatus = String(row.admin_status || '').trim().toLowerCase();
   // A previous frontend could have marked an accepted order as completed
   // before the provider settled it. Re-check every non-failed order so the
   // customer sees the provider's current state instead of a stale local one.
-  if (['failed', 'cancelled', 'refunded'].includes(current)) return null;
+  if (['failed', 'cancelled', 'refunded'].includes(current) && !manualStatus) return null;
   const stored = row.provider_response && typeof row.provider_response === 'object'
     ? row.provider_response as Record<string, unknown>
     : {};
@@ -264,7 +268,7 @@ Deno.serve(async (request) => {
       if (!match) {
         const { data: publicData, error } = await admin
           .from('public_data_orders')
-          .select('id, payment_reference, short_code, provider_name, provider_reference, provider_response, network_type, volume_mb, customer_phone, sale_amount, status, created_at')
+          .select('id, payment_reference, short_code, provider_name, provider_reference, provider_response, network_type, volume_mb, customer_phone, sale_amount, status, admin_status, admin_status_note, created_at')
           .eq('short_code', ref)
           .maybeSingle();
         if (!error && publicData) {
@@ -278,7 +282,11 @@ Deno.serve(async (request) => {
             price: money(publicData.sale_amount),
             name: 'Customer',
             phone: publicData.customer_phone || '',
-            status: live ? dataOrderLabel(live.state) : dataOrderLabel(publicData.status),
+            status: dataOrderLabel(publicData.admin_status || (live ? live.state : publicData.status)),
+            systemStatus: dataOrderLabel(publicData.status),
+            manualStatus: publicData.admin_status || null,
+            manualStatusNote: publicData.admin_status_note || null,
+            providerStatus: String(live?.status || publicData.provider_response?.lastProviderStatus || publicData.provider_response?.providerStatus || 'UNKNOWN'),
             date: dateOf(publicData.created_at),
           };
         }
@@ -288,7 +296,7 @@ Deno.serve(async (request) => {
       if (!match) {
         const { data, error } = await admin
           .from('agent_data_orders')
-          .select('id, provider_reference, provider_name, provider_order_id, provider_response, short_code, network_type, phone, volume_mb, amount, status, created_at')
+          .select('id, provider_reference, provider_name, provider_order_id, provider_response, short_code, network_type, phone, volume_mb, amount, status, admin_status, admin_status_note, created_at')
           .eq('short_code', ref)
           .maybeSingle();
         if (!error && data) {
@@ -302,7 +310,11 @@ Deno.serve(async (request) => {
             price: money(data.amount),
             name: 'Agent Order',
             phone: data.phone || '',
-            status: live ? dataOrderLabel(live.state) : dataOrderLabel(data.status),
+            status: dataOrderLabel(data.admin_status || (live ? live.state : data.status)),
+            systemStatus: dataOrderLabel(data.status),
+            manualStatus: data.admin_status || null,
+            manualStatusNote: data.admin_status_note || null,
+            providerStatus: String(live?.status || data.provider_response?.lastProviderStatus || data.provider_response?.providerStatus || 'UNKNOWN'),
             date: dateOf(data.created_at),
           };
         }
@@ -338,7 +350,7 @@ Deno.serve(async (request) => {
     if (ref.startsWith('PUB')) {
       const { data, error } = await admin
         .from('public_data_orders')
-        .select('id, payment_reference, short_code, provider_name, provider_reference, provider_response, network_type, volume_mb, sale_amount, customer_name, customer_phone, customer_email, status, created_at')
+        .select('id, payment_reference, short_code, provider_name, provider_reference, provider_response, network_type, volume_mb, sale_amount, customer_name, customer_phone, customer_email, status, admin_status, admin_status_note, created_at')
         .eq('payment_reference', ref)
         .maybeSingle();
       if (!error && data) {
@@ -353,7 +365,11 @@ Deno.serve(async (request) => {
           price: money(data.sale_amount),
           name: data.customer_name || 'Customer',
           phone: data.customer_phone || '',
-          status: live ? dataOrderLabel(live.state) : dataOrderLabel(data.status),
+          status: dataOrderLabel(data.admin_status || (live ? live.state : data.status)),
+          systemStatus: dataOrderLabel(data.status),
+          manualStatus: data.admin_status || null,
+          manualStatusNote: data.admin_status_note || null,
+          providerStatus: String(live?.status || data.provider_response?.lastProviderStatus || data.provider_response?.providerStatus || 'UNKNOWN'),
           date: dateOf(data.created_at),
         };
       }
@@ -386,7 +402,7 @@ Deno.serve(async (request) => {
     if (ref.startsWith('DATA-')) {
       const { data, error } = await admin
         .from('agent_data_orders')
-        .select('id, provider_reference, provider_name, provider_order_id, provider_response, short_code, network_type, phone, volume_mb, amount, status, created_at')
+        .select('id, provider_reference, provider_name, provider_order_id, provider_response, short_code, network_type, phone, volume_mb, amount, status, admin_status, admin_status_note, created_at')
         .eq('provider_reference', ref)
         .maybeSingle();
       if (!error && data) {
@@ -400,7 +416,11 @@ Deno.serve(async (request) => {
           price: money(data.amount),
           name: 'Agent Order',
           phone: data.phone || '',
-          status: live ? dataOrderLabel(live.state) : dataOrderLabel(data.status),
+          status: dataOrderLabel(data.admin_status || (live ? live.state : data.status)),
+          systemStatus: dataOrderLabel(data.status),
+          manualStatus: data.admin_status || null,
+          manualStatusNote: data.admin_status_note || null,
+          providerStatus: String(live?.status || data.provider_response?.lastProviderStatus || data.provider_response?.providerStatus || 'UNKNOWN'),
           date: dateOf(data.created_at),
         };
       }

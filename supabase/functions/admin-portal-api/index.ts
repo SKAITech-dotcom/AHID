@@ -512,22 +512,22 @@ Deno.serve(async (request) => {
         const [agentOrders, publicOrders, legacyOrders, storeOrders, catalogRes] = await Promise.all([
           fetchAllRows((from, to) => admin
             .from('agent_data_orders')
-            .select('id, provider_reference, short_code, provider_name, provider_order_id, provider_status, provider_state, provider_response, phone, network_type, volume_mb, amount, status, created_at')
+            .select('id, provider_reference, short_code, provider_name, provider_order_id, provider_status, provider_state, provider_response, phone, network_type, volume_mb, amount, status, admin_status, admin_status_note, admin_status_updated_at, created_at')
             .order('created_at', { ascending: false })
             .range(from, to)),
           fetchAllRows((from, to) => admin
             .from('public_data_orders')
-            .select('id, payment_reference, short_code, provider_name, provider_reference, provider_status, provider_state, provider_response, customer_phone, customer_name, network_type, volume_mb, sale_amount, status, manual_review_required, manual_review_reason, created_at')
+            .select('id, payment_reference, short_code, provider_name, provider_reference, provider_status, provider_state, provider_response, customer_phone, customer_name, network_type, volume_mb, sale_amount, status, admin_status, admin_status_note, admin_status_updated_at, manual_review_required, manual_review_reason, created_at')
             .order('created_at', { ascending: false })
             .range(from, to)),
           fetchAllRows((from, to) => admin
             .from('orders')
-            .select('id, reference, short_code, network, bundle_size, recipient_phone, amount, status, created_at')
+            .select('id, reference, short_code, network, bundle_size, recipient_phone, amount, status, admin_status, admin_status_note, admin_status_updated_at, created_at')
             .order('created_at', { ascending: false })
             .range(from, to)),
           fetchAllRows((from, to) => admin
             .from('store_orders')
-            .select('id, reference, short_code, product_type, product_label, network, recipient, platform_price, fulfilment_status, payment_status, provider, provider_reference, provider_status, provider_state, provider_response, manual_review_required, manual_review_reason, created_at')
+            .select('id, reference, short_code, product_type, product_label, network, recipient, platform_price, fulfilment_status, payment_status, provider, provider_reference, provider_status, provider_state, provider_response, admin_status, admin_status_note, admin_status_updated_at, manual_review_required, manual_review_reason, created_at')
             .eq('product_type', 'data_bundle')
             .order('created_at', { ascending: false })
             .range(from, to)),
@@ -540,12 +540,17 @@ Deno.serve(async (request) => {
 
         const agentOrderRows = agentOrders.map((o) => ({
           id: o.id,
+          kind: 'data',
           reference: o.provider_reference,
           shortCode: o.short_code || '',
           phone: o.phone,
           network: o.network_type,
           amount: Number(o.amount || 0),
-          status: o.status,
+          systemStatus: o.status,
+          manualStatus: o.admin_status || null,
+          manualStatusNote: o.admin_status_note || null,
+          manualStatusUpdatedAt: o.admin_status_updated_at || null,
+          status: o.admin_status || o.status,
           provider: o.provider_name || 'Swift',
           providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
           providerReference: o.provider_order_id || o.provider_reference || '',
@@ -557,12 +562,17 @@ Deno.serve(async (request) => {
 
         const publicOrderRows = publicOrders.map((o) => ({
           id: o.id,
+          kind: 'public_data',
           reference: o.payment_reference,
           shortCode: o.short_code || '',
           phone: o.customer_phone,
           network: o.network_type,
           amount: Number(o.sale_amount || 0),
-          status: o.status,
+          systemStatus: o.status,
+          manualStatus: o.admin_status || null,
+          manualStatusNote: o.admin_status_note || null,
+          manualStatusUpdatedAt: o.admin_status_updated_at || null,
+          status: o.admin_status || o.status,
           provider: o.provider_name || 'Swift',
           providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
           providerReference: o.provider_reference || '',
@@ -574,6 +584,7 @@ Deno.serve(async (request) => {
 
         const legacyOrderRows = legacyOrders.map((o) => ({
           id: o.id,
+          kind: 'legacy',
           reference: o.reference || o.id,
           shortCode: o.short_code || '',
           phone: o.recipient_phone,
@@ -581,7 +592,11 @@ Deno.serve(async (request) => {
           amount: Number(o.amount || 0),
           // Legacy rows have no provider identity. Never present them as
           // delivered; they require a provider-backed reconciliation or review.
-          status: o.status || 'processing',
+          systemStatus: o.status || 'processing',
+          manualStatus: o.admin_status || null,
+          manualStatusNote: o.admin_status_note || null,
+          manualStatusUpdatedAt: o.admin_status_updated_at || null,
+          status: o.admin_status || o.status || 'processing',
           provider: 'Swift',
           providerStatus: o.status || 'UNKNOWN',
           failureReason: '',
@@ -597,7 +612,11 @@ Deno.serve(async (request) => {
           phone: o.recipient,
           network: o.network,
           amount: Number(o.platform_price || 0),
-          status: o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status),
+          systemStatus: o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status),
+          manualStatus: o.admin_status || null,
+          manualStatusNote: o.admin_status_note || null,
+          manualStatusUpdatedAt: o.admin_status_updated_at || null,
+          status: o.admin_status || o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status),
           provider: o.provider || 'Swift',
           providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
           providerReference: o.provider_reference || '',
@@ -605,7 +624,7 @@ Deno.serve(async (request) => {
           createdAt: o.created_at,
           // Store orders are reconciled by the agent order page and remain
           // visible here as durable wallet fulfilment records.
-          kind: 'legacy',
+          kind: 'store_orders',
           type: 'Data Bundle (Agent Wallet)',
           details: o.product_label || 'Data bundle',
         }));
@@ -1366,6 +1385,79 @@ Deno.serve(async (request) => {
       });
     }
 
+    // ACTION: SET DISPLAY-ONLY ADMIN STATUS
+    // This is intentionally separate from the real order status. Provider
+    // polling and payment/wallet settlement must continue to use the system
+    // status and the provider fields, even when an operator adds a recovery
+    // note after a provider resend.
+    if (action === 'set-admin-order-status') {
+      const orderType = String(body.orderType || '').trim().toLowerCase();
+      const orderId = String(body.orderId || '').trim();
+      const requestedStatus = String(body.status || '').trim().toLowerCase();
+      const note = String(body.note || '').trim().slice(0, 500) || null;
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const tableByType: Record<string, string> = {
+        data: 'agent_data_orders',
+        agent_data_orders: 'agent_data_orders',
+        public_data: 'public_data_orders',
+        public_data_orders: 'public_data_orders',
+        store_order: 'store_orders',
+        store_orders: 'store_orders',
+        legacy: 'orders',
+        orders: 'orders',
+      };
+      const table = tableByType[orderType];
+      const allowedStatuses = new Set([
+        'pending', 'pending_payment', 'processing', 'successful', 'completed',
+        'delivered', 'failed', 'cancelled',
+      ]);
+
+      if (!table) return json({ error: 'Unsupported data order type.' }, 400);
+      if (!uuidPattern.test(orderId)) return json({ error: 'A valid order ID is required.' }, 400);
+      if (requestedStatus !== 'live' && requestedStatus !== 'clear' && requestedStatus !== '' && !allowedStatuses.has(requestedStatus)) {
+        return json({ error: 'Invalid admin status.' }, 400);
+      }
+
+      const { data: existing, error: existingError } = await admin
+        .from(table)
+        .select('id')
+        .eq('id', orderId)
+        .maybeSingle();
+      if (existingError) throw existingError;
+      if (!existing) return json({ error: 'Order not found.' }, 404);
+
+      const clear = requestedStatus === 'live' || requestedStatus === 'clear' || requestedStatus === '';
+      const update = clear
+        ? {
+            admin_status: null,
+            admin_status_note: null,
+            admin_status_updated_at: null,
+            admin_status_updated_by: null,
+          }
+        : {
+            admin_status: requestedStatus,
+            admin_status_note: note,
+            admin_status_updated_at: new Date().toISOString(),
+            admin_status_updated_by: caller.id,
+          };
+      const { data: updated, error: updateError } = await admin
+        .from(table)
+        .update(update)
+        .eq('id', orderId)
+        .select('id, admin_status, admin_status_note, admin_status_updated_at')
+        .single();
+      if (updateError) throw updateError;
+
+      return json({
+        success: true,
+        orderType,
+        orderId,
+        manualStatus: updated?.admin_status || null,
+        manualStatusNote: updated?.admin_status_note || null,
+        manualStatusUpdatedAt: updated?.admin_status_updated_at || null,
+      });
+    }
+
     // ACTION: RETRY DATA ORDER
     if (action === 'retry-data-order') {
       const orderId = String(body.orderId || '').trim();
@@ -1737,6 +1829,17 @@ Deno.serve(async (request) => {
             livePayload: live.payload || null,
             syncedAt: new Date().toISOString(),
           };
+          // Preserve the provider's latest answer even if this row is already
+          // terminal locally and only has an admin display override.
+          const providerCheckedAt = new Date().toISOString();
+          const { error: providerLiveUpdateError } = await admin.from('public_data_orders').update({
+            provider_reference: order.provider_reference || live.providerOrderId || null,
+            provider_status: live.status,
+            provider_state: live.state,
+            last_status_checked_at: providerCheckedAt,
+            provider_response: updatedResponse,
+          }).eq('id', order.id);
+          if (providerLiveUpdateError) throw providerLiveUpdateError;
           const nextStatus = live.state === 'successful'
             ? 'successful'
             : live.state === 'failed' || live.state === 'cancelled'
@@ -1862,6 +1965,17 @@ Deno.serve(async (request) => {
             livePayload: live.payload || null,
             syncedAt: new Date().toISOString(),
           };
+          // Admin display overrides never stop live provider status updates.
+          const providerCheckedAt = new Date().toISOString();
+          const { error: providerLiveUpdateError } = await admin.from('store_orders').update({
+            provider_reference: order.provider_reference || live.providerOrderId || null,
+            provider_status: live.status,
+            provider_state: live.state,
+            last_status_checked_at: providerCheckedAt,
+            provider_response: updatedResponse,
+            updated_at: providerCheckedAt,
+          }).eq('id', order.id);
+          if (providerLiveUpdateError) throw providerLiveUpdateError;
           const currentStatus = String(order.fulfilment_status || 'processing');
           if (currentStatus === 'successful' && live.state !== 'successful') {
             await admin.from('store_orders').update({

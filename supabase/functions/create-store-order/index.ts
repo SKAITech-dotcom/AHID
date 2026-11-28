@@ -1,6 +1,5 @@
 import { adminClient, corsPreflight, json } from '../_shared/supabase.ts';
 import { resolveDataPackage } from '../_shared/dataProvider.ts';
-import { catalogPrice, formatBundleVolume, volumeForBundleId } from '../_shared/dataCatalog.ts';
 import { hubtelWalletGrossAmount } from '../_shared/paymentGateway.ts';
 import { hubtelPaymentsConfigured, initializeHubtelCollection } from '../_shared/hubtelPayments.ts';
 import { fulfilStoreOrder } from '../_shared/storeOrderFulfillment.ts';
@@ -8,7 +7,6 @@ import { networkPhoneError } from '../_shared/phoneValidation.ts';
 import { customerPaymentProviderForBundle, customerPaymentProviderLabel } from '../_shared/customerPaymentRouting.ts';
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
-const NETWORK_LABELS: Record<string, string> = { mtn: 'MTN', telecel: 'Telecel', airteltigo: 'AirtelTigo' };
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return corsPreflight();
@@ -202,37 +200,16 @@ Deno.serve(async (request) => {
       });
     }
 
-    // 5. Look up Package from bundle_catalog or canonical catalog
-    const { data: catalogBundle } = await admin
+    // 5. Look up the package from the admin-controlled catalog. There is no
+    // canonical fallback because System Control must be authoritative.
+    const { data: bundle, error: catalogError } = await admin
       .from('bundle_catalog')
-      .select('bundle_id, network, title, volume_mb, price')
+      .select('bundle_id, network, title, volume_mb, price, active')
       .eq('bundle_id', bundleId)
-      .eq('active', true)
       .maybeSingle();
-
-    let bundle = catalogBundle;
-    if (!bundle) {
-      const { data: knownBundle } = await admin
-        .from('bundle_catalog')
-        .select('bundle_id')
-        .eq('bundle_id', bundleId)
-        .maybeSingle();
-      if (knownBundle) {
-        return json({ error: 'That bundle is currently out of stock. Choose another package.' }, 409);
-      }
-      const parsed = volumeForBundleId(bundleId);
-      const catalogSalePrice = parsed ? catalogPrice(parsed.network, parsed.volumeInMB) : null;
-      if (!parsed || catalogSalePrice === null) {
-        return json({ error: 'That package is not available. Choose another.' }, 400);
-      }
-      bundle = {
-        bundle_id: bundleId,
-        network: parsed.network,
-        title: `${NETWORK_LABELS[parsed.network] ?? parsed.network.toUpperCase()} ${formatBundleVolume(parsed.volumeInMB)}`,
-        volume_mb: parsed.volumeInMB,
-        price: catalogSalePrice,
-      };
-    }
+    if (catalogError) throw catalogError;
+    if (!bundle) return json({ error: 'That bundle is not configured in Admin System Control. Refresh and choose another bundle.' }, 409);
+    if (bundle.active !== true) return json({ error: 'That bundle is currently out of stock. Choose another package.' }, 409);
 
     const networkType = String(bundle.network).toLowerCase();
     const volumeInMB = Number(bundle.volume_mb);

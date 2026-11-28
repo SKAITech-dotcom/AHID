@@ -999,16 +999,19 @@ function openOrderDetails(order) {
     const orderCode = fiveCharacterOrderCode(order.shortId || order.id);
     const recipient = order.detailPhone || order.repeatPhone || order.phone || '—';
     const providerStatus = safeProviderStatus(order.providerStatus, 'UNKNOWN');
-    body.innerHTML = [
+    const detailRows = [
         ['Order ID', `#${orderCode}`],
         ['Service', serviceLabel(order.type)],
         ['Network / details', [order.network, order.package].filter(Boolean).join(' · ') || '—'],
         ['Recipient', recipient],
         ['Status', ORDER_STATUS_LABELS[normalizeOrderStatus(order.status)]],
+        ['System status', ORDER_STATUS_LABELS[normalizeOrderStatus(order.systemStatus || order.status)] || order.systemStatus || order.status || '—'],
         ['Provider status', providerStatus],
         ['Provider reference', order.providerRef || 'Not assigned yet'],
         ['Date', order.date || '—'],
-    ].map(([label, value]) => `<div><small style="display:block;color:#64748b;font-size:.72rem;margin-bottom:3px;">${escapeOrderCell(label)}</small><strong>${escapeOrderCell(value)}</strong></div>`).join('');
+    ];
+    if (order.manualStatusNote) detailRows.push(['Admin note', order.manualStatusNote]);
+    body.innerHTML = detailRows.map(([label, value]) => `<div><small style="display:block;color:#64748b;font-size:.72rem;margin-bottom:3px;">${escapeOrderCell(label)}</small><strong>${escapeOrderCell(value)}</strong></div>`).join('');
     if (subtitle) subtitle.textContent = 'Live status is checked from the provider before this view is refreshed.';
 
     const repeatKind = order.repeatKind || order.type;
@@ -1213,7 +1216,7 @@ async function loadStoredOrdersInternal() {
             // rows instead of silently disappearing from the UI.
             const dataOrders = await fetchAllRows((from, to) => supabase
                 .from('agent_data_orders')
-                .select('id, provider_reference, short_code, provider_order_id, provider_status, provider_state, network_type, phone, volume_mb, amount, status, provider_response, created_at')
+                .select('id, provider_reference, short_code, provider_order_id, provider_status, provider_state, network_type, phone, volume_mb, amount, status, admin_status, admin_status_note, provider_response, created_at')
                 .eq('agent_id', user.id)
                 .order('created_at', { ascending: false })
                 .range(from, to));
@@ -1221,7 +1224,7 @@ async function loadStoredOrdersInternal() {
             // Public checkout orders are also Standard Data Bundle orders.
             const publicDataOrders = await fetchAllRows((from, to) => supabase
                 .from('public_data_orders')
-                .select('id, payment_reference, short_code, provider_reference, provider_status, provider_state, network_type, customer_name, customer_phone, volume_mb, sale_amount, status, provider_response, created_at')
+                .select('id, payment_reference, short_code, provider_reference, provider_status, provider_state, network_type, customer_name, customer_phone, volume_mb, sale_amount, status, admin_status, admin_status_note, provider_response, created_at')
                 .eq('agent_id', user.id)
                 .order('created_at', { ascending: false })
                 .range(from, to));
@@ -1233,7 +1236,7 @@ async function loadStoredOrdersInternal() {
             try {
                 legacyWalletOrders = await fetchAllRows((from, to) => supabase
                     .from('orders')
-                    .select('id, reference, short_code, network, bundle_size, recipient_phone, amount, status, created_at')
+                    .select('id, reference, short_code, network, bundle_size, recipient_phone, amount, status, admin_status, admin_status_note, created_at')
                     .eq('agent_id', user.id)
                     .order('created_at', { ascending: false })
                     .range(from, to));
@@ -1248,7 +1251,7 @@ async function loadStoredOrdersInternal() {
             try {
                 storeOrders = await fetchAllRows((from, to) => supabase
                     .from('store_orders')
-                    .select('id, reference, short_code, product_label, network, recipient, customer_phone, platform_price, provider, provider_reference, provider_status, provider_state, provider_response, fulfilment_status, payment_status, created_at')
+                    .select('id, reference, short_code, product_label, network, recipient, customer_phone, platform_price, provider, provider_reference, provider_status, provider_state, provider_response, fulfilment_status, payment_status, admin_status, admin_status_note, created_at')
                     .eq('agent_id', user.id)
                     .eq('product_type', 'data_bundle')
                     .order('created_at', { ascending: false })
@@ -1314,7 +1317,10 @@ async function loadStoredOrdersInternal() {
                         network: (o.network_type || '').toUpperCase(),
                         phone: maskPhoneDisplay(o.phone),
                         package: `${formatDataVolume(o.volume_mb)} (GHS ${Number(o.amount).toFixed(2)})`,
-                        status: o.status,
+                        systemStatus: o.status,
+                        manualStatus: o.admin_status || '',
+                        manualStatusNote: o.admin_status_note || '',
+                        status: o.admin_status || o.status,
                         providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_order_id || o.provider_reference || '',
                         repeatKind: 'data',
@@ -1336,7 +1342,10 @@ async function loadStoredOrdersInternal() {
                         network: (o.network || '').toUpperCase(),
                         phone: maskPhoneDisplay(o.recipient_phone),
                         package: `${o.bundle_size || 'Data bundle'} (GHS ${Number(o.amount).toFixed(2)})`,
-                        status: o.status || ORDER_STATUS.PROCESSING,
+                        systemStatus: o.status || ORDER_STATUS.PROCESSING,
+                        manualStatus: o.admin_status || '',
+                        manualStatusNote: o.admin_status_note || '',
+                        status: o.admin_status || o.status || ORDER_STATUS.PROCESSING,
                         providerStatus: o.status || 'UNKNOWN',
                         providerRef: '',
                         repeatKind: 'data',
@@ -1358,7 +1367,10 @@ async function loadStoredOrdersInternal() {
                         network: (o.network_type || '').toUpperCase(),
                         phone: maskPhoneDisplay(o.customer_phone),
                         package: `${formatDataVolume(o.volume_mb)} (GHS ${Number(o.sale_amount).toFixed(2)})`,
-                        status: o.status,
+                        systemStatus: o.status,
+                        manualStatus: o.admin_status || '',
+                        manualStatusNote: o.admin_status_note || '',
+                        status: o.admin_status || o.status,
                         providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_reference || '',
                         repeatKind: 'data',
@@ -1380,7 +1392,10 @@ async function loadStoredOrdersInternal() {
                         network: (o.network || '').toUpperCase(),
                         phone: maskPhoneDisplay(o.recipient || o.customer_phone),
                         package: `${o.product_label || 'Data bundle'} (GHS ${Number(o.platform_price || 0).toFixed(2)})`,
-                        status: o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status),
+                        systemStatus: o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status),
+                        manualStatus: o.admin_status || '',
+                        manualStatusNote: o.admin_status_note || '',
+                        status: o.admin_status || o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status),
                         providerStatus: o.provider_status || o.provider_response?.lastProviderStatus || o.provider_response?.providerStatus || 'UNKNOWN',
                         providerRef: o.provider_reference || '',
                         repeatKind: 'data',

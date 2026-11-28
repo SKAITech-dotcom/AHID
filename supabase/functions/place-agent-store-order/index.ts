@@ -3,12 +3,12 @@ import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
 import { resolveAgentBundlePrice, type AgentPricingLike } from '../_shared/pricing.ts';
 import {
   bundleIdFor,
-  catalogPrice,
   formatBundleVolume,
   volumeForBundleId,
   type DataNetwork,
 } from '../_shared/dataCatalog.ts';
 import { chargeWallet, refundWallet, getWalletBalance } from '../_shared/wallet.ts';
+import { networkPhoneError } from '../_shared/phoneValidation.ts';
 
 const NETWORK_ALIASES: Record<string, DataNetwork> = {
   mtn: 'mtn',
@@ -75,6 +75,8 @@ Deno.serve(async (request) => {
     if (!/^0\d{9}$/.test(phone)) {
       return json({ error: 'Enter a valid 10-digit Ghanaian recipient number.' }, 400);
     }
+    const phoneNetworkMessage = networkPhoneError(network, phone);
+    if (phoneNetworkMessage) return json({ error: phoneNetworkMessage }, 400);
 
     const bundleId = bundleIdFor(network, volumeInMB);
     const { data: existing, error: existingError } = await admin
@@ -109,9 +111,10 @@ Deno.serve(async (request) => {
       .maybeSingle();
     if (catalogError) throw catalogError;
 
-    const platformPrice = catalogRow
-      ? Number(catalogRow.active ? catalogRow.price : Number.NaN)
-      : Number(catalogPrice(network, volumeInMB));
+    if (!catalogRow) {
+      return json({ error: 'This bundle is not configured in Admin System Control. Please ask an admin to restore the bundle catalog.' }, 409);
+    }
+    const platformPrice = Number(catalogRow.active ? catalogRow.price : Number.NaN);
     if (!Number.isFinite(platformPrice) || platformPrice <= 0) {
       return json({ error: 'This bundle is not available at the current platform price.' }, 400);
     }

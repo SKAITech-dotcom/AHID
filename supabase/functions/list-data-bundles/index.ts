@@ -1,9 +1,6 @@
 import { corsPreflight, json } from '../_shared/supabase.ts';
 import {
   DATA_NETWORKS,
-  SALE_CATALOG,
-  bundleIdFor,
-  formatBundleVolume,
   type DataNetwork,
 } from '../_shared/dataCatalog.ts';
 
@@ -12,13 +9,12 @@ import {
  *
  * Public and unauthenticated on purpose: the storefront has to show a price and
  * a bundle before anyone signs in, and a bundle list is not sensitive. Active
- * rows are returned when available; the static whole-GB fallback is safe
- * because checkout performs a live provider resolution before charging.
+ * rows are returned from the admin-controlled catalog. There is no static
+ * fallback: an empty active result is an intentional out-of-stock state.
  *
  * The client renders exactly what this returns. The provider-confirmed table
- * is preferred; when it has not been populated yet, a whole-GB fallback keeps
- * the Standard Data storefront usable while checkout still resolves the live
- * Swift/GrandTech package before charging the wallet.
+ * is authoritative; an empty active result stays empty so an admin can disable
+ * every bundle without this endpoint silently re-enabling a static fallback.
  *
  * `validity` is passed through as-is and is currently null for every row. The
  * UI must not substitute a placeholder like "30 days" for it.
@@ -48,19 +44,7 @@ Deno.serve(async (request) => {
 
     if (error) throw error;
 
-    const visibleCatalogRows = data ?? [];
-    const rows = visibleCatalogRows.length ? visibleCatalogRows : DATA_NETWORKS.flatMap((network) =>
-      Object.entries(SALE_CATALOG[network])
-        .filter(([volume]) => Number(volume) >= 1024)
-        .map(([volume, price]) => ({
-          bundle_id: bundleIdFor(network, Number(volume)),
-          network,
-          title: `${network.toUpperCase()} ${formatBundleVolume(Number(volume))}`,
-          validity: null,
-          volume_mb: Number(volume),
-          price,
-        })),
-    );
+    const rows = data ?? [];
 
     const networks = (rows ?? []).map((row) => ({
       bundleId: String(row.bundle_id),

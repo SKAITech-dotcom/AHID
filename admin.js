@@ -646,10 +646,10 @@ async function loadDataModuleData(options = {}) {
   const syncLive = options.syncLive !== false;
   try {
     const [agentOrders, publicOrders, legacyOrders, storeOrders, catalogRes] = await Promise.all([
-      fetchAllRows((from, to) => supabase.from('agent_data_orders').select('id, provider_reference, short_code, provider_name, provider_order_id, provider_status, provider_state, phone, network_type, volume_mb, amount, status, failure_reason, provider_response, created_at').order('created_at', { ascending: false }).range(from, to)),
-      fetchAllRows((from, to) => supabase.from('public_data_orders').select('id, payment_reference, short_code, provider_name, provider_reference, provider_status, provider_state, customer_phone, customer_name, network_type, volume_mb, sale_amount, status, manual_review_required, manual_review_reason, provider_response, created_at').order('created_at', { ascending: false }).range(from, to)),
-      fetchAllRows((from, to) => supabase.from('orders').select('id, reference, short_code, network, bundle_size, recipient_phone, amount, status, created_at').order('created_at', { ascending: false }).range(from, to)),
-      fetchAllRows((from, to) => supabase.from('store_orders').select('id, reference, short_code, provider, provider_reference, provider_status, provider_state, provider_response, recipient, customer_phone, network, product_label, platform_price, sale_amount, payment_status, fulfilment_status, manual_review_required, manual_review_reason, failure_reason, created_at').order('created_at', { ascending: false }).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('agent_data_orders').select('id, provider_reference, short_code, provider_name, provider_order_id, provider_status, provider_state, phone, network_type, volume_mb, amount, status, admin_status, admin_status_note, admin_status_updated_at, failure_reason, provider_response, created_at').order('created_at', { ascending: false }).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('public_data_orders').select('id, payment_reference, short_code, provider_name, provider_reference, provider_status, provider_state, customer_phone, customer_name, network_type, volume_mb, sale_amount, status, admin_status, admin_status_note, admin_status_updated_at, manual_review_required, manual_review_reason, provider_response, created_at').order('created_at', { ascending: false }).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('orders').select('id, reference, short_code, network, bundle_size, recipient_phone, amount, status, admin_status, admin_status_note, admin_status_updated_at, created_at').order('created_at', { ascending: false }).range(from, to)),
+      fetchAllRows((from, to) => supabase.from('store_orders').select('id, reference, short_code, provider, provider_reference, provider_status, provider_state, provider_response, recipient, customer_phone, network, product_label, platform_price, sale_amount, payment_status, fulfilment_status, admin_status, admin_status_note, admin_status_updated_at, manual_review_required, manual_review_reason, failure_reason, created_at').order('created_at', { ascending: false }).range(from, to)),
       supabase.from('bundle_catalog').select('bundle_id, network, title, volume_mb, price, provider_cost, active, inactive_reason, updated_at').order('network').order('volume_mb'),
     ]);
 
@@ -668,7 +668,11 @@ async function loadDataModuleData(options = {}) {
         phone: o.phone,
         network: o.network_type,
         amount: Number(o.amount || 0),
-        status: isCancelled ? 'cancelled' : o.status,
+        systemStatus: isCancelled ? 'cancelled' : o.status,
+        manualStatus: o.admin_status || '',
+        manualStatusNote: o.admin_status_note || '',
+        manualStatusUpdatedAt: o.admin_status_updated_at || '',
+        status: o.admin_status || (isCancelled ? 'cancelled' : o.status),
         provider,
         providerStatus,
         providerReference: o.provider_order_id || o.provider_reference || '',
@@ -695,7 +699,11 @@ async function loadDataModuleData(options = {}) {
         phone: o.customer_phone,
         network: o.network_type,
         amount: Number(o.sale_amount || 0),
-        status: isCancelled ? 'cancelled' : o.status,
+        systemStatus: isCancelled ? 'cancelled' : o.status,
+        manualStatus: o.admin_status || '',
+        manualStatusNote: o.admin_status_note || '',
+        manualStatusUpdatedAt: o.admin_status_updated_at || '',
+        status: o.admin_status || (isCancelled ? 'cancelled' : o.status),
         provider,
         providerStatus,
         providerReference: o.provider_reference || '',
@@ -716,7 +724,11 @@ async function loadDataModuleData(options = {}) {
       phone: o.recipient_phone,
       network: o.network,
       amount: Number(o.amount || 0),
-      status: o.status || 'processing',
+      systemStatus: o.status || 'processing',
+      manualStatus: o.admin_status || '',
+      manualStatusNote: o.admin_status_note || '',
+      manualStatusUpdatedAt: o.admin_status_updated_at || '',
+      status: o.admin_status || o.status || 'processing',
       provider: 'Wallet order',
       providerStatus: safeProviderStatus(o.status, 'UNKNOWN'),
       providerReference: '',
@@ -729,7 +741,7 @@ async function loadDataModuleData(options = {}) {
 
     const storeOrderRows = (storeOrders || []).map((o) => {
       const resp = (o.provider_response && typeof o.provider_response === 'object') ? o.provider_response : {};
-      const status = o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status || 'pending');
+      const systemStatus = o.fulfilment_status || (o.payment_status === 'paid' ? 'processing' : o.payment_status || 'pending');
       return {
         id: o.id,
         orderId: fiveCharacterAdminOrderCode(o.short_code || o.reference || o.id),
@@ -739,11 +751,15 @@ async function loadDataModuleData(options = {}) {
         phone: o.recipient || o.customer_phone,
         network: o.network,
         amount: Number(o.platform_price || o.sale_amount || 0),
-        status,
+        systemStatus,
+        manualStatus: o.admin_status || '',
+        manualStatusNote: o.admin_status_note || '',
+        manualStatusUpdatedAt: o.admin_status_updated_at || '',
+        status: o.admin_status || systemStatus,
         provider: o.provider || 'Swift',
       providerStatus: safeProviderStatus(o.provider_status || resp.lastProviderStatus || resp.providerStatus, 'UNKNOWN'),
         providerReference: o.provider_reference || '',
-        isCancelled: status === 'cancelled',
+        isCancelled: systemStatus === 'cancelled',
         failureReason: o.failure_reason || '',
         createdAt: o.created_at,
         type: 'Data Bundle (Agent Wallet)',
@@ -763,7 +779,7 @@ async function loadDataModuleData(options = {}) {
     // calls so a large history cannot block the portal.
     if (syncLive) {
       const activeOrders = cachedDataOrders.filter((o) => {
-        const status = String(o.status || '').toLowerCase();
+        const status = String(o.systemStatus || o.status || '').toLowerCase();
         const providerStatus = String(o.providerStatus || '').toLowerCase();
         const staleTerminal = status === 'successful' && ['pending', 'processing', 'queued', 'submitted', 'accepted'].includes(providerStatus);
         return o.kind !== 'legacy'
@@ -794,29 +810,38 @@ function renderDataOrders(orders) {
 
   tbody.innerHTML = orders.map((o) => {
     const netClass = o.network === 'mtn' ? 'badge-mtn' : o.network === 'telecel' ? 'badge-telecel' : 'badge-at';
-    const rawStatus = String(o.status || '').toLowerCase();
+    const rawStatus = String(o.systemStatus || o.status || '').toLowerCase();
+    const displayStatus = String(o.status || rawStatus).toLowerCase();
     const isCancelled = rawStatus === 'cancelled' || o.isCancelled;
     const isSuccess = ['success', 'successful', 'completed', 'delivered'].includes(rawStatus);
     const isFailed = rawStatus === 'failed';
     const isPending = !isSuccess && !isFailed && !isCancelled;
-    const providerStatus = safeProviderStatus(
-      o?.providerStatus,
-      isCancelled ? 'CANCELLED' : isSuccess ? 'DELIVERED' : isFailed ? 'FAILED' : 'PENDING',
-    );
+    const providerStatus = safeProviderStatus(o?.providerStatus, 'UNKNOWN');
+    const providerRaw = providerStatus.toLowerCase();
+    const providerIsCancelled = ['cancelled', 'canceled'].includes(providerRaw);
+    const providerIsSuccess = ['success', 'successful', 'completed', 'delivered', 'approved'].includes(providerRaw);
+    const providerIsFailed = ['failed', 'rejected', 'error'].includes(providerRaw);
 
     let statusBadge = '';
-    if (isCancelled) {
+    if (providerIsCancelled) {
       statusBadge = `<span class="badge badge-failed"><i class="fa-solid fa-ban"></i> Cancelled</span>`;
-    } else if (isSuccess) {
+    } else if (providerIsSuccess) {
       statusBadge = `<span class="badge badge-success"><i class="fa-solid fa-check"></i> ${escapeHtml(providerStatus.toUpperCase())}</span>`;
-    } else if (isFailed) {
+    } else if (providerIsFailed) {
       statusBadge = `<span class="badge badge-failed"><i class="fa-solid fa-xmark"></i> ${escapeHtml(providerStatus.toUpperCase())}</span>`;
     } else {
       statusBadge = `<span class="badge badge-pending"><i class="fa-solid fa-clock"></i> ${escapeHtml(providerStatus.toUpperCase())}</span>`;
     }
 
-    const orderStatusLabel = isCancelled ? 'Cancelled' : isSuccess ? 'Completed' : isFailed ? 'Failed' : 'Processing';
-    const orderStatusClass = isCancelled || isFailed ? 'badge-failed' : isSuccess ? 'badge-success' : 'badge-pending';
+    const displayIsCancelled = ['cancelled', 'canceled'].includes(displayStatus);
+    const displayIsSuccess = ['success', 'successful', 'completed', 'delivered'].includes(displayStatus);
+    const displayIsFailed = ['failed', 'rejected', 'error'].includes(displayStatus);
+    const orderStatusLabel = displayIsCancelled ? 'Cancelled' : displayIsSuccess ? 'Completed' : displayIsFailed ? 'Failed' : displayStatus === 'pending_payment' ? 'Awaiting Payment' : 'Processing';
+    const orderStatusClass = displayIsCancelled || displayIsFailed ? 'badge-failed' : displayIsSuccess ? 'badge-success' : 'badge-pending';
+    const adminStatusNote = o.manualStatusNote ? `<div style="color: var(--text-dim); font-size: 0.7rem; margin-top: 4px;">${escapeHtml(o.manualStatusNote)}</div>` : '';
+    const adminStatusBadge = o.manualStatus
+      ? `<div style="margin-top: 4px;"><span class="badge badge-primary"><i class="fa-solid fa-user-shield"></i> Admin override</span>${adminStatusNote}</div>`
+      : '';
 
     const providerBadge = `<span class="badge ${String(o.provider || '').toLowerCase().includes('grand') ? 'badge-primary' : 'badge-network'}">${escapeHtml(o.provider || 'Swift')}</span>`;
 
@@ -858,6 +883,9 @@ function renderDataOrders(orders) {
       : `<button class="btn btn-secondary btn-sm" onclick="openProviderStatusHistory('${o.kind}', '${o.id}')" title="View provider status events">
           <i class="fa-solid fa-list-check"></i> Events
         </button>`;
+    const adminStatusButton = `<button class="btn btn-secondary btn-sm" onclick="openAdminStatusModal('${o.kind}', '${o.id}')" title="Set a display-only recovery status">
+        <i class="fa-solid fa-user-shield"></i> Admin Status
+      </button>`;
 
     return `
       <tr>
@@ -869,10 +897,10 @@ function renderDataOrders(orders) {
         <td><strong>${money(o.amount)}</strong></td>
         <td>${providerBadge}</td>
         <td>${statusBadge}</td>
-        <td><span class="badge ${orderStatusClass}">${orderStatusLabel}</span></td>
+        <td><span class="badge ${orderStatusClass}">${orderStatusLabel}</span>${adminStatusBadge}</td>
         <td><code style="font-size: 0.72rem; word-break: break-all;">${escapeHtml(o.providerReference || '—')}</code></td>
         <td style="color: var(--text-dim); font-size: 0.74rem;">${new Date(o.createdAt).toLocaleString()}</td>
-        <td><div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">${eventButton}${actions}</div></td>
+        <td><div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">${adminStatusButton}${eventButton}${actions}</div></td>
       </tr>
     `;
   }).join('');
@@ -936,7 +964,7 @@ async function syncActiveDataOrders(orders) {
 
 async function syncAllActiveDataOrders() {
   const pendingOrders = cachedDataOrders.filter(o => {
-    const status = String(o.status || '').toLowerCase();
+    const status = String(o.systemStatus || o.status || '').toLowerCase();
     const providerStatus = String(o.providerStatus || '').toLowerCase();
     return o.kind !== 'legacy' && Boolean(o.providerReference) && !['failed', 'cancelled'].includes(status) &&
       (status === 'pending' || status === 'processing' || status === 'successful' ||
@@ -1182,7 +1210,7 @@ async function loadNonAgentHistoryData() {
     renderNonAgentHistory();
   } catch (error) {
     console.error('loadNonAgentHistoryData error:', error);
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#f87171;padding:16px;">Failed to load non-agent history: ${escapeHtml(error.message || 'Database error')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#f87171;padding:16px;">Failed to load non-agent history: ${escapeHtml(error.message || 'Database error')}</td></tr>`;
     showToast(error.message || 'Unable to load non-agent history.', 'error');
   }
 }
@@ -1205,11 +1233,12 @@ function renderNonAgentHistory() {
     return statusMatches && searchMatches;
   });
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:16px;">No non-agent orders match this filter.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:16px;">No non-agent orders match this filter.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((row) => {
     const status = String(row.status || 'pending_payment').toLowerCase();
+    const systemStatus = String(row.systemStatus || status).toLowerCase();
     const providerStatus = safeProviderStatus(row.providerStatus || row.providerState || status);
     const statusClass = ['successful', 'completed', 'delivered'].includes(status) ? 'badge-success'
       : ['failed', 'cancelled'].includes(status) ? 'badge-failed' : 'badge-pending';
@@ -1223,8 +1252,9 @@ function renderNonAgentHistory() {
       <td>${escapeHtml(String(row.provider || '—').toUpperCase())}</td>
       <td><code>${escapeHtml(row.providerOrderId || 'Pending provider ID')}</code></td>
       <td><span class="badge ${providerClass}">${escapeHtml(providerStatus.toUpperCase())}</span>${row.checkedAt ? `<br><small style="color:var(--text-muted);">${escapeHtml(new Date(row.checkedAt).toLocaleString())}</small>` : ''}</td>
-      <td><span class="badge ${statusClass}">${escapeHtml(status.replaceAll('_', ' ').toUpperCase())}</span></td>
+      <td><span class="badge ${statusClass}">${escapeHtml(status.replaceAll('_', ' ').toUpperCase())}</span>${row.manualStatus ? `<br><small style="color:var(--text-muted);">System: ${escapeHtml(systemStatus.replaceAll('_', ' '))}</small>` : ''}${row.manualStatusNote ? `<br><small style="color:var(--text-muted);">${escapeHtml(row.manualStatusNote)}</small>` : ''}</td>
       <td style="font-size:.75rem;color:var(--text-muted);">${row.createdAt ? escapeHtml(new Date(row.createdAt).toLocaleString()) : '—'}</td>
+      <td><button class="btn btn-secondary btn-sm" onclick="openAdminStatusModal('public_data', '${escapeHtml(row.id)}')"><i class="fa-solid fa-user-shield"></i> Admin Status</button></td>
     </tr>`;
   }).join('');
 }
@@ -2140,7 +2170,9 @@ async function openProviderStatusHistory(orderType, orderId) {
 
   const dbOrderType = orderType === 'public_data'
       ? 'public_data_orders'
-      : 'agent_data_orders';
+      : orderType === 'store_orders'
+        ? 'store_orders'
+        : 'agent_data_orders';
 
   try {
     const { data, error } = await supabase
@@ -2435,6 +2467,76 @@ async function submitCancelOrder() {
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = '<i class="fa-solid fa-ban"></i> Cancel & Refund';
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// ADMIN STATUS OVERRIDE (DISPLAY-ONLY RECOVERY NOTE)
+// -----------------------------------------------------------------------------
+let pendingAdminStatusOrder = null;
+
+function openAdminStatusModal(orderType, orderId) {
+  const order = cachedDataOrders.find((item) => item.kind === orderType && item.id === orderId)
+    || (orderType === 'public_data' ? cachedNonAgentHistory.find((item) => item.id === orderId) : null);
+  pendingAdminStatusOrder = { orderType, orderId };
+  const detailsEl = document.getElementById('adminStatusOrderDetails');
+  if (detailsEl) {
+    detailsEl.innerHTML = `
+      <div><strong>Order:</strong> <span style="font-family: monospace;">${escapeHtml(order?.orderId || order?.orderCode || order?.reference || orderId)}</span></div>
+      <div style="margin-top: 4px;"><strong>System status:</strong> ${escapeHtml(order?.systemStatus || order?.status || 'Unknown')} · <strong>Provider:</strong> ${escapeHtml(order?.provider || 'Unknown')}</div>
+      <div style="margin-top: 4px; color: var(--text-muted);">The provider live status and payment/wallet settlement continue independently.</div>
+    `;
+  }
+  const select = document.getElementById('adminStatusSelect');
+  if (select) select.value = order?.manualStatus || 'live';
+  const note = document.getElementById('adminStatusNoteInput');
+  if (note) note.value = order?.manualStatusNote || '';
+  document.getElementById('adminStatusModal')?.classList.add('open');
+}
+
+function closeAdminStatusModal() {
+  pendingAdminStatusOrder = null;
+  document.getElementById('adminStatusModal')?.classList.remove('open');
+}
+
+async function submitAdminStatus() {
+  if (!pendingAdminStatusOrder) return;
+  const status = document.getElementById('adminStatusSelect')?.value || 'live';
+  const note = document.getElementById('adminStatusNoteInput')?.value.trim() || '';
+  const btn = document.getElementById('btnSaveAdminStatus');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+  }
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await supabase.functions.invoke('admin-portal-api', {
+      body: {
+        action: 'set-admin-order-status',
+        orderType: pendingAdminStatusOrder.orderType,
+        orderId: pendingAdminStatusOrder.orderId,
+        status,
+        note,
+      },
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    });
+    if (res.error || !res.data?.success) {
+      throw new Error(res.data?.error || res.error?.message || 'Admin status update failed.');
+    }
+    showToast(status === 'live' ? 'Admin override cleared; live status is now displayed.' : 'Admin status saved. Live provider updates remain active.', 'success');
+    const refreshNonAgentHistory = pendingAdminStatusOrder.orderType === 'public_data';
+    closeAdminStatusModal();
+    await loadDataModuleData({ syncLive: false });
+    if (refreshNonAgentHistory) await loadNonAgentHistoryData();
+  } catch (err) {
+    console.error('submitAdminStatus error:', err);
+    showToast('Failed to save admin status: ' + err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Save Admin Status';
     }
   }
 }
@@ -3462,6 +3564,9 @@ window.syncAllActiveDataOrders = syncAllActiveDataOrders;
 window.openCancelOrderModal = openCancelOrderModal;
 window.closeCancelOrderModal = closeCancelOrderModal;
 window.submitCancelOrder = submitCancelOrder;
+window.openAdminStatusModal = openAdminStatusModal;
+window.closeAdminStatusModal = closeAdminStatusModal;
+window.submitAdminStatus = submitAdminStatus;
 window.toggleStockAvailability = toggleStockAvailability;
 window.retryDataOrder = retryDataOrder;
 window.handleAirtimeDispatch = handleAirtimeDispatch;

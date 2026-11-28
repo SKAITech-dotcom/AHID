@@ -1216,6 +1216,7 @@
                   <th>Live provider status</th>
                   <th>Order status</th>
                   <th>Created</th>
+                  <th>Admin Status</th>
                 </tr>
               </thead>
               <tbody id="nonAgentHistoryTbody">
@@ -1304,7 +1305,7 @@
           <!-- Stock & Catalog Status -->
           <div id="dataSubTabStock" style="display: none;">
             <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 14px;">
-              Standard Data Bundle pricing is managed here and is shared by the agent dashboard, wallet store orders, and public agent storefronts. MTN 1GB and Telecel 5GB are currently out of stock; their existing GrandTech routing is unchanged. The remaining bundles use Swift.
+              Standard Data Bundle pricing and availability are managed here and are shared by the agent dashboard, wallet store orders, and public agent storefronts. Use System Control to mark any package out of stock or restore it; provider routing remains independent.
             </p>
             <div class="sub-tabs" style="margin-bottom: 14px;">
               <button class="sub-tab-btn active" data-data-catalog-filter="standard" onclick="filterDataCatalog('standard')">Agent Dashboard · Data Bundle</button>
@@ -2319,6 +2320,44 @@
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-secondary" onclick="closeProviderStatusHistory()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADMIN STATUS OVERRIDE -->
+<div class="modal-overlay" id="adminStatusModal">
+  <div class="modal-card" style="max-width: 520px;">
+    <div class="modal-header">
+      <h3><i class="fa-solid fa-user-shield"></i> Admin Status</h3>
+      <button type="button" class="modal-close" onclick="closeAdminStatusModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="adminStatusOrderDetails" style="padding: 10px; background: var(--sidebar-bg); border-radius: 6px; font-size: 0.82rem; margin-bottom: 14px;"></div>
+      <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0 0 14px;">
+        Use this when a provider resends or recovers an order that was previously marked failed. This is a display-only override: live provider status, payment confirmation, wallet debits, and refunds continue independently.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Status to display</label>
+        <select id="adminStatusSelect" class="form-select">
+          <option value="live">Use live system status</option>
+          <option value="pending">Pending</option>
+          <option value="pending_payment">Awaiting Payment</option>
+          <option value="processing">Processing</option>
+          <option value="successful">Successful</option>
+          <option value="completed">Completed</option>
+          <option value="delivered">Delivered</option>
+          <option value="failed">Failed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Admin note (optional)</label>
+        <input type="text" id="adminStatusNoteInput" class="form-input" maxlength="500" placeholder="e.g. Provider resent the bundle; monitoring live delivery">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeAdminStatusModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="btnSaveAdminStatus" onclick="submitAdminStatus()"><i class="fa-solid fa-check"></i> Save Admin Status</button>
     </div>
   </div>
 </div>

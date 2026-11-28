@@ -12,7 +12,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function statusLabel(status: unknown): string {
   const value = String(status || '').trim().toLowerCase();
-  if (value === 'successful') return 'Successful';
+  if (['successful', 'completed', 'delivered', 'approved'].includes(value)) return 'Successful';
   if (value === 'failed') return 'Failed';
   if (value === 'cancelled') return 'Cancelled';
   if (value === 'pending_payment') return 'Awaiting Payment';
@@ -112,7 +112,7 @@ Deno.serve(async (request) => {
     ] = await Promise.all([
       admin
         .from('public_data_orders')
-        .select('id, short_code, customer_phone, network_type, volume_mb, sale_amount, status, provider_name, provider_reference, provider_status, provider_state, last_status_checked_at, provider_response, created_at')
+        .select('id, short_code, customer_phone, network_type, volume_mb, sale_amount, status, admin_status, admin_status_note, provider_name, provider_reference, provider_status, provider_state, last_status_checked_at, provider_response, created_at')
         .is('agent_id', null)
         .in('customer_phone', phoneVariants)
         .order('created_at', { ascending: false })
@@ -130,7 +130,7 @@ Deno.serve(async (request) => {
       // purchases appear in the same guest tracker.
       admin
         .from('store_orders')
-        .select('id, short_code, reference, product_type, product_label, network, recipient, customer_phone, agent_id, sale_amount, payment_status, fulfilment_status, wallet_debited, refund_amount, provider, provider_reference, provider_status, provider_state, last_status_checked_at, provider_response, meta, created_at')
+        .select('id, short_code, reference, product_type, product_label, network, recipient, customer_phone, agent_id, sale_amount, payment_status, fulfilment_status, admin_status, admin_status_note, wallet_debited, refund_amount, provider, provider_reference, provider_status, provider_state, last_status_checked_at, provider_response, meta, created_at')
         .eq('product_type', 'data_bundle')
         .order('created_at', { ascending: false })
         .limit(200),
@@ -160,13 +160,14 @@ Deno.serve(async (request) => {
       ).trim();
       const providerReference = String(stored.providerReference || row.provider_reference || '').trim();
       let status = String(row.status || 'pending_payment').toLowerCase();
+      const manualStatus = String(row.admin_status || '').trim().toLowerCase();
       let providerStatus = String(row.provider_status || stored.lastProviderStatus || stored.providerStatus || status);
 
       // A customer lookup is also a live status check. Do not stop polling just
       // because an older row was labelled successful; the provider may still
       // report processing or a later failure. Payment remains a separate gate
       // in verify-public-data-payment and is never inferred from this lookup.
-      if (!['failed', 'cancelled'].includes(status) && providerOrderId && (provider === 'swift' || provider === 'grandtech')) {
+      if ((!['failed', 'cancelled'].includes(status) || Boolean(manualStatus)) && providerOrderId && (provider === 'swift' || provider === 'grandtech')) {
         const live = await fetchDataOrderStatus(
           provider as 'swift' | 'grandtech',
           providerOrderId,
@@ -183,6 +184,13 @@ Deno.serve(async (request) => {
             lastProviderState: live.state,
             lastStatusCheckedAt: checkedAt,
           };
+          await admin.from('public_data_orders').update({
+            provider_reference: row.provider_reference || live.providerOrderId || null,
+            provider_status: providerStatus,
+            provider_state: live.state,
+            last_status_checked_at: checkedAt,
+            provider_response: updatedResponse,
+          }).eq('id', row.id);
           if (['successful', 'failed', 'cancelled'].includes(live.state)) {
             await admin.rpc('mark_public_data_order', {
               p_order_id: row.id,
@@ -211,8 +219,11 @@ Deno.serve(async (request) => {
         network: row.network_type,
         volumeMb: Number(row.volume_mb || 0),
         amount: Number(row.sale_amount || 0),
-        status,
-        statusLabel: statusLabel(status),
+        status: manualStatus || status,
+        systemStatus: status,
+        manualStatus: manualStatus || null,
+        manualStatusNote: String(row.admin_status_note || '').trim() || null,
+        statusLabel: statusLabel(manualStatus || status),
         providerStatus,
         createdAt: row.created_at,
       });
@@ -242,9 +253,10 @@ Deno.serve(async (request) => {
       let status = paymentStatus !== 'paid' && fulfilmentStatus === 'pending'
         ? 'pending_payment'
         : fulfilmentStatus;
+      const manualStatus = String(row.admin_status || '').trim().toLowerCase();
       let providerStatus = String(row.provider_status || stored.lastProviderStatus || stored.providerStatus || fulfilmentStatus);
 
-      if (!['failed', 'cancelled'].includes(status) && providerOrderId && (provider === 'swift' || provider === 'grandtech')) {
+      if ((!['failed', 'cancelled'].includes(status) || Boolean(manualStatus)) && providerOrderId && (provider === 'swift' || provider === 'grandtech')) {
         const live = await fetchDataOrderStatus(
           provider as 'swift' | 'grandtech',
           providerOrderId,
@@ -329,8 +341,11 @@ Deno.serve(async (request) => {
         network: row.network,
         volumeMb: Number(meta.volume_mb || 0),
         amount: Number(row.sale_amount || 0),
-        status,
-        statusLabel: statusLabel(status),
+        status: manualStatus || status,
+        systemStatus: status,
+        manualStatus: manualStatus || null,
+        manualStatusNote: String(row.admin_status_note || '').trim() || null,
+        statusLabel: statusLabel(manualStatus || status),
         providerStatus,
         createdAt: row.created_at,
       });

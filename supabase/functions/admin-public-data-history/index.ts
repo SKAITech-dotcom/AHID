@@ -57,7 +57,7 @@ Deno.serve(async (request) => {
     const { admin } = await requireAdmin(request);
     const { data: rows, error } = await admin
       .from('public_data_orders')
-      .select('id, short_code, customer_phone, network_type, volume_mb, sale_amount, payment_provider, status, provider_name, provider_reference, provider_response, created_at, completed_at')
+      .select('id, short_code, customer_phone, network_type, volume_mb, sale_amount, payment_provider, status, admin_status, admin_status_note, provider_name, provider_reference, provider_response, created_at, completed_at')
       .order('created_at', { ascending: false })
       .limit(500);
     if (error) throw error;
@@ -73,14 +73,15 @@ Deno.serve(async (request) => {
       )).toLowerCase();
       const orderId = providerOrderId(row, stored);
       const reference = providerReference(row, stored);
-      const status = internalStatus(row);
+      let status = internalStatus(row);
+      const manualStatus = text(row.admin_status).toLowerCase();
       let providerStatus = text(stored.lastProviderStatus || stored.providerStatus) || status;
       let providerState = text(stored.lastProviderState);
       let checkedAt = text(stored.lastStatusCheckedAt) || null;
 
       // Keep one admin refresh bounded even if a large history contains many
       // open orders. The stored status remains visible for the rest.
-      if (needsProviderRefresh(status, stored) && !orderId && provider === 'grandtech') {
+      if ((needsProviderRefresh(status, stored) || Boolean(manualStatus)) && !orderId && provider === 'grandtech') {
         const recovered = recoverGrandTechOrderIdFromStored(stored, {
           phone: text(row.customer_phone),
           network: text(row.network_type),
@@ -102,7 +103,7 @@ Deno.serve(async (request) => {
       const liveOrderId = provider === 'grandtech' && !orderId
         ? text(stored.providerOrderId)
         : orderId;
-      if (needsProviderRefresh(status, stored) && liveOrderId && liveChecks < 80 && (provider === 'swift' || provider === 'grandtech')) {
+      if ((needsProviderRefresh(status, stored) || Boolean(manualStatus)) && liveOrderId && liveChecks < 80 && (provider === 'swift' || provider === 'grandtech')) {
         liveChecks += 1;
         try {
           const live = await fetchDataOrderStatus(provider as 'swift' | 'grandtech', liveOrderId, reference);
@@ -119,6 +120,9 @@ Deno.serve(async (request) => {
                 lastStatusCheckedAt: checkedAt,
                 livePayload: live.payload || null,
               },
+              provider_status: providerStatus,
+              provider_state: providerState,
+              last_status_checked_at: checkedAt,
             };
             if (live.providerOrderId) update.provider_reference = live.providerOrderId;
             if (status === 'successful' && live.state === 'processing') {
@@ -141,7 +145,10 @@ Deno.serve(async (request) => {
         volumeMb: Number(row.volume_mb || 0),
         amount: Number(row.sale_amount || 0),
         paymentProvider: text(row.payment_provider),
-        status,
+        status: manualStatus || status,
+        systemStatus: status,
+        manualStatus: manualStatus || null,
+        manualStatusNote: text(row.admin_status_note) || null,
         provider,
         providerOrderId: liveOrderId || null,
         providerReference: reference || null,

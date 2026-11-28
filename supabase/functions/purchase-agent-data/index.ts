@@ -1,6 +1,6 @@
 import { adminClient, corsPreflight, json, requireAgent } from '../_shared/supabase.ts';
 import { buyDataPackage, resolveDataPackage } from '../_shared/dataProvider.ts';
-import { DATA_NETWORKS, bundleIdFor, catalogPrice, type DataNetwork } from '../_shared/dataCatalog.ts';
+import { DATA_NETWORKS, bundleIdFor, type DataNetwork } from '../_shared/dataCatalog.ts';
 import { networkPhoneError } from '../_shared/phoneValidation.ts';
 
 const NETWORKS = new Set<string>(DATA_NETWORKS);
@@ -40,16 +40,23 @@ Deno.serve(async (request) => {
     const bundleId = bundleIdFor(networkType as DataNetwork, volumeInMB);
     const { data: catalogRow, error: catalogError } = await admin
       .from('bundle_catalog')
-      .select('bundle_id, price, active')
+      .select('bundle_id, price, active, inactive_reason')
       .eq('bundle_id', bundleId)
       .maybeSingle();
     if (catalogError) throw catalogError;
-    // Existing dashboard fallback packages remain usable before the first
-    // provider catalog sync. Once a row exists, its active flag and admin-set
-    // price are authoritative; an inactive row can never be bypassed.
-    const listPrice = catalogRow
-      ? Number(catalogRow.active ? catalogRow.price : Number.NaN)
-      : Number(catalogPrice(networkType, volumeInMB));
+    if (!catalogRow) {
+      return json({ error: 'This bundle is not configured in Admin System Control. Please ask an admin to restore the bundle catalog.' }, 409);
+    }
+    // The admin-controlled catalog is authoritative for both availability and
+    // price. An inactive row can never be bypassed with a static price.
+    const listPrice = Number(catalogRow.active ? catalogRow.price : Number.NaN);
+    if (catalogRow && catalogRow.active !== true) {
+      return json({
+        error: `This ${networkType.toUpperCase()} ${volumeInMB / 1024}GB bundle is marked out of stock in Admin System Control.${catalogRow.inactive_reason ? ` Reason: ${catalogRow.inactive_reason}` : ''}`,
+        outOfStock: true,
+        bundleId,
+      }, 409);
+    }
     if (!Number.isFinite(listPrice) || listPrice <= 0) {
       return json({ error: 'This bundle is not available at the current agent price.' }, 400);
     }

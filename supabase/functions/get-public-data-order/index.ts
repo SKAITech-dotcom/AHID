@@ -32,7 +32,7 @@ Deno.serve(async (request) => {
     // delivery confirmation and the auto-refund with it.
     let query = supabase
       .from('public_data_orders')
-      .select('id, payment_reference, public_access_token, short_code, agent_id, customer_phone, network_type, volume_mb, sale_amount, status, created_at, provider_response, provider_name, provider_reference, payment_provider, paystack_refund_status')
+      .select('id, payment_reference, public_access_token, short_code, agent_id, customer_phone, network_type, volume_mb, sale_amount, status, admin_status, admin_status_note, admin_status_updated_at, created_at, provider_response, provider_name, provider_reference, payment_provider, paystack_refund_status')
       .limit(1);
     query = reference
       ? query.eq('payment_reference', reference)
@@ -44,6 +44,7 @@ Deno.serve(async (request) => {
     if (error || !data) return json({ error: 'Order not found.' }, 404);
 
     let status = data.status as string;
+    const manualStatus = String(data.admin_status || '').trim();
     let note: string | null = null;
 
     const stored = (data.provider_response || {}) as Record<string, unknown>;
@@ -53,7 +54,7 @@ Deno.serve(async (request) => {
       String(stored.lastProviderState || '').toLowerCase() === 'processing'
     );
 
-    if (status === 'processing' || staleSuccessful) {
+    if (status === 'processing' || staleSuccessful || manualStatus) {
       const provider = String(stored.provider || activeDataProvider(data.network_type, Number(data.volume_mb)));
       let providerOrderId = String(
         stored.providerOrderId
@@ -224,16 +225,22 @@ Deno.serve(async (request) => {
 
     const { data: fresh } = await supabase
       .from('public_data_orders')
-      .select('payment_reference, short_code, network_type, volume_mb, sale_amount, status, payment_provider, provider_name, provider_reference, provider_status, provider_state, last_status_checked_at, provider_response, created_at')
+      .select('payment_reference, short_code, network_type, volume_mb, sale_amount, status, admin_status, admin_status_note, admin_status_updated_at, payment_provider, provider_name, provider_reference, provider_status, provider_state, last_status_checked_at, provider_response, created_at')
       .eq('id', data.id)
       .single();
 
     const order = fresh ?? { ...data, status };
+    const displayedManualStatus = String(order.admin_status || manualStatus || '').trim();
+    const systemStatus = String(order.status || status);
     return json({
       order: {
         ...order,
+        status: displayedManualStatus || systemStatus,
+        systemStatus,
+        manualStatus: displayedManualStatus || null,
+        manualStatusNote: order.admin_status_note || null,
         providerStatus: order.provider_status || order.provider_response?.lastProviderStatus || 'UNKNOWN',
-        providerState: order.provider_state || order.provider_response?.lastProviderState || order.status,
+        providerState: order.provider_state || order.provider_response?.lastProviderState || systemStatus,
       },
       note,
     });

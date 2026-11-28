@@ -57,12 +57,12 @@ Deno.serve(async (request) => {
 
     let query = supabase
       .from('agent_data_orders')
-      .select('id, provider_reference, provider_name, provider_order_id, network_type, phone, volume_mb, amount, status, created_at, provider_response')
+      .select('id, provider_reference, provider_name, provider_order_id, network_type, phone, volume_mb, amount, status, admin_status, created_at, provider_response')
       .eq('agent_id', user.id)
       // Include successful rows whose last provider answer was still pending.
       // Older code could mark an accepted order successful before delivery;
       // those rows must be allowed back into reconciliation.
-      .in('status', ['pending', 'processing', 'successful'])
+      .or('status.in.(pending,processing,successful),admin_status.not.is.null')
       .order('created_at', { ascending: true })
       .limit(MAX_ORDERS_PER_SYNC);
 
@@ -243,10 +243,10 @@ async function syncStoreDataOrders(
 ): Promise<number> {
   let query = supabase
     .from('store_orders')
-    .select('id, reference, short_code, agent_id, network, product_ref, product_label, platform_price, refund_amount, wallet_debited, payment_status, fulfilment_status, commission_credited, meta, provider, provider_reference, provider_response, created_at')
+    .select('id, reference, short_code, agent_id, network, product_ref, product_label, platform_price, refund_amount, wallet_debited, payment_status, fulfilment_status, admin_status, commission_credited, meta, provider, provider_reference, provider_response, created_at')
     .eq('agent_id', agentId)
     .eq('product_type', 'data_bundle')
-    .in('fulfilment_status', ['pending', 'processing', 'successful'])
+    .or('fulfilment_status.in.(pending,processing,successful),admin_status.not.is.null')
     .order('created_at', { ascending: true })
     .limit(MAX_ORDERS_PER_SYNC);
 
@@ -271,7 +271,7 @@ async function syncStoreDataOrders(
       ['PENDING', 'PROCESSING', 'QUEUED', 'SUBMITTED', 'RECEIVED', 'ACCEPTED', 'INITIATED'].includes(lastProviderStatus) ||
       String(stored.lastProviderState || '').toLowerCase() === 'processing'
     );
-    if (order.fulfilment_status === 'successful' && !staleSuccessful) {
+    if (order.fulfilment_status === 'successful' && !staleSuccessful && !order.admin_status) {
       // A provider may have delivered successfully while the commission RPC
       // was temporarily unavailable. Keep successful but uncredited rows in
       // this reconciliation queue until the idempotent credit succeeds.
@@ -326,6 +326,18 @@ async function syncStoreDataOrders(
       lastProviderState: live.state,
       checkedAt,
     };
+
+    // Always retain the provider's latest answer, even when an admin has set
+    // a display override on a previously failed/cancelled row. The override
+    // must never hide or stop the live provider reconciliation trail.
+    await supabase.from('store_orders').update({
+      provider_reference: order.provider_reference || live.providerOrderId || null,
+      provider_status: live.status,
+      provider_state: live.state,
+      last_status_checked_at: checkedAt,
+      provider_response: updatedResponse,
+      updated_at: checkedAt,
+    }).eq('id', order.id);
 
         if (order.fulfilment_status === 'successful' && live.state !== 'successful') {
       await supabase.from('store_orders').update({
@@ -492,9 +504,9 @@ async function syncLegacyPublicDataOrders(
 ): Promise<number> {
   let query = supabase
     .from('public_data_orders')
-    .select('id, payment_reference, provider_name, provider_reference, agent_id, customer_phone, network_type, volume_mb, sale_amount, status, created_at, provider_response')
+    .select('id, payment_reference, provider_name, provider_reference, agent_id, customer_phone, network_type, volume_mb, sale_amount, status, admin_status, created_at, provider_response')
     .eq('agent_id', agentId)
-    .in('status', ['pending_payment', 'processing', 'successful'])
+    .or('status.in.(pending_payment,processing,successful),admin_status.not.is.null')
     .order('created_at', { ascending: true })
     .limit(MAX_ORDERS_PER_SYNC);
 

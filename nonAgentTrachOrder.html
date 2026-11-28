@@ -160,7 +160,9 @@
                     <div><strong>Service:</strong> ${escapeHtml(order.type === 'airtime' ? `${String(order.network || '').toUpperCase()} Airtime` : `${String(order.network || '').toUpperCase()} Data Bundle`)}</div>
                     <div><strong>Details:</strong> ${escapeHtml(order.type === 'airtime' ? `Airtime top-up · GHS ${Number(order.amount || 0).toFixed(2)}` : `${Number(order.volumeMb) >= 1024 ? `${Number(order.volumeMb) / 1024}GB` : `${order.volumeMb}MB`} · GHS ${Number(order.amount || 0).toFixed(2)}`)}</div>
                     <div><strong>Status:</strong> <span style="color: #d97706; font-weight: 700;">${escapeHtml(order.statusLabel || order.status || 'Pending')}</span></div>
+                    ${order.manualStatus ? `<div><strong>System status:</strong> ${escapeHtml(order.systemStatus || '—')}</div>` : ''}
                     <div><strong>Provider status:</strong> ${escapeHtml(order.providerStatus || 'Pending')}</div>
+                    ${order.manualStatusNote ? `<div><strong>Admin note:</strong> ${escapeHtml(order.manualStatusNote)}</div>` : ''}
                     <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 6px;">Placed on: ${escapeHtml(order.createdAt ? new Date(order.createdAt).toLocaleString() : '—')}</div>
                 </div>`).join('')}</div>`;
         }
