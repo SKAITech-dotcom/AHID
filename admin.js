@@ -3334,7 +3334,7 @@ function toggleReferralDetails(agentId) {
   if (!agentRow) return;
   let show = true;
   const next = agentRow.nextElementSibling;
-  if (next?.classList.contains('referral-detail-row')) show = next.style.display === 'none';
+  if (next?.classList.contains('referral-detail-row')) show = window.getComputedStyle(next).display === 'none';
   rows.forEach((row) => { row.style.display = 'none'; });
   let cursor = agentRow.nextElementSibling;
   while (cursor?.classList.contains('referral-detail-row')) {
@@ -3422,7 +3422,7 @@ async function loadPayoutsData() {
 
     for (const p of cachedPayoutsList) {
       const amt = Number(p.amount || 0);
-      if (p.status === 'pending' || p.status === 'processing') {
+      if (['pending', 'requested', 'approved', 'processing'].includes(String(p.status || '').toLowerCase())) {
         pendingCount++;
         pendingTotal += amt;
       } else if (p.status === 'paid') {
