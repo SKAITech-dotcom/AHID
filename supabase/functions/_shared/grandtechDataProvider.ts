@@ -126,7 +126,11 @@ export function grandtechDataBaseUrl(): string {
  */
 const NETWORK_MAP: Record<string, string> = {
   mtn: 'MTN',
+  mtn_data: 'MTN',
+  mtn_prepaid: 'MTN',
+  mtn_bundle: 'MTN',
   telecel: 'TELECEL',
+  vodafone: 'TELECEL',
   airteltigo: 'AIRTELTIGO_ISHARE',
   airteltigo_ishare: 'AIRTELTIGO_ISHARE',
   at: 'AIRTELTIGO_ISHARE',
@@ -135,8 +139,22 @@ const NETWORK_MAP: Record<string, string> = {
 };
 
 export function normalizeDataNetwork(networkType: string): string {
-  const key = String(networkType || '').trim().toLowerCase();
-  return NETWORK_MAP[key] || key.toUpperCase();
+  const raw = String(networkType || '').trim().toLowerCase();
+  const key = raw.replace(/[\s-]+/g, '_').replace(/_+/g, '_');
+  if (NETWORK_MAP[key]) return NETWORK_MAP[key];
+  if (key.startsWith('mtn')) return 'MTN';
+  if (key.startsWith('telecel') || key === 'vodafone') return 'TELECEL';
+  if (key.includes('bigtime')) return 'AIRTELTIGO_BIGTIME';
+  if (key.startsWith('airtel') || key.startsWith('at')) return 'AIRTELTIGO_ISHARE';
+  return key.toUpperCase();
+}
+
+export function catalogNetworkForProvider(networkType: string): 'mtn' | 'telecel' | 'airteltigo' | null {
+  const providerNetwork = normalizeDataNetwork(networkType);
+  if (providerNetwork === 'MTN') return 'mtn';
+  if (providerNetwork === 'TELECEL') return 'telecel';
+  if (providerNetwork === 'AIRTELTIGO_ISHARE' || providerNetwork === 'AIRTELTIGO_BIGTIME' || providerNetwork === 'AIRTELTIGO') return 'airteltigo';
+  return null;
 }
 
 /**
@@ -156,6 +174,18 @@ function parsePackageSizeGb(value: unknown): number | null {
   if (!Number.isFinite(amount) || amount <= 0) return null;
   const unit = (match[2] || 'gb').toLowerCase();
   return unit === 'mb' ? amount / 1024 : amount;
+}
+
+function packageSizeGb(pkg: Record<string, unknown>): number | null {
+  for (const field of ['size', 'size_gb', 'bundle_size', 'volume_gb', 'volume']) {
+    const parsed = parsePackageSizeGb(pkg[field]);
+    if (parsed !== null) return parsed;
+  }
+  for (const field of ['volume_mb', 'data_volume_mb', 'size_mb']) {
+    const amount = Number(pkg[field]);
+    if (Number.isFinite(amount) && amount > 0) return amount / 1024;
+  }
+  return null;
 }
 
 /**
@@ -191,9 +221,9 @@ export async function fetchGrandTechPackages(): Promise<GrandTechPackage[]> {
 
   return (payload.payload as Record<string, unknown>[])
     .map((pkg) => {
-      const providerNetwork = String(pkg.network || '').trim().toUpperCase();
-      const priceGhs = Number(pkg.price) / 100;
-      const sizeGb = parsePackageSizeGb(pkg.size);
+      const providerNetwork = normalizeDataNetwork(String(pkg.network ?? pkg.network_name ?? pkg.network_type ?? pkg.operator ?? ''));
+      const priceGhs = Number(pkg.price ?? pkg.amount ?? pkg.cost) / 100;
+      const sizeGb = packageSizeGb(pkg);
       if (!pkg.id || !providerNetwork || !Number.isFinite(priceGhs) || sizeGb === null) {
         return null;
       }
@@ -213,7 +243,7 @@ export async function fetchGrandTechPackages(): Promise<GrandTechPackage[]> {
         sizeGb,
         priceGhs: Math.round(priceGhs * 100) / 100,
         providerNetwork,
-        network: providerNetwork.toLowerCase(),
+        network: catalogNetworkForProvider(providerNetwork) || providerNetwork.toLowerCase(),
         sales,
         limit,
         soldOut,

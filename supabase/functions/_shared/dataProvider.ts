@@ -156,13 +156,19 @@ export async function resolveDataPackage(
   const provider = await providerForBundleFromSystemControl(network, volumeInMB);
   if (provider === 'grandtech') {
     const pkg = await resolveGrandTechPackage(network, volumeInMB);
-    if (!pkg) return null;
+    if (!pkg) {
+      console.warn('No active GrandTech package matched the requested bundle:', { network, volumeInMB });
+      return null;
+    }
     return { provider, id: pkg.id, costGhs: pkg.priceGhs, raw: { id: pkg.id, price: pkg.priceGhs } };
   }
 
   if (provider === 'swift') {
     const pkg = await resolveSwiftPackage(network, volumeInMB);
-    if (!pkg) return null;
+    if (!pkg) {
+      console.warn('No active Swift package matched the requested bundle:', { network, volumeInMB });
+      return null;
+    }
     return { provider: 'swift', id: pkg.id, costGhs: Number(pkg.price), raw: { id: pkg.id, price: pkg.price } };
   }
   return null;

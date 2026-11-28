@@ -1,6 +1,6 @@
 import { adminClient, corsPreflight, json, requireAdmin } from '../_shared/supabase.ts';
-import { fetchGrandTechPackages, normalizeDataNetwork } from '../_shared/grandtechDataProvider.ts';
-import { fetchSwiftPackages, swiftPackageVolumeInMB } from '../_shared/swiftProvider.ts';
+import { catalogNetworkForProvider, fetchGrandTechPackages, normalizeDataNetwork } from '../_shared/grandtechDataProvider.ts';
+import { fetchSwiftPackages, swiftPackageVolumeForRow } from '../_shared/swiftProvider.ts';
 import { providerForBundle } from '../_shared/dataProvider.ts';
 import {
   DATA_NETWORKS,
@@ -47,8 +47,8 @@ Deno.serve(async (request) => {
     const chosen = new Map<string, { packageId: string; cost: number }>();
     for (const pkg of grandTechPackages) {
       if (pkg.soldOut) continue;
-      const network = String(pkg.network || '').toLowerCase() as DataNetwork;
-      if (!DATA_NETWORKS.includes(network)) continue;
+      const network = catalogNetworkForProvider(String(pkg.providerNetwork || pkg.network || '')) as DataNetwork | null;
+      if (!network || !DATA_NETWORKS.includes(network)) continue;
       const volumeInMB = Math.round(pkg.sizeGb * 1024);
       if (volumeInMB < 1024) continue;
       if (routeFor(network, volumeInMB) !== 'grandtech') continue;
@@ -70,7 +70,7 @@ Deno.serve(async (request) => {
       const namedNetwork = String(pkg.name || '').match(/\b(mtn|telecel|airteltigo|at)\b/i)?.[1]?.toLowerCase();
       const network = (networkName === 'at' ? 'airteltigo' : networkName || (namedNetwork === 'at' ? 'airteltigo' : namedNetwork)) as DataNetwork;
       if (!DATA_NETWORKS.includes(network)) continue;
-      const volumeInMB = swiftPackageVolumeInMB(pkg.name);
+      const volumeInMB = swiftPackageVolumeForRow(pkg.raw || pkg);
       if (volumeInMB === null) continue;
       if (!Number.isFinite(volumeInMB) || volumeInMB < 1024 || routeFor(network, volumeInMB) !== 'swift') continue;
       if (catalogPrice(network, volumeInMB) === null) continue;

@@ -54,9 +54,12 @@ function swiftApiKey() {
 function normalizeNetwork(networkType: string): string {
   const raw = String(networkType || '').trim().toLowerCase();
   const key = raw.replace(/[\s_-]/g, '');
-  if (key === 'mtn') return 'MTN';
-  if (key === 'telecel' || key === 'vodafone') return 'TELECEL';
-  if (key === 'at' || /^(?:at(?:data|bundle|network)?|airtel.*tigo)/.test(key)) return 'AIRTELTIGO';
+  // Swift has returned MTN as both `mtn` and product labels such as
+  // `mtn_data`/`mtn_prepaid`. Keep those provider labels on the same internal
+  // network so every MTN tier can be resolved consistently.
+  if (key === 'mtn' || key.startsWith('mtn')) return 'MTN';
+  if (key === 'telecel' || key === 'vodafone' || key.startsWith('telecel')) return 'TELECEL';
+  if (key === 'at' || key.startsWith('at') || key.includes('airteltigo') || key.includes('airtel')) return 'AIRTELTIGO';
   return raw.toUpperCase();
 }
 
@@ -69,10 +72,41 @@ export function swiftPackageVolumeInMB(packageName: unknown): number | null {
   return Number.isFinite(volumeInMB) && volumeInMB > 0 ? volumeInMB : null;
 }
 
-function swiftCatalogNetwork(networkType: string): string {
-  const key = String(networkType || '').trim().toLowerCase();
-  if (key === 'airteltigo' || key === 'at') return 'at';
-  if (key === 'mtn' || key === 'telecel') return key;
+export function swiftPackageVolumeForRow(row: Record<string, unknown>): number | null {
+  const namedFields = ['name', 'package_name', 'package', 'bundle_name', 'title', 'display_name', 'size', 'volume'];
+  for (const field of namedFields) {
+    const parsed = swiftPackageVolumeInMB(row[field]);
+    if (parsed !== null) return parsed;
+  }
+
+  for (const field of ['size', 'volume']) {
+    const amount = Number(row[field]);
+    if (Number.isFinite(amount) && amount > 0) {
+      // Swift's unlabelled size/volume values are GB; tolerate providers that
+      // return the equivalent MB number as well.
+      return Math.round(amount >= 1024 ? amount : amount * 1024);
+    }
+  }
+  for (const field of ['size_gb', 'volume_gb', 'data_volume_gb']) {
+    const amount = Number(row[field]);
+    if (Number.isFinite(amount) && amount > 0) return Math.round(amount * 1024);
+  }
+
+  // Some Swift responses expose an explicit numeric MB field instead of a
+  // display name. Do not treat an unlabelled number as MB unless the field
+  // says so; `size: 5` is normally a 5GB package.
+  for (const field of ['volume_mb', 'data_volume_mb', 'size_mb']) {
+    const amount = Number(row[field]);
+    if (Number.isFinite(amount) && amount > 0) return Math.round(amount);
+  }
+  return null;
+}
+
+function swiftCatalogNetworkCandidates(networkType: string): string[] {
+  const normalized = normalizeNetwork(networkType);
+  if (normalized === 'AIRTELTIGO') return ['at', 'airteltigo', 'AIRTELTIGO'];
+  if (normalized === 'MTN') return ['mtn', 'MTN'];
+  if (normalized === 'TELECEL') return ['telecel', 'TELECEL', 'vodafone'];
   throw new Error('Unsupported Swift catalog network.');
 }
 
@@ -82,8 +116,10 @@ function packageRows(payload: unknown): Record<string, unknown>[] | null {
   const body = payload as Record<string, unknown>;
   const nestedData = body.data;
   if (nestedData && typeof nestedData === 'object' && !Array.isArray(nestedData)) {
-    const nestedPackages = (nestedData as Record<string, unknown>).packages;
-    if (Array.isArray(nestedPackages)) return nestedPackages as Record<string, unknown>[];
+    for (const field of ['packages', 'results', 'bundles', 'items']) {
+      const nestedPackages = (nestedData as Record<string, unknown>)[field];
+      if (Array.isArray(nestedPackages)) return nestedPackages as Record<string, unknown>[];
+    }
   }
   for (const field of ['data', 'packages', 'results', 'bundles', 'items']) {
     if (Array.isArray(body[field])) return body[field] as Record<string, unknown>[];
@@ -91,15 +127,13 @@ function packageRows(payload: unknown): Record<string, unknown>[] | null {
   return null;
 }
 
-export async function fetchSwiftPackages(networkType?: string): Promise<SwiftPackage[]> {
-  const networks = networkType
-    ? [swiftCatalogNetwork(networkType)]
-    : ['mtn', 'telecel', 'at'];
-  const apiKey = swiftApiKey();
+async function fetchSwiftRows(networkType: string, apiKey: string): Promise<Record<string, unknown>[]> {
+  let lastError: Error | null = null;
+  let successfulResponse = false;
 
-  const results = await Promise.all(networks.map(async (network) => {
+  for (const requestedNetwork of swiftCatalogNetworkCandidates(networkType)) {
     const url = new URL(`${SWIFT_BASE_URL}${SWIFT_CATALOG_PATH}`);
-    url.searchParams.set('network', network);
+    url.searchParams.set('network', requestedNetwork);
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     });
@@ -109,30 +143,61 @@ export async function fetchSwiftPackages(networkType?: string): Promise<SwiftPac
     try { payload = JSON.parse(raw); } catch { payload = raw.slice(0, 300); }
 
     if (!response.ok) {
-      console.error('Swift catalog request failed:', { network, status: response.status, contentType, payload });
-      throw new Error(`Swift package catalog request failed for ${network} (HTTP ${response.status}).`);
+      lastError = new Error(`Swift package catalog request failed for ${requestedNetwork} (HTTP ${response.status}).`);
+      console.error('Swift catalog request failed:', { network: requestedNetwork, status: response.status, contentType, payload });
+      // Authentication failures will not be repaired by another network alias.
+      if (response.status === 401 || response.status === 403) throw lastError;
+      continue;
     }
 
+    successfulResponse = true;
     const rows = packageRows(payload);
     if (!rows) {
+      lastError = new Error(`Swift returned an unsupported package catalog response for ${requestedNetwork}.`);
       const responseKeys = payload && typeof payload === 'object' && !Array.isArray(payload)
         ? Object.keys(payload)
         : [];
-      console.error('Swift catalog response format was not recognized:', { network, contentType, responseKeys });
-      throw new Error(`Swift returned an unsupported package catalog response for ${network}.`);
+      console.error('Swift catalog response format was not recognized:', { network: requestedNetwork, contentType, responseKeys });
+      continue;
     }
-    return rows.map((row) => ({ ...row, _requestedNetwork: network } as Record<string, unknown>));
-  }));
 
-  return results.flat().map((row) => ({
+    if (rows.length > 0) {
+      return rows.map((row) => ({ ...row, _requestedNetwork: networkType }));
+    }
+  }
+
+  if (!successfulResponse && lastError) throw lastError;
+  return [];
+}
+
+export async function fetchSwiftPackages(networkType?: string): Promise<SwiftPackage[]> {
+  const networks = networkType
+    ? [networkType]
+    : ['mtn', 'telecel', 'at'];
+  const apiKey = swiftApiKey();
+
+  const results = await Promise.all(networks.map((network) => fetchSwiftRows(network, apiKey)));
+
+  const packages = results.flat().map((row) => ({
     ...row,
-    id: String(row.package_id ?? row.id ?? row.uuid ?? row.package_uuid ?? ''),
-    name: String(row.name ?? row.package_name ?? row.package ?? row.bundle_name ?? row.title ?? row.display_name ?? row.size ?? ''),
-    network: normalizeNetwork(String(row.network ?? row.network_name ?? row.network_type ?? row._requestedNetwork ?? '')),
-    price: row.price ?? row.amount ?? '',
-  }) as SwiftPackage).filter((pkg) => pkg.id && pkg.name && pkg.network &&
-    Number.isFinite(Number(pkg.price)) && Number(pkg.price) > 0 &&
-    (!String((pkg as unknown as Record<string, unknown>).category || '').trim() || /data|bundle/i.test(String((pkg as unknown as Record<string, unknown>).category))));
+    id: String(row.package_id ?? row.packageId ?? row.id ?? row.uuid ?? row.package_uuid ?? ''),
+    name: String(row.name ?? row.package_name ?? row.package ?? row.bundle_name ?? row.title ?? row.display_name ?? row.size ?? row.volume ?? ''),
+    network: normalizeNetwork(String(row.network ?? row.network_name ?? row.network_type ?? row.operator ?? row.telco ?? row._requestedNetwork ?? '')),
+    price: row.price ?? row.amount ?? row.cost ?? row.provider_cost ?? '',
+    raw: row,
+  }) as SwiftPackage).filter((pkg) => {
+    const row = pkg as unknown as Record<string, unknown>;
+    const category = String(row.category ?? row.type ?? '').trim();
+    const explicitlyNonData = /airtime|voice|sms|bill|utility|afa/i.test(category);
+    return Boolean(pkg.id && pkg.name && pkg.network && Number.isFinite(Number(pkg.price)) && Number(pkg.price) > 0 &&
+      !explicitlyNonData);
+  });
+
+  const unique = new Map<string, SwiftPackage>();
+  for (const pkg of packages) {
+    if (!unique.has(`${pkg.network}:${pkg.id}`)) unique.set(`${pkg.network}:${pkg.id}`, pkg);
+  }
+  return [...unique.values()];
 }
 
 /**
@@ -146,7 +211,7 @@ export async function resolveSwiftPackage(networkType: string, volumeInMB: numbe
   const matches = packages
     .filter((pkg) => {
       const packageNetwork = normalizeNetwork(pkg.network);
-      return packageNetwork === network && swiftPackageVolumeInMB(pkg.name) === volumeInMB;
+      return packageNetwork === network && swiftPackageVolumeForRow(pkg.raw || pkg) === volumeInMB;
     })
     .sort((a, b) => Number(a.price) - Number(b.price));
 
