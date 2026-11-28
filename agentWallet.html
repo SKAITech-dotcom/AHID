@@ -164,6 +164,23 @@
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+    /* Wallet uses one dark-navy visual language; status is communicated by text. */
+    body.wallet-page [style*="color:"] { color: #0f172a !important; }
+    body.wallet-page [style*="background:"] { background: #ffffff !important; }
+    body.wallet-page button[style*="background:"], body.wallet-page .wallet-action-btn { background: #0f172a !important; color: #ffffff !important; border-color: #0f172a !important; }
+    body.wallet-page .wallet-page-hero, body.wallet-page .wallet-page-hero[style*="background:"] { background: #0f172a !important; border-color: #334155 !important; box-shadow: 0 12px 28px rgba(15, 23, 42, .18) !important; }
+    body.wallet-page .wallet-page-hero [style*="color:"] { color: #ffffff !important; }
+    body.wallet-page .wallet-page-hero p { color: #e2e8f0 !important; }
+    body.wallet-page .modal-backdrop { background: rgba(15, 23, 42, .65) !important; }
+    body.wallet-page .toast-msg { background: #0f172a !important; color: #ffffff !important; }
+    body.wallet-page .quick-chip:hover { background: #0f172a !important; color: #ffffff !important; border-color: #0f172a !important; }
+    .wallet-referral-strip, .wallet-payout-history { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; padding: 16px; margin-bottom: 18px; }
+    .wallet-referral-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .wallet-referral-strip input { width: 130px; padding: 9px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    .wallet-payout-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    .wallet-payout-table th, .wallet-payout-table td { padding: 9px 6px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    .wallet-payout-table th { color: #475569; font-size: .7rem; text-transform: uppercase; }
+    @media (max-width: 620px) { .wallet-payout-history { overflow-x: auto; } .wallet-payout-table { min-width: 620px; } }
   </style>
 </head>
 <body class="dashboard-page wallet-page" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0;">
@@ -200,6 +217,18 @@
                 <button id="withdrawCommissionBtn" class="wallet-action-btn" style="background: #fef3c7; color: #b45309; padding: 8px 12px; font-size: 0.78rem;">
                     <i class="fa-solid fa-money-bill-transfer"></i> Withdraw
                 </button>
+            </div>
+        </div>
+
+        <div class="wallet-referral-strip">
+            <div>
+                <div style="font-size: .75rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Referral rewards</div>
+                <strong id="walletReferralBalance">GHS 0.00</strong>
+                <small style="display:block; color:#64748b; margin-top:3px;">Available to transfer into your main account</small>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <input id="walletReferralTransferAmount" type="number" min="0.01" step="0.01" placeholder="Amount (GHS)">
+                <button id="walletTransferReferralBtn" class="wallet-action-btn" style="padding: 9px 12px; font-size: .78rem;"> <i class="fa-solid fa-right-left"></i> Transfer to Main</button>
             </div>
         </div>
 
@@ -308,6 +337,14 @@
                 </div>
             </div>
         </div>
+
+        <section class="wallet-payout-history" aria-label="Commission payment history">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;">
+                <h3 style="font-size:1rem;font-weight:800;color:#0f172a;margin:0;">Commission payment history</h3>
+                <span id="commissionPayoutAvailable" style="font-size:.75rem;color:#475569;">Available: GHS 0.00</span>
+            </div>
+            <div id="commissionPayoutHistoryList" style="color:#64748b;font-size:.82rem;">Loading payout requests…</div>
+        </section>
 
     </div>
   </main>

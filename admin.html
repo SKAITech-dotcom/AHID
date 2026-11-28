@@ -891,6 +891,9 @@
         padding: 16px;
       }
     }
+    .referral-detail-row { display: none; }
+    .referral-detail-card { display: grid; grid-template-columns: 1.2fr 1fr 1.5fr auto; gap: 12px; align-items: center; padding: 12px; background: var(--bg-secondary, #f8fafc); border: 1px solid var(--border, #e2e8f0); border-radius: 8px; }
+    @media (max-width: 900px) { .referral-detail-card { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
 <body>

@@ -13,8 +13,14 @@ let currentWalletStats = {
   transferred_commission: 0,
   total_commission_earned: 0,
   store_sales: 0,
+  referral_balance: 0,
+  total_referral_earned: 0,
+  transferred_referral_rewards: 0,
+  paid_referral_rewards: 0,
 };
 let allTransactions = [];
+let currentReferralStats = { referralBalance: 0, totalReferralEarned: 0, transferredReferralRewards: 0, paidReferralRewards: 0 };
+let currentPayoutData = { balance: { available: 0 }, payouts: [] };
 
 async function fetchAllRows(queryFactory, pageSize = 1000) {
   const rows = [];
@@ -67,6 +73,8 @@ export async function refreshDashboard() {
   await Promise.all([
     loadWalletStats(),
     loadTransactions(),
+    loadReferralWalletData(),
+    loadCommissionPayouts(),
   ]);
 }
 
@@ -95,6 +103,10 @@ async function loadWalletStats() {
           transferred_commission: Number(directWallet.transferred_commission || 0),
           total_commission_earned: Number(directWallet.total_commission_earned || 0),
           store_sales: Number(directWallet.store_sales || 0),
+          referral_balance: Number(directWallet.referral_balance || 0),
+          total_referral_earned: Number(directWallet.total_referral_earned || 0),
+          transferred_referral_rewards: Number(directWallet.transferred_referral_rewards || 0),
+          paid_referral_rewards: Number(directWallet.paid_referral_rewards || 0),
         };
       }
     } else if (data) {
@@ -108,6 +120,10 @@ async function loadWalletStats() {
         transferred_commission: Number(data.transferred_commission || 0),
         total_commission_earned: Number(data.total_commission_earned || 0),
         store_sales: Number(data.store_sales || 0),
+        referral_balance: Number(data.referral_balance || 0),
+        total_referral_earned: Number(data.total_referral_earned || 0),
+        transferred_referral_rewards: Number(data.transferred_referral_rewards || 0),
+        paid_referral_rewards: Number(data.paid_referral_rewards || 0),
       };
     }
 
@@ -134,10 +150,61 @@ function renderCards() {
   setElText('walletTransferredCommission', fmt(currentWalletStats.transferred_commission));
   setElText('walletTotalCommission', fmt(currentWalletStats.total_commission_earned));
   setElText('walletStoreSales', fmt(currentWalletStats.store_sales));
+  setElText('walletReferralBalance', fmt(currentReferralStats.referralBalance || currentWalletStats.referral_balance));
 
   // Update commission modal references
   setElText('transferModalAvailable', fmt(currentWalletStats.commission_balance));
   setElText('withdrawModalAvailable', fmt(currentWalletStats.commission_balance));
+}
+
+async function loadReferralWalletData() {
+  try {
+    const { data, error } = await supabase.functions.invoke('manage-agent-referrals', { method: 'GET' });
+    if (error || !data?.success) throw new Error(error?.message || data?.error || 'Unable to load referral rewards.');
+    currentReferralStats = {
+      referralBalance: Number(data.referralBalance || 0),
+      totalReferralEarned: Number(data.totalReferralEarned || 0),
+      transferredReferralRewards: Number(data.transferredReferralRewards || 0),
+      paidReferralRewards: Number(data.paidReferralRewards || 0),
+    };
+    setElText('walletReferralBalance', `GHS ${currentReferralStats.referralBalance.toFixed(2)}`);
+  } catch (err) {
+    console.warn('Failed to load referral wallet data:', err);
+  }
+}
+
+async function loadCommissionPayouts() {
+  try {
+    const { data, error } = await supabase.functions.invoke('manage-agent-payout', { method: 'GET' });
+    if (error || data?.error) throw new Error(error?.message || data?.error || 'Unable to load commission payments.');
+    currentPayoutData = data || currentPayoutData;
+    const available = Number(currentPayoutData.balance?.available || 0);
+    setElText('commissionPayoutAvailable', `Available: GHS ${available.toFixed(2)}`);
+    setElText('withdrawModalAvailable', `GHS ${available.toFixed(2)}`);
+    renderCommissionPayouts();
+  } catch (err) {
+    console.warn('Failed to load commission payouts:', err);
+    setElText('commissionPayoutHistoryList', 'Commission payment history is unavailable right now.');
+  }
+}
+
+function renderCommissionPayouts() {
+  const target = document.getElementById('commissionPayoutHistoryList');
+  if (!target) return;
+  const payouts = Array.isArray(currentPayoutData.payouts) ? currentPayoutData.payouts : [];
+  if (!payouts.length) {
+    target.textContent = 'No commission payout requests yet.';
+    return;
+  }
+  target.innerHTML = `<table class="wallet-payout-table"><thead><tr><th>Amount</th><th>Status</th><th>Account details</th><th>Reference</th><th>Date</th></tr></thead><tbody>${payouts.map((payout) => {
+    const account = payout.account_snapshot || {};
+    const network = account.network || account.momo_network || '';
+    const accountDetails = `${escapeHtml(account.method || payout.method || 'momo')}${network ? ` · ${escapeHtml(network)}` : ''} · ${escapeHtml(account.account_number || '—')} ${account.account_name ? `(${escapeHtml(account.account_name)})` : ''}`;
+    const status = String(payout.status || 'requested');
+    const date = payout.paid_at || payout.requested_at;
+    const reference = payout.disbursement_reference || payout.reference || '—';
+    return `<tr><td><strong>GHS ${Number(payout.amount || 0).toFixed(2)}</strong></td><td>${escapeHtml(status.charAt(0).toUpperCase() + status.slice(1))}</td><td>${accountDetails}</td><td>${escapeHtml(reference)}${payout.admin_note ? `<br><small>${escapeHtml(payout.admin_note)}</small>` : ''}</td><td>${escapeHtml(formatTxDate(date))}</td></tr>`;
+  }).join('')}</tbody></table>`;
 }
 
 // =============================================================================
@@ -242,7 +309,7 @@ function renderTransactions() {
     const isCredit = ['wallet deposit', 'deposit', 'commission transfer', 'store sales'].includes(String(tx.type || '').toLowerCase());
     const amountVal = Math.abs(Number(tx.amount || 0)).toFixed(2);
     const amountFormatted = isCredit ? `+GHS ${amountVal}` : `-GHS ${amountVal}`;
-    const amountColor = isCredit ? '#10b981' : '#ef4444';
+    const amountColor = '#0f172a';
 
     // Badge styling
     const badgeStyle = getBadgeStyle(tx.type);
@@ -258,7 +325,7 @@ function renderTransactions() {
           </div>
           <div style="font-size: 0.75rem; color: #64748b; display: flex; gap: 8px; align-items: center;">
             <span><i class="fa-regular fa-clock" style="margin-right: 4px;"></i>${dateFormatted}</span>
-            ${tx.status ? `<span style="text-transform: capitalize; color: ${tx.status === 'success' || tx.status === 'completed' ? '#15803d' : '#b45309'}; font-weight: 600;">&bull; ${tx.status}</span>` : ''}
+            ${tx.status ? `<span style="text-transform: capitalize; color: #0f172a; font-weight: 600;">&bull; ${tx.status}</span>` : ''}
           </div>
         </div>
         <div style="text-align: right;">
@@ -272,26 +339,7 @@ function renderTransactions() {
 }
 
 function getBadgeStyle(type) {
-  const norm = String(type || '').toLowerCase();
-  if (norm.includes('deposit')) {
-    return { css: 'background: #dcfce7; color: #15803d;' };
-  }
-  if (norm.includes('purchase')) {
-    return { css: 'background: #dbeafe; color: #1d4ed8;' };
-  }
-  if (norm.includes('transfer')) {
-    return { css: 'background: #e0f2fe; color: #0369a1;' };
-  }
-  if (norm.includes('withdrawal')) {
-    return { css: 'background: #fef3c7; color: #b45309;' };
-  }
-  if (norm.includes('sales')) {
-    return { css: 'background: #ccfbf1; color: #0f766e;' };
-  }
-  if (norm.includes('overdraft')) {
-    return { css: 'background: #fee2e2; color: #b91c1c;' };
-  }
-  return { css: 'background: #f1f5f9; color: #475569;' };
+  return { css: 'background: #e2e8f0; color: #0f172a;' };
 }
 
 // =============================================================================
@@ -340,6 +388,33 @@ async function handleTransferCommission() {
   }
 }
 
+async function handleTransferReferralRewards() {
+  const amount = parseFloat(document.getElementById('walletReferralTransferAmount')?.value || 0);
+  const available = Number(currentReferralStats.referralBalance || 0);
+  if (!amount || !Number.isFinite(amount) || amount <= 0) {
+    showToast('Enter a valid referral transfer amount.', true);
+    return;
+  }
+  if (amount > available) {
+    showToast(`Insufficient referral balance (Available: GHS ${available.toFixed(2)}).`, true);
+    return;
+  }
+  const button = document.getElementById('walletTransferReferralBtn');
+  if (button) { button.disabled = true; button.textContent = 'Transferring…'; }
+  try {
+    const { data, error } = await supabase.functions.invoke('manage-agent-referrals', { body: { action: 'transfer', amount } });
+    if (error || !data?.success) throw new Error(error?.message || data?.error || 'Referral transfer failed.');
+    document.getElementById('walletReferralTransferAmount').value = '';
+    showToast(`Transferred GHS ${amount.toFixed(2)} to your main wallet.`);
+    await refreshDashboard();
+  } catch (err) {
+    console.error('Transfer referral rewards error:', err);
+    showToast(err.message || 'Referral transfer failed.', true);
+  } finally {
+    if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-right-left"></i> Transfer to Main'; }
+  }
+}
+
 async function handleWithdrawCommission() {
   const methodSelect = document.getElementById('withdrawMethodSelect');
   const method = methodSelect ? methodSelect.value : 'momo';
@@ -361,8 +436,9 @@ async function handleWithdrawCommission() {
     showToast('Please enter a valid withdrawal amount.', true);
     return;
   }
-  if (amount > currentWalletStats.commission_balance) {
-    showToast(`Insufficient commission balance (Available: GHS ${currentWalletStats.commission_balance.toFixed(2)}).`, true);
+  const payoutAvailable = Number(currentPayoutData.balance?.available ?? currentWalletStats.commission_balance);
+  if (amount > payoutAvailable) {
+    showToast(`Insufficient commission balance (Available: GHS ${payoutAvailable.toFixed(2)}).`, true);
     return;
   }
 
@@ -419,6 +495,7 @@ function setupEventListeners() {
 
   // Modal actions
   document.getElementById('confirmTransferBtn')?.addEventListener('click', handleTransferCommission);
+  document.getElementById('walletTransferReferralBtn')?.addEventListener('click', handleTransferReferralRewards);
   document.getElementById('confirmWithdrawBtn')?.addEventListener('click', handleWithdrawCommission);
 
   // Transfer Max All button
@@ -492,7 +569,7 @@ export function showToast(message, isError = false) {
   text.innerText = message;
   if (icon) {
     icon.className = isError ? 'fa-solid fa-circle-exclamation' : 'fa-solid fa-circle-check';
-    icon.style.color = isError ? '#ef4444' : '#10b981';
+    icon.style.color = '#ffffff';
   }
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3800);

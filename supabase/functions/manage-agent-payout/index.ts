@@ -141,7 +141,10 @@ Deno.serve(async (request) => {
           amount,
           status: 'requested',
           method: account.method,
-          account_snapshot: account,
+          account_snapshot: {
+            ...account,
+            network: account.momo_network || null,
+          },
           reference,
           commission_debited: false,
         }).select('id').single();

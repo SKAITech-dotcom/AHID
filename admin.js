@@ -3290,27 +3290,92 @@ async function loadReferralsData() {
     tbody.innerHTML = cachedReferralAgents.map((agent) => {
       const qualified = Number(agent.referralCount || 0);
       const rewarded = Number(agent.rewardedReferralCount || 0);
-      const canReward = qualified > rewarded;
       const agentName = escapeHtml(agent.full_name || 'Agent');
       const code = escapeHtml(agent.agent_code || '—');
       const referralSlug = escapeHtml(agent.referral_slug || '—');
-      return `<tr>
+      const referrals = Array.isArray(agent.referrals) ? agent.referrals : [];
+      const detailRows = referrals.length ? referrals.map((referral) => {
+        const referred = referral.referredAgent || {};
+        const award = referral.award || null;
+        const status = award?.status || 'Not rewarded';
+        const awardAction = award
+          ? (award.status === 'paid'
+            ? `<span class="badge badge-success">Paid${award.paid_reference ? ` · ${escapeHtml(award.paid_reference)}` : ''}<br><small>${award.paid_at ? escapeHtml(new Date(award.paid_at).toLocaleString()) : ''}</small></span>`
+            : `<button class="btn btn-secondary btn-sm" onclick="markReferralPaid('${award.id}')"><i class="fa-solid fa-check"></i> Mark as Paid</button>`)
+          : `<button class="btn btn-primary btn-sm" onclick="awardSpecificReferral('${agent.id}', '${referral.id}')"><i class="fa-solid fa-gift"></i> Award</button>`;
+        return `<tr class="referral-detail-row"><td colspan="9"><div class="referral-detail-card">
+          <div><strong>${escapeHtml(referred.full_name || 'Referred account')}</strong><br><small>${escapeHtml(referred.phone || referred.agent_code || '—')}</small></div>
+          <div><span class="badge badge-primary">${escapeHtml(referral.status || 'qualified')}</span><br><small>${escapeHtml(referral.source || 'signup')} · ${referral.created_at ? escapeHtml(new Date(referral.created_at).toLocaleString()) : '—'}</small></div>
+          <div><strong>${award ? money(award.amount) : 'Not awarded'}</strong><br><small>${award ? `Audit: ${escapeHtml(award.audit_reference || '—')} · ${escapeHtml(status)}` : 'This referral is ready for an award.'}</small></div>
+          <div>${awardAction}</div>
+        </div></td></tr>`;
+      }).join('') : `<tr class="referral-detail-row"><td colspan="9"><div class="referral-detail-card">No qualified referrals recorded for this agent.</div></td></tr>`;
+      return `<tr id="referral-agent-${agent.id}">
         <td><strong>${agentName}</strong></td>
         <td><span style="font-family:monospace;">${code}</span></td>
         <td><span style="font-family:monospace;">${referralSlug}</span></td>
         <td>${escapeHtml(agent.phone || '—')}</td>
         <td><strong>${qualified}</strong></td>
         <td>${rewarded}</td>
-        <td style="color:#10b981;font-weight:700;">${money(agent.rewardTotal || 0)}</td>
+        <td style="font-weight:700;">${money(agent.rewardTotal || 0)}<br><small>Available: ${money(agent.referralBalance || 0)}</small></td>
         <td style="font-size:.76rem;color:var(--text-dim);">${agent.lastReferralAt ? escapeHtml(new Date(agent.lastReferralAt).toLocaleString()) : '—'}</td>
-        <td>${canReward
-          ? `<button class="btn btn-primary btn-sm" onclick="rewardReferralAgent('${agent.id}', '${agentName}', ${qualified - rewarded})"><i class="fa-solid fa-gift"></i> Reward</button>`
-          : '<span style="color:var(--text-dim);font-size:.76rem;">Up to date</span>'}</td>
-      </tr>`;
+        <td><button class="btn btn-secondary btn-sm" onclick="toggleReferralDetails('${agent.id}')"><i class="fa-solid fa-list"></i> View referrals</button></td>
+      </tr>${detailRows}`;
     }).join('');
   } catch (err) {
     console.error('loadReferralsData error:', err);
     tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#ef4444;padding:16px;">${escapeHtml(err.message || 'Failed to load referrals.')}</td></tr>`;
+  }
+}
+
+function toggleReferralDetails(agentId) {
+  const rows = document.querySelectorAll(`.referral-detail-row`);
+  const agentRow = document.getElementById(`referral-agent-${agentId}`);
+  if (!agentRow) return;
+  let show = true;
+  const next = agentRow.nextElementSibling;
+  if (next?.classList.contains('referral-detail-row')) show = next.style.display === 'none';
+  rows.forEach((row) => { row.style.display = 'none'; });
+  let cursor = agentRow.nextElementSibling;
+  while (cursor?.classList.contains('referral-detail-row')) {
+    cursor.style.display = show ? 'table-row' : 'none';
+    cursor = cursor.nextElementSibling;
+  }
+}
+
+async function awardSpecificReferral(agentId, referralId) {
+  const amount = Number(window.prompt('Reward amount for this qualified referral (GHS):', '0'));
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  const reason = window.prompt('Reward reason:', 'Qualified referral reward');
+  if (!reason?.trim()) return;
+  const auditReference = window.prompt('Audit reference (optional):', '') || '';
+  try {
+    const { data, error } = await supabase.functions.invoke('manage-agent-referrals', {
+      body: { action: 'award-referral', agentId, referralId, amount, reason: reason.trim(), auditReference: auditReference.trim() },
+    });
+    if (error || !data?.success) throw new Error(error?.message || data?.error || 'Referral reward failed.');
+    showToast(`Referral reward credited. Audit: ${data.data?.auditReference || 'created'}`, 'success');
+    await loadReferralsData();
+  } catch (err) {
+    console.error('awardSpecificReferral error:', err);
+    showToast(err.message || 'Referral reward failed.', 'error');
+  }
+}
+
+async function markReferralPaid(awardId) {
+  const paidReference = window.prompt('Payment/disbursement reference:', '') || '';
+  if (!paidReference.trim()) return;
+  const note = window.prompt('Admin payment note (optional):', '') || '';
+  try {
+    const { data, error } = await supabase.functions.invoke('manage-agent-referrals', {
+      body: { action: 'mark-paid', awardId, paidReference: paidReference.trim(), note: note.trim() },
+    });
+    if (error || !data?.success) throw new Error(error?.message || data?.error || 'Unable to mark referral reward as paid.');
+    showToast(`Referral reward marked paid. ${data.data?.paidReference || ''}`, 'success');
+    await loadReferralsData();
+  } catch (err) {
+    console.error('markReferralPaid error:', err);
+    showToast(err.message || 'Unable to mark referral reward as paid.', 'error');
   }
 }
 
@@ -3393,7 +3458,8 @@ function renderPayoutsTable(payouts) {
     const snap = (p.account_snapshot && typeof p.account_snapshot === 'object') ? p.account_snapshot : {};
     const accNumber = snap.account_number || '—';
     const accName = snap.account_name ? ` (${snap.account_name})` : '';
-    const network = snap.network ? `[${snap.network.toUpperCase()}] ` : '';
+    const networkName = snap.network || snap.momo_network || '';
+    const network = networkName ? `[${String(networkName).toUpperCase()}] ` : '';
 
     const isPending = ['pending', 'requested', 'approved', 'processing'].includes(String(p.status || '').toLowerCase());
     const isPaid = p.status === 'paid';
@@ -3602,6 +3668,9 @@ window.sendAdminNotification = sendAdminNotification;
 window.loadPayoutsData = loadPayoutsData;
 window.loadReferralsData = loadReferralsData;
 window.rewardReferralAgent = rewardReferralAgent;
+window.toggleReferralDetails = toggleReferralDetails;
+window.awardSpecificReferral = awardSpecificReferral;
+window.markReferralPaid = markReferralPaid;
 window.filterPayouts = filterPayouts;
 window.openPayoutModal = openPayoutModal;
 window.closePayoutModal = closePayoutModal;

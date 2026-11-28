@@ -13,7 +13,7 @@
     .referral-hero { background: linear-gradient(135deg, #0f172a, #1e3a8a); color: #fff; border-radius: 18px; padding: 26px; margin-bottom: 18px; }
     .referral-hero h1 { margin: 0 0 8px; font-size: clamp(1.5rem, 3vw, 2rem); }
     .referral-hero p { margin: 0; color: #dbeafe; }
-    .referral-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .referral-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
     .referral-stat, .referral-panel { background: var(--card-bg, #fff); border: 1px solid var(--border-color, #e5e7eb); border-radius: 14px; padding: 18px; box-shadow: 0 8px 24px rgba(15, 23, 42, .06); }
     .referral-stat small { display: block; color: var(--text-muted, #64748b); margin-bottom: 8px; }
     .referral-stat strong { font-size: 1.6rem; color: var(--text-main, #0f172a); }
@@ -24,7 +24,11 @@
     .referral-table th, .referral-table td { padding: 11px 8px; border-bottom: 1px solid var(--border-color, #e5e7eb); text-align: left; font-size: .86rem; }
     .referral-table th { color: var(--text-muted, #64748b); font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
     .referral-empty { color: var(--text-muted, #64748b); padding: 18px 0; }
-    @media (max-width: 700px) { .referral-grid { grid-template-columns: 1fr; } .referral-link-row { align-items: stretch; flex-direction: column; } .referral-link-row button { width: 100%; } .referral-panel { overflow-x: auto; } }
+    .referral-action-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:18px; }
+    .referral-action-row input { width:140px; padding:10px; border:1px solid var(--border-color,#d1d5db); border-radius:8px; background:var(--input-bg,#fff); color:var(--text-main,#111827); }
+    .referral-status { display:inline-flex; align-items:center; gap:5px; border-radius:999px; padding:4px 8px; font-size:.72rem; font-weight:700; background:#e2e8f0; color:#0f172a; }
+    @media (max-width: 900px) { .referral-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 700px) { .referral-grid { grid-template-columns: 1fr; } .referral-link-row { align-items:stretch; flex-direction:column; } .referral-link-row button { width:100%; } .referral-panel { overflow-x:auto; } }
   </style>
 </head>
 <body class="dashboard-body">
@@ -37,11 +41,18 @@
         <button class="btn btn-primary" id="copyReferralBtn" type="button"><i class="fa-solid fa-copy"></i> Copy link</button>
       </div>
       <p class="referral-note">A referral is counted after the new agent completes sign-in. Each signup can be attributed only once.</p>
+      <div class="referral-action-row">
+        <label for="referralTransferAmount" class="referral-note" style="margin:0;">Available referral balance: <strong id="referralAvailableInline">GHS 0.00</strong></label>
+        <input id="referralTransferAmount" type="number" min="0.01" step="0.01" placeholder="Amount (GHS)">
+        <button class="btn btn-secondary" id="transferReferralBtn" type="button"><i class="fa-solid fa-right-left"></i> Transfer to Main Account</button>
+      </div>
     </section>
 
     <section class="referral-grid" aria-label="Referral summary">
       <div class="referral-stat"><small>Qualified referrals</small><strong id="referralCount">0</strong></div>
-      <div class="referral-stat"><small>Rewards credited</small><strong id="referralRewardTotal">GHS 0.00</strong></div>
+      <div class="referral-stat"><small>Total rewards credited</small><strong id="referralRewardTotal">GHS 0.00</strong></div>
+      <div class="referral-stat"><small>Available referral balance</small><strong id="referralBalance">GHS 0.00</strong></div>
+      <div class="referral-stat"><small>Transferred / paid</small><strong id="referralSettledTotal">GHS 0.00</strong></div>
       <div class="referral-stat"><small>Your referral link name</small><strong id="referralCode">—</strong></div>
     </section>
 

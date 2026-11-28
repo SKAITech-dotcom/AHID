@@ -31,7 +31,7 @@ Deno.serve(async (request) => {
         admin.from('store_orders')
           .select('store_id, sale_amount, agent_earning, platform_revenue, payment_status, fulfilment_status'),
         admin.from('agent_payouts')
-          .select('id, agent_id, amount, status, method, reference, admin_note, account_snapshot, requested_at, paid_at, agents(full_name, agent_code)')
+          .select('id, agent_id, amount, status, method, reference, admin_note, account_snapshot, requested_at, paid_at, commission_debited, disbursement_reference, agents(full_name, agent_code)')
           .order('requested_at', { ascending: false })
           .limit(200),
       ]);
@@ -83,6 +83,8 @@ Deno.serve(async (request) => {
           reference: payout.reference || '',
           adminNote: payout.admin_note || '',
           account: payout.account_snapshot || null,
+          commissionDebited: payout.commission_debited === true,
+          disbursementReference: payout.disbursement_reference || '',
           requestedAt: payout.requested_at,
           paidAt: payout.paid_at,
           ownerName: owner?.full_name || owner?.agent_code || '',
@@ -119,13 +121,21 @@ Deno.serve(async (request) => {
         if (!DECISIONS.includes(decision)) {
           return json({ error: 'Choose a valid payout decision.' }, 400);
         }
+        if (decision === 'paid' || decision === 'rejected' || decision === 'failed') {
+          const { data, error } = await admin.rpc('admin_decide_payout', {
+            p_payout_id: payoutId,
+            p_decision: decision === 'failed' ? 'rejected' : decision,
+            p_note: text(body.note, 300),
+          });
+          if (error) throw error;
+          return json({ success: true, status: data?.status || decision, data });
+        }
         const updates: Record<string, unknown> = {
           status: decision,
           admin_note: text(body.note, 300) || null,
           reviewed_at: new Date().toISOString(),
           reviewed_by: user.id,
         };
-        if (decision === 'paid') updates.paid_at = new Date().toISOString();
         const { error } = await admin.from('agent_payouts').update(updates).eq('id', payoutId);
         if (error) throw error;
         return json({ success: true, status: decision });
