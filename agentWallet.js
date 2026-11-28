@@ -266,7 +266,9 @@ function renderTransactions() {
       } else if (filterNorm === 'store sales') {
         typeMatches = txTypeNorm === 'store sales' || txTypeNorm === 'store sale';
       } else if (filterNorm === 'commission transfer') {
-        typeMatches = txTypeNorm === 'commission transfer' || txTypeNorm.includes('transfer');
+        typeMatches = txTypeNorm === 'commission transfer' || txTypeNorm === 'transfer commission';
+      } else if (filterNorm === 'referral transfer') {
+        typeMatches = txTypeNorm === 'referral transfer';
       } else if (filterNorm === 'commission withdrawal') {
         typeMatches = txTypeNorm === 'commission withdrawal' || txTypeNorm.includes('withdrawal');
       } else if (filterNorm === 'overdraft') {
@@ -281,8 +283,10 @@ function renderTransactions() {
     if (idFilter) {
       const ref = String(tx.reference || tx.id || '').toLowerCase();
       const type = String(tx.type || '').toLowerCase();
+      const description = String(tx.description || '').toLowerCase();
+      const status = String(tx.status || '').toLowerCase();
       const meta = JSON.stringify(tx.metadata || '').toLowerCase();
-      idMatches = ref.includes(idFilter) || type.includes(idFilter) || meta.includes(idFilter);
+      idMatches = ref.includes(idFilter) || type.includes(idFilter) || description.includes(idFilter) || status.includes(idFilter) || meta.includes(idFilter);
     }
 
     return typeMatches && idMatches;
@@ -306,30 +310,27 @@ function renderTransactions() {
   // 4. Render Items
   let html = '';
   filtered.forEach(tx => {
-    const isCredit = ['wallet deposit', 'deposit', 'commission transfer', 'store sales'].includes(String(tx.type || '').toLowerCase());
+    const visual = getTransactionVisual(tx);
     const amountVal = Math.abs(Number(tx.amount || 0)).toFixed(2);
-    const amountFormatted = isCredit ? `+GHS ${amountVal}` : `-GHS ${amountVal}`;
-    const amountColor = '#0f172a';
-
-    // Badge styling
-    const badgeStyle = getBadgeStyle(tx.type);
+    const amountFormatted = `${visual.sign}GHS ${amountVal}`;
     const dateFormatted = formatTxDate(tx.created_at || tx.date);
     const displayRef = tx.reference || tx.id || 'REF';
+    const statusText = tx.status ? escapeHtml(String(tx.status).replace(/[_-]+/g, ' ')) : '';
 
     html += `
-      <div class="tx-item">
-        <div style="flex: 1; padding-right: 12px;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 3px; flex-wrap: wrap;">
-            <span class="tx-badge" style="${badgeStyle.css}">${escapeHtml(tx.type || 'Transaction')}</span>
-            <span style="font-weight: 700; font-size: 0.85rem; color: #1e293b; font-family: monospace;">${escapeHtml(displayRef)}</span>
+      <div class="tx-item tx-${visual.tone}">
+        <div class="tx-item-main">
+          <div class="tx-item-heading">
+            <span class="tx-badge tx-badge-${visual.tone}">${escapeHtml(tx.type || 'Transaction')}</span>
+            <span class="tx-ref">${escapeHtml(displayRef)}</span>
           </div>
-          <div style="font-size: 0.75rem; color: #64748b; display: flex; gap: 8px; align-items: center;">
-            <span><i class="fa-regular fa-clock" style="margin-right: 4px;"></i>${dateFormatted}</span>
-            ${tx.status ? `<span style="text-transform: capitalize; color: #0f172a; font-weight: 600;">&bull; ${tx.status}</span>` : ''}
+          <div class="tx-meta">
+            <span><i class="fa-regular fa-clock" aria-hidden="true"></i> ${escapeHtml(dateFormatted)}</span>
+            ${statusText ? `<span class="tx-status">&bull; ${statusText}</span>` : ''}
           </div>
         </div>
-        <div style="text-align: right;">
-          <div style="font-weight: 800; font-size: 0.95rem; color: ${amountColor};">${amountFormatted}</div>
+        <div class="tx-amount tx-amount-${visual.tone}">
+          ${amountFormatted}
         </div>
       </div>
     `;
@@ -338,8 +339,21 @@ function renderTransactions() {
   listContainer.innerHTML = html;
 }
 
-function getBadgeStyle(type) {
-  return { css: 'background: #e2e8f0; color: #0f172a;' };
+function getTransactionVisual(tx) {
+  const type = String(tx?.type || '').trim().toLowerCase();
+  const status = String(tx?.status || '').trim().toLowerCase();
+
+  // Transactions store positive magnitudes, so direction must be inferred
+  // from the business label/status rather than the numeric amount column.
+  const failed = /failed|declined|decline|error|rejected|cancelled|canceled|reversed/.test(status);
+  const debit = /admin\s*debit|\bdebit\b|transfer\s*out|referral\s*transfer|withdraw|purchase|order|payout|overdraft|charge|payment/.test(type);
+  const reward = /referral\s*reward|\breward\b|\bbonus\b/.test(type);
+  const signedDelta = Number(tx?.metadata?.signed_delta);
+  const numericDebit = Number(tx?.amount) < 0 || (Number.isFinite(signedDelta) && signedDelta < 0);
+
+  if (failed || debit || numericDebit) return { tone: 'red', sign: '-' };
+  if (reward) return { tone: 'yellow', sign: '+' };
+  return { tone: 'green', sign: '+' };
 }
 
 // =============================================================================
